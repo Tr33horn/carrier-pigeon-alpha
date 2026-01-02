@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../../lib/supabase";
+
 
 const MapView = dynamic(() => import("./MapView"), { ssr: false });
 
@@ -56,52 +56,50 @@ function formatCountdown(ms: number) {
 }
 
 export default function LetterStatusPage() {
-  const params = useParams<{ token: string }>();
-  const token = params.token;
+  const params = useParams();
+  const raw = (params as any)?.token;
+  const token = Array.isArray(raw) ? raw[0] : raw;
 
   const [letter, setLetter] = useState<Letter | null>(null);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState<Date>(new Date());
+  const [now, setNow] = useState(new Date());
 
+  // clock tick (for ETA countdown)
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
+  // load letter + checkpoints from APIuseEffect(() => {
   useEffect(() => {
-    async function load() {
+    if (!token) return;
+
+  const load = async () => {
+    try {
       setError(null);
 
-      const { data: ltr, error: lErr } = await supabase
-        .from("letters")
-        .select("*")
-        .eq("public_token", token)
-        .single();
+      const res = await fetch(`/api/letters/${encodeURIComponent(token)}`, {
+        cache: "no-store",
+      });
 
-      if (lErr || !ltr) {
-        setError(lErr?.message ?? "Letter not found");
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data?.error ?? "Letter not found");
         return;
       }
 
-      setLetter(ltr as Letter);
-
-      const { data: cps, error: cErr } = await supabase
-        .from("letter_checkpoints")
-        .select("id, idx, name, at")
-        .eq("letter_id", (ltr as any).id)
-        .order("idx", { ascending: true });
-
-      if (cErr) {
-        setError(cErr.message);
-        return;
-      }
-
-      setCheckpoints((cps ?? []) as Checkpoint[]);
+      setLetter(data.letter);
+      setCheckpoints(data.checkpoints);
+    } catch (e: any) {
+      console.error("LOAD ERROR:", e);
+      setError(e?.message ?? String(e));
     }
+  };
 
-    load();
-  }, [token]);
+  load();
+}, [token]);
 
   const delivered = useMemo(() => {
     if (!letter) return false;

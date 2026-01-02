@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { supabase } from "../../../lib/supabase";
+import { supabaseServer } from "../../../lib/supabaseServer";
 
 function toRad(deg: number) {
   return (deg * Math.PI) / 180;
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
   const etaAt = new Date(sentAt.getTime() + ms);
   const publicToken = crypto.randomBytes(16).toString("hex");
 
-  const { data: letter, error: letterErr } = await supabase
+  const { data: letter, error: letterErr } = await supabaseServer
     .from("letters")
     .insert({
       public_token: publicToken,
@@ -93,7 +93,7 @@ export async function POST(req: Request) {
 
   const checkpoints = generateCheckpoints(sentAt, etaAt, origin.lat, origin.lon, destination.lat, destination.lon);
 
-  const { error: cpErr } = await supabase.from("letter_checkpoints").insert(
+  const { error: cpErr } = await supabaseServer.from("letter_checkpoints").insert(
     checkpoints.map((cp) => ({
       letter_id: letter.id,
       idx: cp.idx,
