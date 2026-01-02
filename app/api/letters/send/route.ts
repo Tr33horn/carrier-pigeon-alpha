@@ -24,7 +24,14 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
-function generateCheckpoints(sentAt: Date, etaAt: Date, oLat: number, oLon: number, dLat: number, dLon: number) {
+function generateCheckpoints(
+  sentAt: Date,
+  etaAt: Date,
+  oLat: number,
+  oLon: number,
+  dLat: number,
+  dLon: number
+) {
   const count = 8;
   const totalMs = etaAt.getTime() - sentAt.getTime();
   const labels = [
@@ -52,10 +59,12 @@ function generateCheckpoints(sentAt: Date, etaAt: Date, oLat: number, oLon: numb
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { from_name, to_name, subject, message, origin, destination } = body;
 
-  const SPEED_KMH = 72;      // ~45 mph
-  const REST_FACTOR = 1.15;  // “pigeon reality tax”
+  // ✅ NEW: accept to_email from client
+  const { from_name, to_name, to_email, subject, message, origin, destination } = body;
+
+  const SPEED_KMH = 72; // ~45 mph
+  const REST_FACTOR = 1.15; // “pigeon reality tax”
 
   const km = distanceKm(origin.lat, origin.lon, destination.lat, destination.lon);
   const hours = (km / SPEED_KMH) * REST_FACTOR;
@@ -65,12 +74,19 @@ export async function POST(req: Request) {
   const etaAt = new Date(sentAt.getTime() + ms);
   const publicToken = crypto.randomBytes(16).toString("hex");
 
+  const normalizedEmail =
+    typeof to_email === "string" && to_email.trim().length > 0
+      ? to_email.trim()
+      : null;
+
   const { data: letter, error: letterErr } = await supabaseServer
     .from("letters")
     .insert({
       public_token: publicToken,
       from_name,
       to_name,
+      to_email: normalizedEmail, // ✅ NEW
+      delivered_notified_at: null, // ✅ NEW (optional but explicit)
       subject,
       body: message,
       origin_name: origin.name,
@@ -88,10 +104,20 @@ export async function POST(req: Request) {
     .single();
 
   if (letterErr || !letter) {
-    return NextResponse.json({ error: letterErr?.message ?? "Insert failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: letterErr?.message ?? "Insert failed" },
+      { status: 500 }
+    );
   }
 
-  const checkpoints = generateCheckpoints(sentAt, etaAt, origin.lat, origin.lon, destination.lat, destination.lon);
+  const checkpoints = generateCheckpoints(
+    sentAt,
+    etaAt,
+    origin.lat,
+    origin.lon,
+    destination.lat,
+    destination.lon
+  );
 
   const { error: cpErr } = await supabaseServer.from("letter_checkpoints").insert(
     checkpoints.map((cp) => ({
