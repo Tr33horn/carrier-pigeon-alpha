@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-
 const MapView = dynamic(() => import("./MapView"), { ssr: false });
 
 type Letter = {
@@ -13,7 +12,7 @@ type Letter = {
   from_name: string | null;
   to_name: string | null;
   subject: string | null;
-  body: string;
+  body: string | null; // body is null until delivered
   origin_name: string;
   origin_lat: number;
   origin_lon: number;
@@ -32,6 +31,107 @@ type Checkpoint = {
   name: string;
   at: string;
 };
+
+function WaxSealOverlay({ etaText }: { etaText: string }) {
+  return (
+    <div style={{ position: "relative" }}>
+      <div
+        style={{
+          position: "relative",
+          borderRadius: 14,
+          padding: 18,
+          border: "1px solid rgba(255,255,255,0.12)",
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
+          overflow: "hidden",
+        }}
+      >
+        {/* Blur veil to hide the content behind */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+            background: "rgba(0,0,0,0.25)",
+          }}
+        />
+
+        {/* Seal */}
+        <div
+          style={{
+            position: "relative",
+            zIndex: 2,
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+          }}
+        >
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: "999px",
+              background:
+                "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.35), rgba(255,255,255,0) 40%)," +
+                "radial-gradient(circle at 70% 75%, rgba(0,0,0,0.35), rgba(0,0,0,0) 45%)," +
+                "linear-gradient(145deg, #8b0f18, #5b0a10)",
+              boxShadow:
+                "0 10px 30px rgba(0,0,0,0.45), inset 0 2px 10px rgba(255,255,255,0.18)",
+              border: "1px solid rgba(255,255,255,0.18)",
+              display: "grid",
+              placeItems: "center",
+              transform: "rotate(-8deg)",
+            }}
+            aria-label="Wax seal"
+            title="Sealed until delivery"
+          >
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: "999px",
+                border: "1px dashed rgba(255,255,255,0.35)",
+                display: "grid",
+                placeItems: "center",
+                fontWeight: 800,
+                letterSpacing: 1,
+                color: "rgba(255,255,255,0.9)",
+                fontSize: 14,
+                textTransform: "uppercase",
+              }}
+            >
+              AH
+            </div>
+          </div>
+
+          <div style={{ position: "relative", zIndex: 2 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>
+              Sealed until delivery
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.75 }}>Opens at {etaText}</div>
+            <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>
+              No peeking. The bird is watching.
+            </div>
+          </div>
+        </div>
+
+        {/* Subtle “paper fibers” noise */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            opacity: 0.07,
+            backgroundImage:
+              "repeating-linear-gradient(0deg, rgba(255,255,255,0.25) 0px, rgba(255,255,255,0.25) 1px, rgba(0,0,0,0) 2px, rgba(0,0,0,0) 6px)",
+            mixBlendMode: "overlay",
+            pointerEvents: "none",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
@@ -64,6 +164,7 @@ export default function LetterStatusPage() {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
+  const [delivered, setDelivered] = useState(false);
 
   // clock tick (for ETA countdown)
   useEffect(() => {
@@ -71,40 +172,36 @@ export default function LetterStatusPage() {
     return () => clearInterval(t);
   }, []);
 
-  // load letter + checkpoints from APIuseEffect(() => {
+  // load letter + checkpoints from API
   useEffect(() => {
     if (!token) return;
 
-  const load = async () => {
-    try {
-      setError(null);
+    const load = async () => {
+      try {
+        setError(null);
 
-      const res = await fetch(`/api/letters/${encodeURIComponent(token)}`, {
-        cache: "no-store",
-      });
+        const res = await fetch(`/api/letters/${encodeURIComponent(token)}`, {
+          cache: "no-store",
+        });
 
-      const data = await res.json();
+        const data = await res.json();
 
-      if (!res.ok) {
-        setError(data?.error ?? "Letter not found");
-        return;
+        if (!res.ok) {
+          setError(data?.error ?? "Letter not found");
+          return;
+        }
+
+        setLetter(data.letter as Letter);
+        setDelivered(!!data.delivered);
+        setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
+      } catch (e: any) {
+        console.error("LOAD ERROR:", e);
+        setError(e?.message ?? String(e));
       }
+    };
 
-      setLetter(data.letter);
-      setCheckpoints(data.checkpoints);
-    } catch (e: any) {
-      console.error("LOAD ERROR:", e);
-      setError(e?.message ?? String(e));
-    }
-  };
-
-  load();
-}, [token]);
-
-  const delivered = useMemo(() => {
-    if (!letter) return false;
-    return now.getTime() >= new Date(letter.eta_at).getTime();
-  }, [letter, now]);
+    load();
+  }, [token]);
 
   const progress = useMemo(() => {
     if (!letter) return 0;
@@ -147,7 +244,14 @@ export default function LetterStatusPage() {
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 760 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 12,
+          alignItems: "baseline",
+        }}
+      >
         <h1 style={{ fontSize: 26, fontWeight: 900 }}>Flight Status</h1>
         <div style={{ fontWeight: 800, opacity: 0.8 }}>
           {delivered ? "✅ Delivered" : "🕊️ In Flight"}
@@ -160,18 +264,22 @@ export default function LetterStatusPage() {
         </div>
         <div style={{ marginTop: 4 }}>
           <strong>ETA:</strong> {new Date(letter.eta_at).toLocaleString()}{" "}
-          {!delivered && <span style={{ marginLeft: 8 }}>(T-minus {countdown})</span>}
+          {!delivered && (
+            <span style={{ marginLeft: 8 }}>(T-minus {countdown})</span>
+          )}
         </div>
+
         <div style={{ marginTop: 16 }}>
-  <MapView
-    origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-    dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-    progress={progress}
-  />
-</div>
+          <MapView
+            origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+            dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+            progress={progress}
+          />
+        </div>
+
         <div style={{ marginTop: 4 }}>
-          <strong>Distance:</strong> {letter.distance_km.toFixed(0)} km • <strong>Speed:</strong>{" "}
-          {letter.speed_kmh.toFixed(0)} km/h
+          <strong>Distance:</strong> {letter.distance_km.toFixed(0)} km •{" "}
+          <strong>Speed:</strong> {letter.speed_kmh.toFixed(0)} km/h
         </div>
       </div>
 
@@ -195,7 +303,8 @@ export default function LetterStatusPage() {
           />
         </div>
         <div style={{ marginTop: 6, opacity: 0.8 }}>
-          {Math.round(progress * 100)}% • {currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}
+          {Math.round(progress * 100)}% •{" "}
+          {currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}
         </div>
       </div>
 
@@ -230,50 +339,54 @@ export default function LetterStatusPage() {
       {/* Message */}
       <div style={{ marginTop: 18 }}>
         <h2 style={{ fontSize: 16, fontWeight: 900 }}>
-          Letter from {letter.from_name || "Sender"} to {letter.to_name || "Recipient"}
+          Letter from {letter.from_name || "Sender"} to{" "}
+          {letter.to_name || "Recipient"}
         </h2>
 
-        <div style={{ marginTop: 10, padding: 14, borderRadius: 10, border: "1px solid #333" }}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>{letter.subject || "(No subject)"}</div>
+        <div
+          style={{
+            marginTop: 10,
+            padding: 14,
+            borderRadius: 10,
+            border: "1px solid #333",
+          }}
+        >
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>
+            {letter.subject || "(No subject)"}
+          </div>
 
-          {!delivered ? (
-            <div style={{ opacity: 0.85 }}>
-              <div style={{ fontWeight: 800 }}>🔒 Sealed until delivery</div>
-              <div style={{ marginTop: 8 }}>
-                This letter will open when the pigeon lands. (No peeking. The bird is watching.)
-              </div>
+          {delivered ? (
+            <div
+              style={{
+                whiteSpace: "pre-wrap",
+                lineHeight: 1.5,
+                animation: "reveal 420ms ease-out",
+              }}
+            >
+              {letter.body ?? ""}
             </div>
-          ) : 
-          
-letter.body ? (
-  <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
-    {letter.body}
-  </div>
-) : (
-  <div
-    style={{
-      border: "1px dashed #555",
-      borderRadius: 12,
-      padding: 16,
-      opacity: 0.85,
-    }}
-  >
-    <div style={{ fontSize: 14, marginBottom: 6 }}>
-      🔒 Sealed until delivery
-    </div>
-    <div style={{ fontSize: 12 }}>
-      Opens at {new Date(letter.eta_at).toLocaleString()}
-    </div>
-  </div>
-)
-          
-          }
+          ) : (
+            <WaxSealOverlay etaText={new Date(letter.eta_at).toLocaleString()} />
+          )}
         </div>
       </div>
 
       <div style={{ marginTop: 18, opacity: 0.6, fontSize: 12 }}>
         Token: {letter.public_token}
       </div>
+
+      <style jsx global>{`
+        @keyframes reveal {
+          from {
+            opacity: 0;
+            transform: translateY(6px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </main>
   );
 }
