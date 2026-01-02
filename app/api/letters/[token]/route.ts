@@ -7,25 +7,45 @@ export async function GET(
 ) {
   const { token } = await ctx.params;
 
- const { data: letter, error: lErr } = await supabaseServer
-  .from("letters")
-  .select("*")
-  .eq("public_token", token)
-  .order("sent_at", { ascending: false })
-  .limit(1)
-  .maybeSingle();
+  // First fetch: metadata ONLY (no body)
+  const { data: meta, error: metaErr } = await supabaseServer
+    .from("letters")
+    .select(
+      `
+      id,
+      public_token,
+      from_name,
+      to_name,
+      subject,
+      origin_name,
+      origin_lat,
+      origin_lon,
+      dest_name,
+      dest_lat,
+      dest_lon,
+      distance_km,
+      speed_kmh,
+      sent_at,
+      eta_at
+    `
+    )
+    .eq("public_token", token)
+    .order("sent_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  if (lErr || !letter) {
+  if (metaErr || !meta) {
     return NextResponse.json(
-      { error: lErr?.message ?? "Not found" },
+      { error: metaErr?.message ?? "Not found" },
       { status: 404 }
     );
   }
 
+  // Fetch checkpoints
   const { data: checkpoints, error: cErr } = await supabaseServer
     .from("letter_checkpoints")
     .select("id, idx, name, at, lat, lon")
-    .eq("letter_id", (letter as any).id)
+    .eq("letter_id", meta.id)
     .order("idx", { ascending: true });
 
   if (cErr) {
@@ -34,16 +54,27 @@ export async function GET(
 
   // Decide delivery server-side
   const now = Date.now();
-  const eta = Date.parse((letter as any).eta_at); // eta_at is ISO string in your DB
+  const eta = Date.parse(meta.eta_at);
   const delivered = Number.isFinite(eta) ? now >= eta : true;
 
-  // Hide body until delivered
-  const safeLetter = delivered
-    ? letter
-    : { ...letter, body: null };
+  // Only fetch body AFTER delivery
+  let body: string | null = null;
+
+  if (delivered) {
+    const { data: bodyRow } = await supabaseServer
+      .from("letters")
+      .select("body")
+      .eq("id", meta.id)
+      .single();
+
+    body = bodyRow?.body ?? null;
+  }
 
   return NextResponse.json({
-    letter: safeLetter,
+    letter: {
+      ...meta,
+      body,
+    },
     checkpoints: checkpoints ?? [],
     delivered,
   });

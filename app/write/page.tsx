@@ -6,13 +6,23 @@ import { CITIES } from "../lib/cities";
 export default function WritePage() {
   const [fromName, setFromName] = useState("Greggor");
   const [toName, setToName] = useState("");
+  const [toEmail, setToEmail] = useState("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [origin, setOrigin] = useState(CITIES[0]);
-  const [destination, setDestination] = useState(CITIES[CITIES.length - 1]);
-  const [result, setResult] = useState<{ url: string; eta_at: string } | null>(null);
+  const [destination, setDestination] = useState(
+    CITIES[CITIES.length - 1]
+  );
+  const [result, setResult] = useState<{ url: string; eta_at: string } | null>(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+
+  // STEP 1: email validation (optional field)
+  const emailLooksValid =
+    !toEmail.trim() ||
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail.trim());
 
   async function sendLetter() {
     setSending(true);
@@ -26,6 +36,7 @@ export default function WritePage() {
         body: JSON.stringify({
           from_name: fromName,
           to_name: toName,
+          to_email: toEmail.trim() || null,
           subject,
           message,
           origin,
@@ -60,7 +71,12 @@ export default function WritePage() {
           <input
             value={fromName}
             onChange={(e) => setFromName(e.target.value)}
-            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
+            style={{
+              display: "block",
+              width: "100%",
+              padding: 10,
+              marginTop: 6,
+            }}
           />
         </label>
 
@@ -70,16 +86,55 @@ export default function WritePage() {
             value={toName}
             onChange={(e) => setToName(e.target.value)}
             placeholder="Recipient name"
-            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
+            style={{
+              display: "block",
+              width: "100%",
+              padding: 10,
+              marginTop: 6,
+            }}
           />
         </label>
+
+        <label style={{ display: "block", marginTop: 12, fontWeight: 700 }}>
+          Recipient Email (optional)
+        </label>
+        <input
+          type="email"
+          value={toEmail}
+          onChange={(e) => setToEmail(e.target.value)}
+          placeholder="name@email.com"
+          style={{
+            width: "100%",
+            marginTop: 6,
+            padding: 10,
+            borderRadius: 10,
+            border: "1px solid #333",
+            background: "transparent",
+            color: "inherit",
+          }}
+        />
+        <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
+          We’ll email them when the pigeon lands.
+        </div>
+
+        {/* STEP 3: inline validation warning */}
+        {toEmail.trim() && !emailLooksValid && (
+          <div style={{ fontSize: 12, color: "crimson", marginTop: 6 }}>
+            Please enter a valid email address.
+          </div>
+        )}
 
         <label>
           Subject
           <input
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
+            style={{
+              display: "block",
+              width: "100%",
+              padding: 10,
+              marginTop: 6,
+            }}
           />
         </label>
 
@@ -89,17 +144,37 @@ export default function WritePage() {
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             rows={6}
-            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
+            style={{
+              display: "block",
+              width: "100%",
+              padding: 10,
+              marginTop: 6,
+            }}
           />
         </label>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 12,
+          }}
+        >
           <label>
             Origin
             <select
               value={origin.name}
-              onChange={(e) => setOrigin(CITIES.find((c) => c.name === e.target.value)!)}
-              style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
+              onChange={(e) =>
+                setOrigin(
+                  CITIES.find((c) => c.name === e.target.value)!
+                )
+              }
+              style={{
+                display: "block",
+                width: "100%",
+                padding: 10,
+                marginTop: 6,
+              }}
             >
               {CITIES.map((c) => (
                 <option key={c.name} value={c.name}>
@@ -113,8 +188,17 @@ export default function WritePage() {
             Destination
             <select
               value={destination.name}
-              onChange={(e) => setDestination(CITIES.find((c) => c.name === e.target.value)!)}
-              style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
+              onChange={(e) =>
+                setDestination(
+                  CITIES.find((c) => c.name === e.target.value)!
+                )
+              }
+              style={{
+                display: "block",
+                width: "100%",
+                padding: 10,
+                marginTop: 6,
+              }}
             >
               {CITIES.map((c) => (
                 <option key={c.name} value={c.name}>
@@ -125,9 +209,15 @@ export default function WritePage() {
           </label>
         </div>
 
+        {/* STEP 2: disable send when email invalid */}
         <button
           onClick={sendLetter}
-          disabled={sending || !message.trim() || !toName.trim()}
+          disabled={
+            sending ||
+            !message.trim() ||
+            !toName.trim() ||
+            !emailLooksValid
+          }
           style={{
             padding: "12px 14px",
             fontWeight: 700,
@@ -137,14 +227,16 @@ export default function WritePage() {
           {sending ? "Sending…" : "Send Letter"}
         </button>
 
-        {error && (
-          <p style={{ color: "crimson" }}>
-            ❌ {error}
-          </p>
-        )}
+        {error && <p style={{ color: "crimson" }}>❌ {error}</p>}
 
         {result && (
-          <div style={{ padding: 12, border: "1px solid #333", borderRadius: 8 }}>
+          <div
+            style={{
+              padding: 12,
+              border: "1px solid #333",
+              borderRadius: 8,
+            }}
+          >
             <div style={{ fontWeight: 800 }}>✅ Sent!</div>
             <div style={{ marginTop: 8 }}>
               Share link:{" "}
