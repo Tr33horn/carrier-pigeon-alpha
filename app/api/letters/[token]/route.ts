@@ -32,5 +32,19 @@ export async function GET(
     return NextResponse.json({ error: cErr.message }, { status: 500 });
   }
 
-  return NextResponse.json({ letter, checkpoints: checkpoints ?? [] });
+  // Decide delivery server-side
+  const now = Date.now();
+  const eta = Date.parse((letter as any).eta_at); // eta_at is ISO string in your DB
+  const delivered = Number.isFinite(eta) ? now >= eta : true;
+
+  // Hide body until delivered
+  const safeLetter = delivered
+    ? letter
+    : { ...letter, body: null };
+
+  return NextResponse.json({
+    letter: safeLetter,
+    checkpoints: checkpoints ?? [],
+    delivered,
+  });
 }

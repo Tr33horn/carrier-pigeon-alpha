@@ -243,9 +243,31 @@ export default function LetterStatusPage() {
                 This letter will open when the pigeon lands. (No peeking. The bird is watching.)
               </div>
             </div>
-          ) : (
-            <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{letter.body}</div>
-          )}
+          ) : 
+          
+letter.body ? (
+  <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+    {letter.body}
+  </div>
+) : (
+  <div
+    style={{
+      border: "1px dashed #555",
+      borderRadius: 12,
+      padding: 16,
+      opacity: 0.85,
+    }}
+  >
+    <div style={{ fontSize: 14, marginBottom: 6 }}>
+      🔒 Sealed until delivery
+    </div>
+    <div style={{ fontSize: 12 }}>
+      Opens at {new Date(letter.eta_at).toLocaleString()}
+    </div>
+  </div>
+)
+          
+          }
         </div>
       </div>
 
