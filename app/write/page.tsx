@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CITIES } from "../lib/cities";
 
-// --- Helpers: nearest city (fast + good enough for a city list) ---
+/* ---------- helpers ---------- */
 function nearestCity(
   lat: number,
   lon: number,
@@ -15,7 +15,7 @@ function nearestCity(
   for (const c of cities) {
     const dLat = lat - c.lat;
     const dLon = lon - c.lon;
-    const d = dLat * dLat + dLon * dLon; // squared distance (no sqrt needed)
+    const d = dLat * dLat + dLon * dLon;
     if (d < bestDist) {
       bestDist = d;
       best = c;
@@ -24,6 +24,7 @@ function nearestCity(
   return best;
 }
 
+/* ---------- page ---------- */
 export default function WritePage() {
   const [fromName, setFromName] = useState("You");
   const [fromEmail, setFromEmail] = useState("");
@@ -31,26 +32,32 @@ export default function WritePage() {
   const [toEmail, setToEmail] = useState("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+
   const [origin, setOrigin] = useState(CITIES[0]);
-  const [destination, setDestination] = useState(CITIES[CITIES.length - 1]);
+  const [destination, setDestination] = useState(
+    CITIES[CITIES.length - 1]
+  );
 
-  const [result, setResult] = useState<{ url: string; eta_at: string } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
-
-  // NEW: location UX state
+  const [showOriginPicker, setShowOriginPicker] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
 
-  // STEP 1: email validation (optional field)
+  const [result, setResult] = useState<{ url: string; eta_at: string } | null>(
+    null
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+
+  /* ---------- validation ---------- */
   const emailLooksValid =
     !toEmail.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail.trim());
 
+  /* ---------- geolocation ---------- */
   function useMyLocationForOrigin() {
     setLocError(null);
 
     if (!navigator.geolocation) {
-      setLocError("Geolocation isn’t supported on this browser.");
+      setLocError("Geolocation isn’t supported on this device.");
       return;
     }
 
@@ -64,17 +71,14 @@ export default function WritePage() {
         setLocating(false);
       },
       (err) => {
-        setLocError(err?.message || "Couldn’t get location.");
+        setLocError(err?.message || "Couldn’t determine location.");
         setLocating(false);
       },
-      {
-        enableHighAccuracy: false,
-        timeout: 8000,
-        maximumAge: 5 * 60 * 1000,
-      }
+      { enableHighAccuracy: false, timeout: 8000 }
     );
   }
 
+  /* ---------- submit ---------- */
   async function sendLetter() {
     setSending(true);
     setError(null);
@@ -110,11 +114,12 @@ export default function WritePage() {
     }
   }
 
+  /* ---------- UI ---------- */
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 720 }}>
       <h1 style={{ fontSize: 26, fontWeight: 800 }}>Write a Letter</h1>
       <p style={{ opacity: 0.7, marginTop: 6 }}>
-        It’ll unlock for the recipient when the pigeon “lands.”
+        It’ll unlock for the recipient when the pigeon lands.
       </p>
 
       <div style={{ display: "grid", gap: 12, marginTop: 18 }}>
@@ -123,36 +128,20 @@ export default function WritePage() {
           <input
             value={fromName}
             onChange={(e) => setFromName(e.target.value)}
-            style={{
-              display: "block",
-              width: "100%",
-              padding: 10,
-              marginTop: 6,
-            }}
+            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
           />
         </label>
 
-        <label style={{ display: "block", marginTop: 12, fontWeight: 700 }}>
+        <label>
           Sender Email (optional)
+          <input
+            type="email"
+            value={fromEmail}
+            onChange={(e) => setFromEmail(e.target.value)}
+            placeholder="you@email.com"
+            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
+          />
         </label>
-        <input
-          type="email"
-          value={fromEmail}
-          onChange={(e) => setFromEmail(e.target.value)}
-          placeholder="you@email.com"
-          style={{
-            width: "100%",
-            marginTop: 6,
-            padding: 10,
-            borderRadius: 10,
-            border: "1px solid #333",
-            background: "transparent",
-            color: "inherit",
-          }}
-        />
-        <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
-          We’ll send you a delivery receipt when it lands.
-        </div>
 
         <label>
           To
@@ -160,40 +149,23 @@ export default function WritePage() {
             value={toName}
             onChange={(e) => setToName(e.target.value)}
             placeholder="Recipient name"
-            style={{
-              display: "block",
-              width: "100%",
-              padding: 10,
-              marginTop: 6,
-            }}
+            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
           />
         </label>
 
-        <label style={{ display: "block", marginTop: 12, fontWeight: 700 }}>
+        <label>
           Recipient Email (optional)
+          <input
+            type="email"
+            value={toEmail}
+            onChange={(e) => setToEmail(e.target.value)}
+            placeholder="name@email.com"
+            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
+          />
         </label>
-        <input
-          type="email"
-          value={toEmail}
-          onChange={(e) => setToEmail(e.target.value)}
-          placeholder="name@email.com"
-          style={{
-            width: "100%",
-            marginTop: 6,
-            padding: 10,
-            borderRadius: 10,
-            border: "1px solid #333",
-            background: "transparent",
-            color: "inherit",
-          }}
-        />
-        <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
-          We’ll email them when the pigeon lands.
-        </div>
 
-        {/* STEP 3: inline validation warning */}
         {toEmail.trim() && !emailLooksValid && (
-          <div style={{ fontSize: 12, color: "crimson", marginTop: 6 }}>
+          <div style={{ fontSize: 12, color: "crimson" }}>
             Please enter a valid email address.
           </div>
         )}
@@ -203,12 +175,7 @@ export default function WritePage() {
           <input
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            style={{
-              display: "block",
-              width: "100%",
-              padding: 10,
-              marginTop: 6,
-            }}
+            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
           />
         </label>
 
@@ -218,42 +185,26 @@ export default function WritePage() {
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             rows={6}
-            style={{
-              display: "block",
-              width: "100%",
-              padding: 10,
-              marginTop: 6,
-            }}
+            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
           />
         </label>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 12,
-          }}
-        >
-          <label>
-            Origin
-            <select
-              value={origin.name}
-              onChange={(e) =>
-                setOrigin(CITIES.find((c) => c.name === e.target.value)!)
-              }
+        {/* ---------- ORIGIN + DEST ---------- */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          {/* ORIGIN */}
+          <div>
+            <div style={{ fontWeight: 700 }}>Origin</div>
+
+            <div
               style={{
-                display: "block",
-                width: "100%",
-                padding: 10,
                 marginTop: 6,
+                padding: 10,
+                borderRadius: 10,
+                border: "1px solid #333",
               }}
             >
-              {CITIES.map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              {origin.name}
+            </div>
 
             <button
               type="button"
@@ -266,24 +217,59 @@ export default function WritePage() {
                 borderRadius: 10,
                 border: "1px solid #333",
                 background: "transparent",
-                cursor: locating ? "not-allowed" : "pointer",
                 fontWeight: 700,
+                cursor: locating ? "not-allowed" : "pointer",
               }}
             >
               {locating ? "Finding your roost…" : "Use my location"}
             </button>
+
+            <button
+              type="button"
+              onClick={() => setShowOriginPicker((v) => !v)}
+              style={{
+                marginTop: 8,
+                width: "100%",
+                padding: "8px 10px",
+                borderRadius: 10,
+                border: "1px dashed #444",
+                background: "transparent",
+                fontSize: 12,
+                opacity: 0.7,
+              }}
+            >
+              {showOriginPicker ? "Hide origin picker" : "Change origin"}
+            </button>
+
+            {showOriginPicker && (
+              <select
+                value={origin.name}
+                onChange={(e) =>
+                  setOrigin(CITIES.find((c) => c.name === e.target.value)!)
+                }
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: 10,
+                  marginTop: 8,
+                }}
+              >
+                {CITIES.map((c) => (
+                  <option key={c.name} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
 
             {locError && (
               <div style={{ fontSize: 12, color: "crimson", marginTop: 6 }}>
                 {locError}
               </div>
             )}
+          </div>
 
-            <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>
-              Uses your device location to pick the nearest city from the list.
-            </div>
-          </label>
-
+          {/* DESTINATION */}
           <label>
             Destination
             <select
@@ -291,12 +277,7 @@ export default function WritePage() {
               onChange={(e) =>
                 setDestination(CITIES.find((c) => c.name === e.target.value)!)
               }
-              style={{
-                display: "block",
-                width: "100%",
-                padding: 10,
-                marginTop: 6,
-              }}
+              style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
             >
               {CITIES.map((c) => (
                 <option key={c.name} value={c.name}>
@@ -307,10 +288,15 @@ export default function WritePage() {
           </label>
         </div>
 
-        {/* STEP 2: disable send when email invalid */}
+        {/* ---------- SEND ---------- */}
         <button
           onClick={sendLetter}
-          disabled={sending || !message.trim() || !toName.trim() || !emailLooksValid}
+          disabled={
+            sending ||
+            !message.trim() ||
+            !toName.trim() ||
+            !emailLooksValid
+          }
           style={{
             padding: "12px 14px",
             fontWeight: 700,
@@ -323,13 +309,7 @@ export default function WritePage() {
         {error && <p style={{ color: "crimson" }}>❌ {error}</p>}
 
         {result && (
-          <div
-            style={{
-              padding: 12,
-              border: "1px solid #333",
-              borderRadius: 8,
-            }}
-          >
+          <div style={{ padding: 12, border: "1px solid #333", borderRadius: 8 }}>
             <div style={{ fontWeight: 800 }}>✅ Sent!</div>
             <div style={{ marginTop: 8 }}>
               Share link:{" "}
