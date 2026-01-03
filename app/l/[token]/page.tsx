@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const MapView = dynamic(() => import("./MapView"), { ssr: false });
 
@@ -32,6 +32,256 @@ type Checkpoint = {
   at: string;
 };
 
+/* ----------------- helpers ----------------- */
+function clamp01(n: number) {
+  return Math.max(0, Math.min(1, n));
+}
+
+function progressFraction(sentISO: string, etaISO: string, now = new Date()) {
+  const sent = new Date(sentISO).getTime();
+  const eta = new Date(etaISO).getTime();
+  const t = now.getTime();
+  if (eta <= sent) return 1;
+  return clamp01((t - sent) / (eta - sent));
+}
+
+function formatCountdown(ms: number) {
+  if (ms <= 0) return "Delivered";
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad = (x: number) => String(x).padStart(2, "0");
+  return `${h}:${pad(m)}:${pad(s)}`;
+}
+
+function milestoneTimeISO(sentISO: string, etaISO: string, fraction: number) {
+  const sent = new Date(sentISO).getTime();
+  const eta = new Date(etaISO).getTime();
+  if (!Number.isFinite(sent) || !Number.isFinite(eta) || eta <= sent) return etaISO;
+  const t = sent + (eta - sent) * fraction;
+  return new Date(t).toISOString();
+}
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+function fakeOverText(p: number, origin: string, dest: string) {
+  if (p < 0.08) return `Leaving ${origin}… (wings warming up)`;
+  if (p < 0.25) return "Low altitude cruise • suspicious bread crumbs detected";
+  if (p < 0.5) return "Over the plains • tailwind acquired (allegedly)";
+  if (p < 0.75) return "Crossing the big stuff • mountains, vibes, drama";
+  if (p < 0.92) return `Approaching ${dest} • practicing landing swagger`;
+  return `Final approach to ${dest} • do not startle the bird`;
+}
+
+/* ----------------- UI bits ----------------- */
+function LivePill() {
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        gap: 8,
+        alignItems: "center",
+        padding: "8px 12px",
+        borderRadius: 999,
+        border: "1px solid rgba(255,255,255,0.18)",
+        background: "rgba(255,255,255,0.06)",
+        fontWeight: 900,
+        fontSize: 12,
+        letterSpacing: 0.3,
+      }}
+      title="Updates are refreshing"
+      aria-label="Live indicator"
+    >
+      <span
+        style={{
+          width: 10,
+          height: 10,
+          borderRadius: 999,
+          background: "rgba(80, 220, 140, 0.9)",
+          boxShadow: "0 0 0 0 rgba(80, 220, 140, 0.55)",
+          animation: "pulse 1400ms ease-out infinite",
+        }}
+      />
+      LIVE
+    </div>
+  );
+}
+
+function ConfettiBurst({ active }: { active: boolean }) {
+  const pieces = useMemo(() => {
+    // deterministic-ish random
+    const out: Array<{
+      left: number;
+      rotate: number;
+      delay: number;
+      duration: number;
+      size: number;
+      hue: number;
+      drift: number;
+    }> = [];
+
+    for (let i = 0; i < 26; i++) {
+      out.push({
+        left: 45 + (i % 8) * 2 + (Math.random() * 10 - 5),
+        rotate: Math.random() * 360,
+        delay: Math.random() * 120,
+        duration: 650 + Math.random() * 650,
+        size: 6 + Math.random() * 7,
+        hue: Math.floor(Math.random() * 360),
+        drift: (Math.random() * 2 - 1) * 120,
+      });
+    }
+    return out;
+  }, []);
+
+  if (!active) return null;
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "fixed",
+        inset: 0,
+        pointerEvents: "none",
+        zIndex: 9999,
+      }}
+    >
+      {pieces.map((p, idx) => (
+        <div
+          key={idx}
+          style={{
+            position: "absolute",
+            top: 90,
+            left: `${p.left}%`,
+            width: p.size,
+            height: p.size * 0.55,
+            borderRadius: 2,
+            background: `hsl(${p.hue} 85% 65%)`,
+            transform: `rotate(${p.rotate}deg)`,
+            animation: `confetti-fall ${p.duration}ms ease-out forwards`,
+            animationDelay: `${p.delay}ms`,
+            // stash drift in CSS var
+            ["--drift" as any]: `${p.drift}px`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SealCrackOverlay({ active }: { active: boolean }) {
+  if (!active) return null;
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "absolute",
+        inset: 0,
+        borderRadius: 14,
+        overflow: "hidden",
+        display: "grid",
+        placeItems: "center",
+        background: "rgba(0,0,0,0.35)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        zIndex: 5,
+      }}
+    >
+      <div style={{ position: "relative", width: 84, height: 84 }}>
+        <div
+          style={{
+            width: 84,
+            height: 84,
+            borderRadius: 999,
+            background:
+              "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.35), rgba(255,255,255,0) 40%)," +
+              "radial-gradient(circle at 70% 75%, rgba(0,0,0,0.35), rgba(0,0,0,0) 45%)," +
+              "linear-gradient(145deg, #8b0f18, #5b0a10)",
+            boxShadow:
+              "0 18px 40px rgba(0,0,0,0.55), inset 0 2px 12px rgba(255,255,255,0.18)",
+            border: "1px solid rgba(255,255,255,0.18)",
+            display: "grid",
+            placeItems: "center",
+            transform: "rotate(-8deg)",
+            animation: "seal-pop 520ms ease-out forwards",
+          }}
+        >
+          <div
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 999,
+              border: "1px dashed rgba(255,255,255,0.35)",
+              display: "grid",
+              placeItems: "center",
+              fontWeight: 900,
+              letterSpacing: 1,
+              color: "rgba(255,255,255,0.92)",
+              fontSize: 14,
+              textTransform: "uppercase",
+            }}
+          >
+            AH
+          </div>
+        </div>
+
+        {/* crack line */}
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "14%",
+            width: 2,
+            height: "72%",
+            background: "rgba(255,255,255,0.75)",
+            transform: "translateX(-50%) rotate(14deg) scaleY(0)",
+            transformOrigin: "top",
+            animation: "crack 520ms ease-out forwards",
+          }}
+        />
+
+        {/* tiny “chip” bits */}
+        <div
+          style={{
+            position: "absolute",
+            left: "18%",
+            top: "58%",
+            width: 10,
+            height: 10,
+            borderRadius: 3,
+            background: "rgba(255,255,255,0.35)",
+            transform: "rotate(18deg) scale(0)",
+            animation: "chip 520ms ease-out forwards",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            right: "16%",
+            top: "38%",
+            width: 8,
+            height: 8,
+            borderRadius: 3,
+            background: "rgba(255,255,255,0.28)",
+            transform: "rotate(-22deg) scale(0)",
+            animation: "chip2 520ms ease-out forwards",
+          }}
+        />
+      </div>
+
+      <div style={{ marginTop: 14, fontWeight: 900, opacity: 0.9 }}>
+        Seal broken. Letter unlocked.
+      </div>
+      <div style={{ marginTop: 6, fontSize: 12, opacity: 0.65 }}>
+        (the pigeon approves this message)
+      </div>
+    </div>
+  );
+}
+
 function WaxSealOverlay({ etaText }: { etaText: string }) {
   return (
     <div style={{ position: "relative" }}>
@@ -46,7 +296,6 @@ function WaxSealOverlay({ etaText }: { etaText: string }) {
           overflow: "hidden",
         }}
       >
-        {/* Blur veil to hide the content behind */}
         <div
           style={{
             position: "absolute",
@@ -57,7 +306,6 @@ function WaxSealOverlay({ etaText }: { etaText: string }) {
           }}
         />
 
-        {/* Seal */}
         <div
           style={{
             position: "relative",
@@ -116,7 +364,6 @@ function WaxSealOverlay({ etaText }: { etaText: string }) {
           </div>
         </div>
 
-        {/* Subtle “paper fibers” noise */}
         <div
           style={{
             position: "absolute",
@@ -133,37 +380,7 @@ function WaxSealOverlay({ etaText }: { etaText: string }) {
   );
 }
 
-function clamp01(n: number) {
-  return Math.max(0, Math.min(1, n));
-}
-
-function progressFraction(sentISO: string, etaISO: string, now = new Date()) {
-  const sent = new Date(sentISO).getTime();
-  const eta = new Date(etaISO).getTime();
-  const t = now.getTime();
-  if (eta <= sent) return 1;
-  return clamp01((t - sent) / (eta - sent));
-}
-
-function formatCountdown(ms: number) {
-  if (ms <= 0) return "Delivered";
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  const pad = (x: number) => String(x).padStart(2, "0");
-  return `${h}:${pad(m)}:${pad(s)}`;
-}
-
-// compute milestone timestamp between sent_at and eta_at
-function milestoneTimeISO(sentISO: string, etaISO: string, fraction: number) {
-  const sent = new Date(sentISO).getTime();
-  const eta = new Date(etaISO).getTime();
-  if (!Number.isFinite(sent) || !Number.isFinite(eta) || eta <= sent) return etaISO;
-  const t = sent + (eta - sent) * fraction;
-  return new Date(t).toISOString();
-}
-
+/* ----------------- page ----------------- */
 export default function LetterStatusPage() {
   const params = useParams();
   const raw = (params as any)?.token;
@@ -173,9 +390,16 @@ export default function LetterStatusPage() {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
-  const [delivered, setDelivered] = useState(false);
 
-  // tiny UX: show “copied”
+  const [delivered, setDelivered] = useState(false);
+  const prevDeliveredRef = useRef(false);
+
+  // delivery FX
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [sealCrack, setSealCrack] = useState(false);
+  const [revealBody, setRevealBody] = useState(false);
+
+  // copy UX
   const [copied, setCopied] = useState(false);
 
   // clock tick (for ETA countdown)
@@ -215,6 +439,55 @@ export default function LetterStatusPage() {
     load();
   }, [token]);
 
+  // poll a bit while in-flight so it feels "live"
+  useEffect(() => {
+    if (!token || delivered) return;
+
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/letters/${encodeURIComponent(token)}`, {
+          cache: "no-store",
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setLetter(data.letter as Letter);
+          setDelivered(!!data.delivered);
+          setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
+        }
+      } catch {
+        // ignore polling errors quietly
+      }
+    }, 15000);
+
+    return () => clearInterval(poll);
+  }, [token, delivered]);
+
+  // delivery moment: confetti + seal crack, then reveal body
+  useEffect(() => {
+    const prev = prevDeliveredRef.current;
+    if (!prev && delivered) {
+      // trigger once
+      setShowConfetti(true);
+      setSealCrack(true);
+
+      const t1 = setTimeout(() => setSealCrack(false), 900);
+      const t2 = setTimeout(() => setShowConfetti(false), 1200);
+      const t3 = setTimeout(() => setRevealBody(true), 650);
+
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
+    }
+    prevDeliveredRef.current = delivered;
+  }, [delivered]);
+
+  // if page loads already delivered, show body immediately
+  useEffect(() => {
+    if (delivered) setRevealBody(true);
+  }, [delivered]);
+
   const progress = useMemo(() => {
     if (!letter) return 0;
     return progressFraction(letter.sent_at, letter.eta_at, now);
@@ -236,7 +509,6 @@ export default function LetterStatusPage() {
     return current ?? checkpoints[0];
   }, [checkpoints, letter, now]);
 
-  // milestone model (computed client-side)
   const milestones = useMemo(() => {
     if (!letter) return [];
     const defs = [
@@ -256,6 +528,14 @@ export default function LetterStatusPage() {
     if (!letter) return "";
     return `${window.location.origin}/l/${letter.public_token}`;
   }, [letter]);
+
+  const pigeon = useMemo(() => {
+    if (!letter) return null;
+    const lat = lerp(letter.origin_lat, letter.dest_lat, progress);
+    const lon = lerp(letter.origin_lon, letter.dest_lon, progress);
+    const text = fakeOverText(progress, letter.origin_name, letter.dest_name);
+    return { lat, lon, text };
+  }, [letter, progress]);
 
   const timelineItems = useMemo(() => {
     const cps = checkpoints.map((cp) => ({
@@ -299,6 +579,8 @@ export default function LetterStatusPage() {
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860, margin: "0 auto" }}>
+      <ConfettiBurst active={showConfetti} />
+
       {/* ---------- Top header card ---------- */}
       <div
         style={{
@@ -340,23 +622,23 @@ export default function LetterStatusPage() {
           </div>
 
           <div style={{ display: "grid", gap: 10, justifyItems: "end" }}>
-            {/* status pill */}
-            <div
-              style={{
-                padding: "8px 12px",
-                borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.18)",
-                fontWeight: 800,
-                fontSize: 12,
-                letterSpacing: 0.3,
-                opacity: 0.95,
-                background: delivered
-                  ? "rgba(80, 220, 140, 0.12)"
-                  : "rgba(255, 255, 255, 0.06)",
-              }}
-            >
-              {delivered ? "✅ Delivered" : "🕊️ In Flight"}
-            </div>
+            {/* LIVE + status pill */}
+            {!delivered ? (
+              <LivePill />
+            ) : (
+              <div
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  fontWeight: 900,
+                  fontSize: 12,
+                  background: "rgba(80, 220, 140, 0.12)",
+                }}
+              >
+                ✅ Delivered
+              </div>
+            )}
 
             {/* copy link */}
             <button
@@ -367,7 +649,7 @@ export default function LetterStatusPage() {
                   setCopied(true);
                   setTimeout(() => setCopied(false), 1200);
                 } catch {
-                  // fallback: do nothing
+                  // ignore
                 }
               }}
               style={{
@@ -375,7 +657,7 @@ export default function LetterStatusPage() {
                 borderRadius: 12,
                 border: "1px solid rgba(255,255,255,0.18)",
                 background: "transparent",
-                fontWeight: 800,
+                fontWeight: 900,
                 cursor: "pointer",
                 fontSize: 12,
                 opacity: 0.9,
@@ -448,7 +730,7 @@ export default function LetterStatusPage() {
                 }}
               >
                 <span style={{ fontWeight: 900 }}>{m.isPast ? "●" : "○"}</span>
-                <span style={{ fontWeight: 800 }}>{m.label}</span>
+                <span style={{ fontWeight: 900 }}>{m.label}</span>
                 <span style={{ opacity: 0.75 }}>
                   {new Date(m.atISO).toLocaleString()}
                 </span>
@@ -458,7 +740,7 @@ export default function LetterStatusPage() {
         </div>
       </div>
 
-      {/* ---------- Map card ---------- */}
+      {/* ---------- Map card (with fake marker + tooltip) ---------- */}
       <div
         style={{
           marginTop: 16,
@@ -472,16 +754,79 @@ export default function LetterStatusPage() {
         <div style={{ padding: 12, borderBottom: "1px solid rgba(255,255,255,0.10)" }}>
           <div style={{ fontWeight: 900 }}>Route Map</div>
           <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-            Pigeon position updates are ETA-based. The bird refuses GPS collars.
+            We’re faking GPS. The pigeon demanded privacy.
           </div>
         </div>
 
         <div style={{ padding: 12 }}>
-          <MapView
-            origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-            dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-            progress={progress}
-          />
+          {/* wrapper so we can overlay a marker without touching MapView */}
+          <div style={{ position: "relative" }}>
+            <MapView
+              origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+              dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+              progress={progress}
+            />
+
+            {/* fake marker that “moves” across the map area */}
+            {!delivered && pigeon && (
+              <div
+                style={{
+                  position: "absolute",
+                  left: `${8 + progress * 84}%`,
+                  top: `${52 + Math.sin(progress * Math.PI * 2) * 6}%`,
+                  transform: "translate(-50%, -50%)",
+                  zIndex: 4,
+                }}
+              >
+                <div
+                  style={{
+                    position: "relative",
+                    width: 18,
+                    height: 18,
+                    borderRadius: 999,
+                    background: "rgba(255,255,255,0.92)",
+                    border: "2px solid rgba(0,0,0,0.6)",
+                    boxShadow: "0 10px 22px rgba(0,0,0,0.35)",
+                    cursor: "default",
+                  }}
+                  title={`${pigeon.text}\nLat/Lon: ${pigeon.lat.toFixed(2)}, ${pigeon.lon.toFixed(2)}`}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: "50%",
+                      top: "50%",
+                      width: 6,
+                      height: 6,
+                      borderRadius: 999,
+                      background: "rgba(0,0,0,0.8)",
+                      transform: "translate(-50%, -50%)",
+                    }}
+                  />
+                  {/* tooltip bubble */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      bottom: 26,
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      padding: "8px 10px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(255,255,255,0.16)",
+                      background: "rgba(0,0,0,0.62)",
+                      color: "rgba(255,255,255,0.95)",
+                      fontSize: 12,
+                      whiteSpace: "nowrap",
+                      opacity: 0.92,
+                      pointerEvents: "none",
+                    }}
+                  >
+                    🕊️ {pigeon.text}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div
@@ -560,7 +905,7 @@ export default function LetterStatusPage() {
                     </div>
 
                     {isCurrentCheckpoint && (
-                      <div style={{ fontSize: 12, opacity: 0.8, fontWeight: 800 }}>
+                      <div style={{ fontSize: 12, opacity: 0.8, fontWeight: 900 }}>
                         current
                       </div>
                     )}
@@ -596,6 +941,7 @@ export default function LetterStatusPage() {
               border: "1px solid rgba(255,255,255,0.12)",
               overflow: "hidden",
               background: "rgba(0,0,0,0.15)",
+              position: "relative",
             }}
           >
             <div
@@ -607,8 +953,10 @@ export default function LetterStatusPage() {
               <div style={{ fontWeight: 900 }}>{letter.subject || "(No subject)"}</div>
             </div>
 
-            <div style={{ padding: 14 }}>
-              {delivered ? (
+            <div style={{ padding: 14, position: "relative" }}>
+              <SealCrackOverlay active={sealCrack} />
+
+              {revealBody ? (
                 <div
                   style={{
                     whiteSpace: "pre-wrap",
@@ -643,8 +991,92 @@ export default function LetterStatusPage() {
           }
         }
 
+        @keyframes pulse {
+          0% {
+            box-shadow: 0 0 0 0 rgba(80, 220, 140, 0.55);
+          }
+          70% {
+            box-shadow: 0 0 0 10px rgba(80, 220, 140, 0);
+          }
+          100% {
+            box-shadow: 0 0 0 0 rgba(80, 220, 140, 0);
+          }
+        }
+
+        @keyframes confetti-fall {
+          0% {
+            opacity: 0;
+            transform: translate3d(0, 0, 0) rotate(0deg);
+          }
+          10% {
+            opacity: 1;
+          }
+          100% {
+            opacity: 0;
+            transform: translate3d(var(--drift), 520px, 0) rotate(220deg);
+          }
+        }
+
+        @keyframes seal-pop {
+          0% {
+            transform: rotate(-8deg) scale(0.92);
+            filter: blur(0.2px);
+          }
+          60% {
+            transform: rotate(-8deg) scale(1.03);
+          }
+          100% {
+            transform: rotate(-8deg) scale(1);
+          }
+        }
+
+        @keyframes crack {
+          0% {
+            transform: translateX(-50%) rotate(14deg) scaleY(0);
+            opacity: 0.2;
+          }
+          55% {
+            transform: translateX(-50%) rotate(14deg) scaleY(1);
+            opacity: 1;
+          }
+          100% {
+            transform: translateX(-50%) rotate(14deg) scaleY(1);
+            opacity: 0.85;
+          }
+        }
+
+        @keyframes chip {
+          0% {
+            transform: rotate(18deg) scale(0);
+            opacity: 0;
+          }
+          65% {
+            transform: rotate(18deg) scale(1);
+            opacity: 1;
+          }
+          100% {
+            transform: rotate(18deg) translate(10px, 8px) scale(1);
+            opacity: 0;
+          }
+        }
+
+        @keyframes chip2 {
+          0% {
+            transform: rotate(-22deg) scale(0);
+            opacity: 0;
+          }
+          60% {
+            transform: rotate(-22deg) scale(1);
+            opacity: 1;
+          }
+          100% {
+            transform: rotate(-22deg) translate(-10px, 10px) scale(1);
+            opacity: 0;
+          }
+        }
+
         @media (min-width: 980px) {
-          main > div:nth-of-type(3) {
+          main > div:nth-of-type(4) {
             grid-template-columns: 1fr 1fr;
             align-items: start;
           }
