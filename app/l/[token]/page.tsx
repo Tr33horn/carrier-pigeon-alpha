@@ -54,7 +54,6 @@ function formatCountdown(ms: number) {
   return `${h}:${pad(m)}:${pad(s)}`;
 }
 
-// compute milestone timestamp between sent_at and eta_at
 function milestoneTimeISO(sentISO: string, etaISO: string, fraction: number) {
   const sent = new Date(sentISO).getTime();
   const eta = new Date(etaISO).getTime();
@@ -66,22 +65,19 @@ function milestoneTimeISO(sentISO: string, etaISO: string, fraction: number) {
 /* ---------- Wax Seal ---------- */
 function WaxSealOverlay({ etaText, cracking }: { etaText: string; cracking?: boolean }) {
   return (
-    <div
-      className={cracking ? "seal crack" : "seal"}
-      style={{ position: "relative" }}
-    >
+    <div className={cracking ? "seal crack" : "seal"} style={{ position: "relative" }}>
       <div
         style={{
           position: "relative",
           borderRadius: 18,
           padding: 18,
           background:
-            "linear-gradient(180deg, rgba(255,255,255,0.70), rgba(255,255,255,0.35))",
+            "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.40))",
           overflow: "hidden",
-          boxShadow: "0 12px 30px rgba(0,0,0,0.12)",
+          boxShadow: "var(--shadow-lg)",
+          border: "1px solid rgba(0,0,0,0.06)",
         }}
       >
-        {/* veil */}
         <div
           style={{
             position: "absolute",
@@ -101,7 +97,6 @@ function WaxSealOverlay({ etaText, cracking }: { etaText: string; cracking?: boo
             gap: 14,
           }}
         >
-          {/* wax */}
           <div
             style={{
               width: 64,
@@ -110,7 +105,7 @@ function WaxSealOverlay({ etaText, cracking }: { etaText: string; cracking?: boo
               background:
                 "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.35), rgba(255,255,255,0) 40%)," +
                 "radial-gradient(circle at 70% 75%, rgba(0,0,0,0.20), rgba(0,0,0,0) 45%)," +
-                "linear-gradient(145deg, #D92D20, #8B1A12)",
+                "linear-gradient(145deg, var(--brand-red), #8B1A12)",
               boxShadow:
                 "0 10px 24px rgba(0,0,0,0.18), inset 0 2px 10px rgba(255,255,255,0.22)",
               border: "1px solid rgba(255,255,255,0.55)",
@@ -126,12 +121,12 @@ function WaxSealOverlay({ etaText, cracking }: { etaText: string; cracking?: boo
                 width: 40,
                 height: 40,
                 borderRadius: "999px",
-                border: "1px dashed rgba(255,255,255,0.65)",
+                border: "1px dashed rgba(255,255,255,0.70)",
                 display: "grid",
                 placeItems: "center",
                 fontWeight: 900,
                 letterSpacing: 1,
-                color: "rgba(255,255,255,0.95)",
+                color: "rgba(255,255,255,0.96)",
                 fontSize: 14,
                 textTransform: "uppercase",
               }}
@@ -141,7 +136,7 @@ function WaxSealOverlay({ etaText, cracking }: { etaText: string; cracking?: boo
           </div>
 
           <div style={{ position: "relative", zIndex: 2 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>
+            <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 4 }}>
               Sealed until delivery
             </div>
             <div style={{ fontSize: 12, opacity: 0.75 }}>Opens at {etaText}</div>
@@ -151,14 +146,13 @@ function WaxSealOverlay({ etaText, cracking }: { etaText: string; cracking?: boo
           </div>
         </div>
 
-        {/* “paper fibers” */}
         <div
           style={{
             position: "absolute",
             inset: 0,
             opacity: 0.08,
             backgroundImage:
-              "repeating-linear-gradient(0deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, rgba(0,0,0,0) 2px, rgba(0,0,0,0) 6px)",
+              "repeating-linear-gradient(0deg, rgba(0,0,0,0.10) 0px, rgba(0,0,0,0.10) 1px, rgba(0,0,0,0) 2px, rgba(0,0,0,0) 6px)",
             mixBlendMode: "multiply",
             pointerEvents: "none",
           }}
@@ -168,7 +162,7 @@ function WaxSealOverlay({ etaText, cracking }: { etaText: string; cracking?: boo
   );
 }
 
-/* ---------- tiny confetti ---------- */
+/* ---------- Confetti ---------- */
 function ConfettiBurst({ show }: { show: boolean }) {
   if (!show) return null;
   return (
@@ -192,21 +186,17 @@ export default function LetterStatusPage() {
   const [now, setNow] = useState(new Date());
   const [delivered, setDelivered] = useState(false);
 
-  // “legit” freshness
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
-  // delivery micro interaction
   const prevDelivered = useRef(false);
   const [revealStage, setRevealStage] = useState<"idle" | "crack" | "open">("idle");
   const [confetti, setConfetti] = useState(false);
 
-  /* tick */
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  /* loader */
   useEffect(() => {
     if (!token) return;
 
@@ -240,7 +230,7 @@ export default function LetterStatusPage() {
 
     load();
 
-    // refresh every 15s while in flight (feels “live”)
+    // feels “live” while in flight
     const interval = setInterval(() => load(), 15000);
 
     return () => {
@@ -249,9 +239,7 @@ export default function LetterStatusPage() {
     };
   }, [token]);
 
-  /* delivery animation sequencing */
   useEffect(() => {
-    // detect false -> true transition
     if (!prevDelivered.current && delivered) {
       setRevealStage("crack");
       setConfetti(true);
@@ -311,327 +299,447 @@ export default function LetterStatusPage() {
 
   const currentlyOver = useMemo(() => {
     if (delivered) return "Delivered";
-    // “fake it til the pigeon makes it”
     return currentCheckpoint?.name ? currentCheckpoint.name : "somewhere over the U.S.";
   }, [delivered, currentCheckpoint]);
 
-  /* ---------- styles ---------- */
+  const showLive = !delivered;
+
   const page = {
     padding: 24,
     fontFamily: `"Bricolage Grotesque", system-ui, -apple-system, Segoe UI, Roboto, Arial`,
-    maxWidth: 920,
+    maxWidth: 980,
     margin: "0 auto",
-    color: "#111",
+    color: "var(--ink)",
   } as const;
 
   const card = {
-    background: "#FFF",
+    background: "var(--card)",
     borderRadius: 18,
     padding: 16,
-    boxShadow: "0 10px 28px rgba(0,0,0,0.10)",
+    boxShadow: "var(--shadow-lg)",
+    border: "1px solid rgba(0,0,0,0.06)",
   } as const;
 
-  const cardSoft = {
-    background: "#F0F0ED",
+  const soft = {
+    background: "var(--soft)",
     borderRadius: 18,
     padding: 16,
+    border: "1px solid rgba(0,0,0,0.06)",
   } as const;
 
   if (error) {
     return (
-      <main style={{ ...page, background: "#F6F6F4", minHeight: "100vh" }}>
-        <h1 style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.02em" }}>
-          Flight Status
-        </h1>
-        <p style={{ color: "#D92D20", marginTop: 12, fontWeight: 700 }}>❌ {error}</p>
+      <main className="pageBg">
+        <main style={page}>
+          <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.02em", margin: 0 }}>
+            Flight Status
+          </h1>
+          <p style={{ color: "var(--brand-red)", marginTop: 12, fontWeight: 800 }}>
+            ❌ {error}
+          </p>
+        </main>
       </main>
     );
   }
 
   if (!letter) {
     return (
-      <main style={{ ...page, background: "#F6F6F4", minHeight: "100vh" }}>
-        <h1 style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.02em" }}>
-          Flight Status
-        </h1>
-        <p style={{ marginTop: 12, opacity: 0.7, fontWeight: 600 }}>Loading…</p>
+      <main className="pageBg">
+        <main style={page}>
+          <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.02em", margin: 0 }}>
+            Flight Status
+          </h1>
+          <p style={{ marginTop: 12, opacity: 0.7, fontWeight: 700 }}>Loading…</p>
+        </main>
       </main>
     );
   }
 
-  const showLive = !delivered;
-
   return (
-    <main style={{ ...page, background: "#F6F6F4", minHeight: "100vh" }}>
-      {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          alignItems: "flex-end",
-          marginBottom: 12,
-        }}
-      >
-        <div>
-          <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.02em", margin: 0 }}>
-            Flight Status
-          </h1>
-
-          {/* LIVE row */}
-          <div style={{ marginTop: 8, display: "flex", gap: 10, alignItems: "center" }}>
-            {showLive ? (
-              <>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <span className="liveDot" />
-                  <span style={{ fontWeight: 900, letterSpacing: "0.04em", fontSize: 12 }}>
-                    LIVE
-                  </span>
-                </div>
-                <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75 }}>
-                  Currently over: <span style={{ opacity: 1 }}>{currentlyOver}</span>
-                </div>
-              </>
-            ) : (
-              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>
-                ✅ Delivered
-              </div>
-            )}
-          </div>
-
-          {showLive && (
-            <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.55, marginTop: 4 }}>
-              Last updated: {secondsSinceFetch ?? 0}s ago
-            </div>
-          )}
-        </div>
-
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.6 }}>ETA</div>
-          <div style={{ fontSize: 14, fontWeight: 900 }}>
-            {new Date(letter.eta_at).toLocaleString()}
-          </div>
-          {!delivered && (
-            <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.7, marginTop: 2 }}>
-              T-minus {countdown}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Route + Map */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 14 }}>
-        <div style={card}>
-          <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.6 }}>Route</div>
-          <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: "-0.01em", marginTop: 4 }}>
-            {letter.origin_name} <span style={{ opacity: 0.45 }}>→</span> {letter.dest_name}
-          </div>
-
-          <div style={{ marginTop: 14 }}>
-            <MapView
-              origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-              dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-              progress={progress}
-              tooltipText={`Currently over: ${currentlyOver}`}
-            />
-          </div>
-
-          <div style={{ display: "flex", gap: 14, marginTop: 12, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.75 }}>
-              Distance: <span style={{ opacity: 1 }}>{letter.distance_km.toFixed(0)} km</span>
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.75 }}>
-              Speed: <span style={{ opacity: 1 }}>{letter.speed_kmh.toFixed(0)} km/h</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Progress + milestones */}
-        <div style={card}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+    <main className="pageBg">
+      <main style={page}>
+        {/* TOP BANNER BLOCK (Route) */}
+        <section className="routeBanner">
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start" }}>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.6 }}>Progress</div>
-              <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: "-0.02em" }}>
-                {Math.round(progress * 100)}%
+              <div className="kicker">Flight status</div>
+
+              <div className="routeHeadline">
+                {letter.origin_name} <span className="arrow">→</span> {letter.dest_name}
+              </div>
+
+              <div className="subRow">
+                {showLive ? (
+                  <>
+                    <div className="liveWrap">
+                      <span className="liveDot" />
+                      <span className="liveText">LIVE</span>
+                    </div>
+                    <div className="metaText">
+                      Currently over: <strong>{currentlyOver}</strong>
+                    </div>
+                    <div className="metaText faint">
+                      Last updated: {secondsSinceFetch ?? 0}s ago
+                    </div>
+                  </>
+                ) : (
+                  <div className="metaText">
+                    <strong>✅ Delivered</strong> — the bird has clocked out.
+                  </div>
+                )}
               </div>
             </div>
 
-            <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.7 }}>
-              {currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}
+            <div className="etaBox">
+              <div className="kicker">ETA</div>
+              <div className="etaTime">{new Date(letter.eta_at).toLocaleString()}</div>
+              {!delivered && <div className="etaSub">T-minus {countdown}</div>}
+            </div>
+          </div>
+        </section>
+
+        {/* GRID */}
+        <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 14, marginTop: 14 }}>
+          {/* MAP CARD */}
+          <div style={card}>
+            <div className="kicker">Map</div>
+            <div style={{ marginTop: 12 }}>
+              <MapView
+                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+                progress={progress}
+                tooltipText={`Currently over: ${currentlyOver}`}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 14, marginTop: 12, flexWrap: "wrap" }}>
+              <div className="metaText faint">
+                Distance: <strong>{letter.distance_km.toFixed(0)} km</strong>
+              </div>
+              <div className="metaText faint">
+                Speed: <strong>{letter.speed_kmh.toFixed(0)} km/h</strong>
+              </div>
             </div>
           </div>
 
-          <div style={{ marginTop: 12 }}>
-            <div
-              style={{
-                position: "relative",
-                height: 12,
-                borderRadius: 999,
-                background: "#E6E6E2",
-                overflow: "hidden",
-              }}
-            >
+          {/* PROGRESS CARD */}
+          <div style={card}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <div>
+                <div className="kicker">Progress</div>
+                <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.02em", marginTop: 4 }}>
+                  {Math.round(progress * 100)}%
+                </div>
+              </div>
+              <div className="metaText faint" style={{ textAlign: "right" }}>
+                {currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 12 }}>
               <div
                 style={{
-                  height: "100%",
-                  width: `${Math.round(progress * 100)}%`,
-                  background: "#111",
-                  transition: "width 0.4s ease",
+                  position: "relative",
+                  height: 12,
+                  borderRadius: 999,
+                  background: "rgba(0,0,0,0.10)",
+                  overflow: "hidden",
                 }}
-              />
-              {[25, 50, 75].map((p) => (
+              >
                 <div
-                  key={p}
                   style={{
-                    position: "absolute",
-                    left: `${p}%`,
-                    top: 0,
-                    bottom: 0,
-                    width: 2,
-                    background: "rgba(17,17,17,0.18)",
-                    transform: "translateX(-1px)",
+                    height: "100%",
+                    width: `${Math.round(progress * 100)}%`,
+                    background: "var(--ink)",
+                    transition: "width 0.4s ease",
                   }}
                 />
+                {[25, 50, 75].map((p) => (
+                  <div
+                    key={p}
+                    style={{
+                      position: "absolute",
+                      left: `${p}%`,
+                      top: 0,
+                      bottom: 0,
+                      width: 2,
+                      background: "rgba(0,0,0,0.16)",
+                      transform: "translateX(-1px)",
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+              {milestones.map((m) => (
+                <div
+                  key={m.pct}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "10px 12px",
+                    borderRadius: 14,
+                    background: m.isPast ? "var(--card)" : "var(--soft)",
+                    border: "1px solid rgba(0,0,0,0.06)",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <span style={{ fontWeight: 900 }}>{m.isPast ? "●" : "○"}</span>
+                    <div style={{ fontWeight: 900, fontSize: 13 }}>{m.label}</div>
+                  </div>
+                  <div className="metaText faint">{new Date(m.atISO).toLocaleString()}</div>
+                </div>
               ))}
+            </div>
+          </div>
+        </div>
+
+        {/* TIMELINE */}
+        <div style={{ marginTop: 14, ...card }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <h2 style={{ fontSize: 16, fontWeight: 900, letterSpacing: "-0.01em", margin: 0 }}>
+              Timeline
+            </h2>
+            <div className="metaText faint">
+              {delivered ? "Final log" : "Auto-updating"}
             </div>
           </div>
 
           <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-            {milestones.map((m) => (
-              <div
-                key={m.pct}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: "10px 12px",
-                  borderRadius: 14,
-                  background: m.isPast ? "#FFFFFF" : "#F0F0ED",
-                  boxShadow: m.isPast ? "0 8px 18px rgba(0,0,0,0.08)" : "none",
-                }}
-              >
-                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <span style={{ fontWeight: 900 }}>{m.isPast ? "●" : "○"}</span>
-                  <div style={{ fontWeight: 900, fontSize: 13 }}>{m.label}</div>
-                </div>
-                <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.6 }}>
-                  {new Date(m.atISO).toLocaleString()}
-                </div>
-              </div>
-            ))}
+            {[
+              ...checkpoints.map((cp) => ({
+                key: `cp-${cp.id}`,
+                name: cp.name,
+                at: cp.at,
+                kind: "checkpoint" as const,
+              })),
+              ...milestones.map((m) => ({
+                key: `ms-${m.pct}`,
+                name: `🕊️ ${m.label}`,
+                at: m.atISO,
+                kind: "milestone" as const,
+              })),
+            ]
+              .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+              .map((item) => {
+                const isPast = new Date(item.at).getTime() <= now.getTime();
+                const isMilestone = item.kind === "milestone";
+
+                return (
+                  <div
+                    key={item.key}
+                    style={{
+                      padding: 12,
+                      borderRadius: 14,
+                      background: isMilestone ? "rgba(217,45,32,0.06)" : isPast ? "var(--card)" : "var(--soft)",
+                      border: "1px solid rgba(0,0,0,0.06)",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      alignItems: "center",
+                    }}
+                  >
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <span style={{ fontWeight: 900 }}>{isPast ? "●" : "○"}</span>
+                      <div style={{ fontWeight: 900 }}>{item.name}</div>
+                    </div>
+                    <div className="metaText faint">{new Date(item.at).toLocaleString()}</div>
+                  </div>
+                );
+              })}
           </div>
         </div>
-      </div>
 
-      {/* Timeline */}
-      <div style={{ marginTop: 14, ...card }}>
-        <h2 style={{ fontSize: 16, fontWeight: 900, letterSpacing: "-0.01em", margin: 0 }}>
-          Timeline
-        </h2>
+        {/* MESSAGE */}
+        <div style={{ marginTop: 14, position: "relative", ...card }}>
+          <ConfettiBurst show={confetti} />
 
-        <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-          {[
-            ...checkpoints.map((cp) => ({
-              key: `cp-${cp.id}`,
-              name: cp.name,
-              at: cp.at,
-              kind: "checkpoint" as const,
-            })),
-            ...milestones.map((m) => ({
-              key: `ms-${m.pct}`,
-              name: `🕊️ ${m.label}`,
-              at: m.atISO,
-              kind: "milestone" as const,
-            })),
-          ]
-            .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
-            .map((item) => {
-              const isPast = new Date(item.at).getTime() <= now.getTime();
-              const isMilestone = item.kind === "milestone";
+          <h2 style={{ fontSize: 16, fontWeight: 900, letterSpacing: "-0.01em", margin: 0 }}>
+            Letter from {letter.from_name || "Sender"} to {letter.to_name || "Recipient"}
+          </h2>
 
-              return (
-                <div
-                  key={item.key}
-                  style={{
-                    padding: 12,
-                    borderRadius: 14,
-                    background: isMilestone ? "#F7F2EC" : isPast ? "#FFFFFF" : "#F0F0ED",
-                    boxShadow: isPast ? "0 8px 18px rgba(0,0,0,0.08)" : "none",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    alignItems: "center",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                    <span style={{ fontWeight: 900 }}>{isPast ? "●" : "○"}</span>
-                    <div style={{ fontWeight: 900 }}>{item.name}</div>
-                  </div>
-
-                  <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.65 }}>
-                    {new Date(item.at).toLocaleString()}
-                  </div>
-                </div>
-              );
-            })}
-        </div>
-      </div>
-
-      {/* Message */}
-      <div style={{ marginTop: 14, position: "relative", ...card }}>
-        <ConfettiBurst show={confetti} />
-
-        <h2 style={{ fontSize: 16, fontWeight: 900, letterSpacing: "-0.01em", margin: 0 }}>
-          Letter from {letter.from_name || "Sender"} to {letter.to_name || "Recipient"}
-        </h2>
-
-        <div style={{ marginTop: 10, ...cardSoft }}>
-          <div style={{ fontWeight: 900, marginBottom: 10, fontSize: 14 }}>
-            {letter.subject || "(No subject)"}
-          </div>
-
-          {/* Reveal stack: seal cracks, then body appears */}
-          <div style={{ position: "relative" }}>
-            {/* body */}
-            <div
-              className={delivered && revealStage === "open" ? "bodyReveal" : ""}
-              style={{
-                whiteSpace: "pre-wrap",
-                lineHeight: 1.55,
-                fontSize: 14,
-                fontWeight: 600,
-                opacity: delivered ? 1 : 0,
-              }}
-            >
-              {delivered ? (letter.body ?? "") : ""}
+          <div style={{ marginTop: 10, ...soft }}>
+            <div style={{ fontWeight: 900, marginBottom: 10, fontSize: 14 }}>
+              {letter.subject || "(No subject)"}
             </div>
 
-            {/* seal overlay */}
-            {!delivered || revealStage !== "open" ? (
-              <div style={{ position: delivered ? "absolute" : "relative", inset: 0 }}>
-                <WaxSealOverlay
-                  etaText={new Date(letter.eta_at).toLocaleString()}
-                  cracking={delivered && revealStage === "crack"}
-                />
+            <div style={{ position: "relative" }}>
+              <div
+                className={delivered && revealStage === "open" ? "bodyReveal" : ""}
+                style={{
+                  whiteSpace: "pre-wrap",
+                  lineHeight: 1.55,
+                  fontSize: 14,
+                  fontWeight: 650,
+                  opacity: delivered ? 1 : 0,
+                }}
+              >
+                {delivered ? (letter.body ?? "") : ""}
               </div>
-            ) : null}
+
+              {!delivered || revealStage !== "open" ? (
+                <div style={{ position: delivered ? "absolute" : "relative", inset: 0 }}>
+                  <WaxSealOverlay
+                    etaText={new Date(letter.eta_at).toLocaleString()}
+                    cracking={delivered && revealStage === "crack"}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 14, opacity: 0.55, fontSize: 11, fontWeight: 800 }}>
+            Token: {letter.public_token}
           </div>
         </div>
+      </main>
 
-        <div style={{ marginTop: 14, opacity: 0.55, fontSize: 11, fontWeight: 800 }}>
-          Token: {letter.public_token}
-        </div>
-      </div>
-
-      {/* global styles */}
+      {/* ✅ Brand tokens + subtle grain + banner styles */}
       <style jsx global>{`
+        :root {
+          --bg: #f6f6f4;
+          --card: #ffffff;
+          --soft: #f0f0ed;
+          --ink: #121212;
+
+          /* brand tokens */
+          --brand-cream: #f6f6f4;
+          --brand-red: #d92d20;
+
+          --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.10);
+        }
+
+        .pageBg {
+          min-height: 100vh;
+          background: var(--brand-cream);
+          position: relative;
+        }
+
+        /* Subtle grain overlay */
+        .pageBg::before {
+          content: "";
+          position: fixed;
+          inset: 0;
+          pointer-events: none;
+          opacity: 0.06;
+          mix-blend-mode: multiply;
+          background-image:
+            radial-gradient(circle at 20% 30%, rgba(0,0,0,0.10) 0.5px, transparent 0.6px),
+            radial-gradient(circle at 80% 70%, rgba(0,0,0,0.08) 0.5px, transparent 0.6px),
+            radial-gradient(circle at 50% 50%, rgba(0,0,0,0.07) 0.5px, transparent 0.6px);
+          background-size: 6px 6px;
+        }
+
+        .kicker {
+          font-size: 12px;
+          font-weight: 900;
+          opacity: 0.6;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+
+        .metaText {
+          font-size: 12px;
+          font-weight: 800;
+          opacity: 0.8;
+        }
+        .metaText.faint {
+          opacity: 0.6;
+          font-weight: 800;
+        }
+
+        /* Route banner */
+        .routeBanner {
+          border-radius: 22px;
+          padding: 18px;
+          background: #ffffff;
+          border: 1px solid rgba(0,0,0,0.06);
+          box-shadow: var(--shadow-lg);
+          position: relative;
+          overflow: hidden;
+        }
+
+        /* solid block accent (Alpinhound-y) */
+        .routeBanner::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background:
+            linear-gradient(135deg, rgba(217,45,32,0.10), rgba(217,45,32,0.00) 55%),
+            linear-gradient(0deg, rgba(0,0,0,0.03), rgba(0,0,0,0));
+          pointer-events: none;
+        }
+
+        .routeHeadline {
+          font-size: 34px;
+          font-weight: 900;
+          letter-spacing: -0.03em;
+          margin-top: 8px;
+          position: relative;
+          z-index: 1;
+        }
+
+        .routeHeadline .arrow {
+          opacity: 0.4;
+          margin: 0 8px;
+        }
+
+        .subRow {
+          margin-top: 10px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          align-items: center;
+          position: relative;
+          z-index: 1;
+        }
+
+        .etaBox {
+          padding: 12px 14px;
+          border-radius: 16px;
+          background: rgba(0,0,0,0.04);
+          border: 1px solid rgba(0,0,0,0.06);
+          min-width: 260px;
+          position: relative;
+          z-index: 1;
+        }
+
+        .etaTime {
+          font-size: 14px;
+          font-weight: 900;
+          letter-spacing: -0.01em;
+          margin-top: 4px;
+        }
+        .etaSub {
+          font-size: 12px;
+          font-weight: 800;
+          opacity: 0.7;
+          margin-top: 2px;
+        }
+
         /* LIVE dot pulse */
+        .liveWrap {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+          padding: 6px 10px;
+          border-radius: 999px;
+          background: rgba(217,45,32,0.10);
+          border: 1px solid rgba(217,45,32,0.18);
+        }
+        .liveText {
+          font-weight: 900;
+          letter-spacing: 0.08em;
+          font-size: 12px;
+        }
         .liveDot {
           width: 10px;
           height: 10px;
           border-radius: 999px;
-          background: #d92d20;
+          background: var(--brand-red);
           box-shadow: 0 0 0 0 rgba(217, 45, 32, 0.40);
           animation: pulse 1.4s ease-out infinite;
           display: inline-block;
@@ -704,7 +812,7 @@ export default function LetterStatusPage() {
           width: 10px;
           height: 6px;
           border-radius: 3px;
-          background: rgba(17, 17, 17, 0.9);
+          background: rgba(18, 18, 18, 0.9);
           transform: translateX(-50%);
           animation: confettiFall 1100ms ease-out forwards;
         }
@@ -715,7 +823,6 @@ export default function LetterStatusPage() {
           background: rgba(0, 0, 0, 0.35);
         }
 
-        /* scatter positions */
         .confetti-bit:nth-child(1) { left: 10%; animation-delay: 0ms; }
         .confetti-bit:nth-child(2) { left: 18%; animation-delay: 40ms; }
         .confetti-bit:nth-child(3) { left: 28%; animation-delay: 80ms; }
