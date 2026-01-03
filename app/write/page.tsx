@@ -117,6 +117,7 @@ export default function WritePage() {
   /* ---------- UI ---------- */
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 720 }}>
+      <a href="/dashboard" style={{ textDecoration: "underline" }}>Dashboard</a>
       <h1 style={{ fontSize: 26, fontWeight: 800 }}>Write a Letter</h1>
       <p style={{ opacity: 0.7, marginTop: 6 }}>
         It’ll unlock for the recipient when the pigeon lands.
