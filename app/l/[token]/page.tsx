@@ -545,10 +545,10 @@ export default function LetterStatusPage() {
                 {showLive ? (
                   <>
                     <div className="liveStack">
-<div className="liveWrap">
-  <span className="liveDot" />
-  <span className="liveText">LIVE</span>
-</div>
+                      <div className="liveWrap">
+                        <span className="liveDot" />
+                        <span className="liveText">LIVE</span>
+                      </div>
                       <div className="liveSub">Last updated: {secondsSinceFetch ?? 0}s ago</div>
                     </div>
 
@@ -615,7 +615,7 @@ export default function LetterStatusPage() {
           </div>
         </section>
 
-        {/* LETTER directly under Flight Status (better flow) */}
+        {/* LETTER directly under Flight Status */}
         <div className="card" style={{ marginTop: 14, position: "relative" }}>
           <ConfettiBurst show={confetti} />
 
@@ -674,7 +674,6 @@ export default function LetterStatusPage() {
               />
             </div>
 
-            {/* progress bar */}
             <div style={{ marginTop: 14 }}>
               <div className="bar">
                 <div className="barFill" style={{ width: `${Math.round(progress * 100)}%` }} />
@@ -698,7 +697,7 @@ export default function LetterStatusPage() {
             </div>
           </div>
 
-          {/* TIMELINE CARD (rail) */}
+          {/* TIMELINE CARD */}
           <div className="card">
             <div className="cardHead">
               <div>
@@ -732,6 +731,11 @@ export default function LetterStatusPage() {
           --alp-blue-18: rgba(204, 239, 253, 0.18);
           --alp-blue-12: rgba(204, 239, 253, 0.12);
 
+          /* LIVE pulse green */
+          --live-green: #16a34a;
+          --live-green-30: rgba(22, 163, 74, 0.30);
+          --live-green-55: rgba(22, 163, 74, 0.55);
+
           --border: rgba(0, 0, 0, 0.08);
           --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.10);
           --shadow-md: 0 8px 18px rgba(0, 0, 0, 0.10);
@@ -748,7 +752,6 @@ export default function LetterStatusPage() {
           position: relative;
         }
 
-        /* subtle grain */
         .pageBg::before {
           content: "";
           position: fixed;
@@ -825,7 +828,6 @@ export default function LetterStatusPage() {
           border: 1px solid rgba(0, 0, 0, 0.06);
         }
 
-        /* ---------- banner ---------- */
         .routeBanner {
           border-radius: 24px;
           padding: 18px;
@@ -856,7 +858,7 @@ export default function LetterStatusPage() {
         }
 
         .routeHeadline {
-          font-size: 34px; /* tightened a touch */
+          font-size: 34px;
           font-weight: 900;
           letter-spacing: -0.035em;
           margin-top: 8px;
@@ -899,38 +901,6 @@ export default function LetterStatusPage() {
           margin-top: 2px;
         }
 
-        .liveWrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(204, 239, 253, 0.30); /* your Alpinhound blue @ 30% */
-  border: 1px solid rgba(0, 0, 0, 0.10);
-  font-weight: 900;
-  font-size: 12px;
-}
-
-.liveText {
-  letter-spacing: 0.10em;
-}
-
-.liveDot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: #121212;
-  box-shadow: 0 0 0 0 rgba(18, 18, 18, 0.35);
-  animation: livePulse 1.4s ease-out infinite;
-  display: inline-block;
-}
-
-@keyframes livePulse {
-  0% { box-shadow: 0 0 0 0 rgba(18, 18, 18, 0.35); transform: scale(1); }
-  70% { box-shadow: 0 0 0 10px rgba(18, 18, 18, 0); transform: scale(1.05); }
-  100% { box-shadow: 0 0 0 0 rgba(18, 18, 18, 0); transform: scale(1); }
-}
-
         /* ---------- pills / buttons ---------- */
         .ico {
           display: inline-grid;
@@ -972,11 +942,12 @@ export default function LetterStatusPage() {
           opacity: 0.75;
         }
 
-        /* LIVE stack: pill + last updated under it */
+        /* ---------- LIVE stack: black pill + green pulse dot ---------- */
         .liveStack {
           display: grid;
           gap: 6px;
         }
+
         .liveSub {
           font-size: 12px;
           font-weight: 850;
@@ -990,8 +961,12 @@ export default function LetterStatusPage() {
           gap: 8px;
           padding: 8px 12px;
           border-radius: 999px;
-          background: var(--alp-blue-30);
-          border: 1px solid rgba(0, 0, 0, 0.10);
+
+          /* KEEP PILL BLACK */
+          background: var(--ink);
+          border: 1px solid rgba(0, 0, 0, 0.20);
+          color: #fff;
+
           font-weight: 900;
           font-size: 12px;
         }
@@ -1004,24 +979,28 @@ export default function LetterStatusPage() {
           width: 10px;
           height: 10px;
           border-radius: 999px;
-          background: var(--ink);
-          box-shadow: 0 0 0 0 rgba(204, 239, 253, 0.9);
-          animation: pulseBlue 1.4s ease-out infinite;
+
+          /* DOT GREEN */
+          background: var(--live-green);
+
+          /* Make the pulse obvious even on black pill */
+          box-shadow: 0 0 0 0 var(--live-green-55);
+          animation: livePulseGreen 1.15s ease-out infinite;
           display: inline-block;
         }
 
-        @keyframes pulseBlue {
+        @keyframes livePulseGreen {
           0% {
-            box-shadow: 0 0 0 0 rgba(204, 239, 253, 0.75);
             transform: scale(1);
+            box-shadow: 0 0 0 0 var(--live-green-55);
           }
           70% {
-            box-shadow: 0 0 0 10px rgba(204, 239, 253, 0);
-            transform: scale(1.05);
+            transform: scale(1.08);
+            box-shadow: 0 0 0 10px rgba(22, 163, 74, 0);
           }
           100% {
-            box-shadow: 0 0 0 0 rgba(204, 239, 253, 0);
             transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
           }
         }
 
@@ -1211,7 +1190,6 @@ export default function LetterStatusPage() {
           box-shadow: 0 0 0 6px var(--alp-blue-30);
         }
 
-        /* pop/stamp when item flips to past */
         .railNode.pop .railDot {
           animation: pop 420ms ease-out both;
         }
@@ -1307,7 +1285,6 @@ export default function LetterStatusPage() {
           gap: 14px;
         }
 
-        /* keeping wax seal red as a “stamp” moment (feels nice against blue) */
         .wax {
           width: 64px;
           height: 64px;
