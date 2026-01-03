@@ -545,10 +545,10 @@ export default function LetterStatusPage() {
                 {showLive ? (
                   <>
                     <div className="liveStack">
-                      <div className="liveWrap">
-                        <span className="liveDot" />
-                        <span className="liveText">LIVE</span>
-                      </div>
+<div className="liveWrap">
+  <span className="liveDot" />
+  <span className="liveText">LIVE</span>
+</div>
                       <div className="liveSub">Last updated: {secondsSinceFetch ?? 0}s ago</div>
                     </div>
 
