@@ -1015,6 +1015,34 @@ body {
   box-shadow: 0 4px 10px rgba(0,0,0,0.25);
 }
 
+/* Destination map pin */
+.destPin {
+  color: #111;
+  filter: drop-shadow(0 6px 10px rgba(0,0,0,0.25));
+}
+
+.destPin svg {
+  display: block;
+  width: 22px;
+  height: 28px;
+}
+
+.destPin.delivered {
+  color: #2ecc71;
+}
+
+.map-dark .destPin {
+  color: #fff;
+}
+
+.destPin::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  opacity: 0.25;
+}
 
 /* Optional UI overlay image */
 .mapUiOverlay{

@@ -138,10 +138,20 @@ const originIcon = useMemo(
 const destIcon = useMemo(
   () =>
     L.divIcon({
-      className: "routeMarker destRing",
-      html: `<span></span>`,
-      iconSize: [18, 18],
-      iconAnchor: [9, 9],
+      className: "routeMarker destPin",
+      html: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+          />
+          <circle cx="12" cy="10" r="2.5" fill="currentColor"/>
+        </svg>
+      `,
+      iconSize: [22, 28],
+      iconAnchor: [11, 28],
     }),
   []
 );
