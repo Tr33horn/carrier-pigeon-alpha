@@ -23,6 +23,9 @@ type Letter = {
   speed_kmh: number;
   sent_at: string;
   eta_at: string;
+
+  // ✅ NEW: comes from /api/letters/[token]
+  eta_utc_text?: string; // e.g. "1/3/2026, 8:22:10 PM UTC"
 };
 
 type Checkpoint = {
@@ -32,7 +35,7 @@ type Checkpoint = {
   at: string;
 };
 
-// ✅ NEW: map style union
+// ✅ map style union
 type MapStyle = "carto-positron" | "carto-voyager" | "carto-dark";
 
 function clamp01(n: number) {
@@ -65,19 +68,20 @@ function milestoneTimeISO(sentISO: string, etaISO: string, fraction: number) {
   return new Date(t).toISOString();
 }
 
+// ✅ NEW: ultra-simple UTC label fallback (if API hasn’t added eta_utc_text yet)
+function formatUtcFallback(iso: string) {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  // ISO is always UTC — this is crude but consistent and “UTC”.
+  return `${d.toISOString().replace("T", " ").replace("Z", "")} UTC`;
+}
+
 /* ---------- tiny icon system (inline SVG) ---------- */
 function Ico({
   name,
   size = 16,
 }: {
-  name:
-    | "live"
-    | "pin"
-    | "speed"
-    | "distance"
-    | "check"
-    | "mail"
-    | "timeline";
+  name: "live" | "pin" | "speed" | "distance" | "check" | "mail" | "timeline";
   size?: number;
 }) {
   const common = {
@@ -294,19 +298,11 @@ function RailTimeline({
 
           return (
             <div key={it.key} className="railItem">
-              <div
-                className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${
-                  shouldPop ? "pop" : ""
-                }`}
-              >
+              <div className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${shouldPop ? "pop" : ""}`}>
                 <span className="railDot">{isPast ? "✓" : ""}</span>
               </div>
 
-              <div
-                className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${
-                  isCurrent ? "current" : ""
-                }`}
-              >
+              <div className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${isCurrent ? "current" : ""}`}>
                 {isCurrent && <div className="pigeonTag">🕊️ Pigeon is here</div>}
 
                 <div className="railTitleRow">
@@ -339,7 +335,6 @@ export default function LetterStatusPage() {
   const [revealStage, setRevealStage] = useState<"idle" | "crack" | "open">("idle");
   const [confetti, setConfetti] = useState(false);
 
-  // ✅ NEW: map style state (with persistence)
   const [mapStyle, setMapStyle] = useState<MapStyle>("carto-positron");
 
   useEffect(() => {
@@ -364,9 +359,7 @@ export default function LetterStatusPage() {
     const load = async () => {
       try {
         setError(null);
-        const res = await fetch(`/api/letters/${encodeURIComponent(token)}`, {
-          cache: "no-store",
-        });
+        const res = await fetch(`/api/letters/${encodeURIComponent(token)}`, { cache: "no-store" });
         const data = await res.json();
 
         if (!res.ok) {
@@ -493,6 +486,12 @@ export default function LetterStatusPage() {
     return timelineItems[idx]?.key ?? null;
   }, [timelineItems, now, delivered]);
 
+  // ✅ NEW: one source of truth for what we print on screen
+  const etaTextUTC = useMemo(() => {
+    if (!letter) return "";
+    return (letter.eta_utc_text && letter.eta_utc_text.trim()) || formatUtcFallback(letter.eta_at);
+  }, [letter]);
+
   if (error) {
     return (
       <main className="pageBg">
@@ -531,7 +530,6 @@ export default function LetterStatusPage() {
               <div className="subRow">
                 {showLive ? (
                   <>
-                    {/* ✅ UPDATED: fixed width so it won’t shove the “Currently over” pill */}
                     <div className="liveStack" style={{ minWidth: 230, flex: "0 0 auto" }}>
                       <div className="liveWrap">
                         <span className="liveDot" />
@@ -540,7 +538,6 @@ export default function LetterStatusPage() {
                       <div className="liveSub">Last updated: {secondsSinceFetch ?? 0}s ago</div>
                     </div>
 
-                    {/* ✅ UPDATED: let this flex instead of being pushed around */}
                     <div className="metaPill" style={{ flex: "1 1 auto" }}>
                       <span className="ico">
                         <Ico name="pin" />
@@ -564,8 +561,9 @@ export default function LetterStatusPage() {
             </div>
 
             <div className="etaBox">
-              <div className="kicker">ETA</div>
-              <div className="etaTime">{new Date(letter.eta_at).toLocaleString()}</div>
+              <div className="kicker">ETA (UTC)</div>
+              {/* ✅ CHANGED: show UTC text (matches emails) */}
+              <div className="etaTime">{etaTextUTC}</div>
               {!delivered && <div className="etaSub">T-minus {countdown}</div>}
             </div>
           </div>
@@ -628,19 +626,14 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div
-                className={delivered && revealStage === "open" ? "bodyReveal" : ""}
-                style={{ opacity: delivered ? 1 : 0 }}
-              >
+              <div className={delivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: delivered ? 1 : 0 }}>
                 <div className="body">{delivered ? (letter.body ?? "") : ""}</div>
               </div>
 
               {!delivered || revealStage !== "open" ? (
                 <div style={{ position: delivered ? "absolute" : "relative", inset: 0 }}>
-                  <WaxSealOverlay
-                    etaText={new Date(letter.eta_at).toLocaleString()}
-                    cracking={delivered && revealStage === "crack"}
-                  />
+                  {/* ✅ CHANGED: use same UTC string here too */}
+                  <WaxSealOverlay etaText={etaTextUTC} cracking={delivered && revealStage === "crack"} />
                 </div>
               ) : null}
             </div>
@@ -653,15 +646,7 @@ export default function LetterStatusPage() {
         <div className="grid">
           {/* MAP CARD */}
           <div className="card">
-            {/* ✅ UPDATED: Map title + style switcher */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 10,
-                alignItems: "center",
-              }}
-            >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
               <div className="kicker">Map</div>
 
               <div className="mapStyleRow" role="group" aria-label="Map style">
@@ -698,7 +683,6 @@ export default function LetterStatusPage() {
                 dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
                 progress={progress}
                 tooltipText={`Currently over: ${currentlyOver}`}
-                // ✅ NEW: pass selected style
                 mapStyle={mapStyle}
               />
             </div>
@@ -712,9 +696,7 @@ export default function LetterStatusPage() {
               </div>
               <div className="barMeta">
                 <div className="mutedStrong">{Math.round(progress * 100)}%</div>
-                <div className="muted">
-                  {currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}
-                </div>
+                <div className="muted">{currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}</div>
               </div>
 
               <div className="chips">

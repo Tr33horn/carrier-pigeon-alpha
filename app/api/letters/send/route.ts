@@ -63,6 +63,23 @@ function isEmailValid(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
+/** ✅ One true UTC formatter (match the cron file) */
+function formatUtc(iso: string) {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZone: "UTC",
+    timeZoneName: "short",
+  }).format(d);
+}
+
 export async function POST(req: Request) {
   const body = await req.json();
 
@@ -135,10 +152,10 @@ export async function POST(req: Request) {
     .insert({
       public_token: publicToken,
       from_name,
-      from_email: normalizedFromEmail,     // required now
-      sender_receipt_sent_at: null,        // requires column (you already added)
+      from_email: normalizedFromEmail,
+      sender_receipt_sent_at: null,
       to_name,
-      to_email: normalizedToEmail,         // required now
+      to_email: normalizedToEmail,
       delivered_notified_at: null,
       subject,
       body: message,
@@ -189,7 +206,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: cpErr.message }, { status: 500 });
   }
 
-  // Send "Pigeon launched" email immediately (recipient email is guaranteed now)
+  // Send "Pigeon launched" email immediately
   try {
     const key = process.env.RESEND_API_KEY;
     if (!key) throw new Error("Missing RESEND_API_KEY");
@@ -197,7 +214,9 @@ export async function POST(req: Request) {
 
     const base = process.env.APP_BASE_URL || "http://localhost:3000";
     const statusUrl = `${base}/l/${publicToken}`;
-    const etaText = new Date(letter.eta_at).toLocaleString();
+
+    // ✅ FIX: consistent UTC formatting
+    const etaText = formatUtc(letter.eta_at);
 
     await resend.emails.send({
       from: process.env.MAIL_FROM || "Carrier Pigeon <no-reply@localhost>",
@@ -210,7 +229,7 @@ export async function POST(req: Request) {
             You have a letter from <strong>${from_name || "Someone"}</strong>.
             It stays sealed until delivery.
           </p>
-          <p style="margin: 0 0 12px"><strong>ETA:</strong> ${etaText}</p>
+          <p style="margin: 0 0 12px"><strong>ETA (UTC):</strong> ${etaText}</p>
           <p style="margin: 0 0 16px">
             <a href="${statusUrl}" style="display:inline-block;padding:10px 14px;border-radius:10px;text-decoration:none;border:1px solid #222">
               Track flight status
@@ -223,7 +242,6 @@ export async function POST(req: Request) {
       `,
     });
   } catch (e) {
-    // Don't fail the whole send if email fails — just log it.
     console.error("LAUNCH EMAIL ERROR:", e);
   }
 

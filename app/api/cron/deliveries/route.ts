@@ -14,6 +14,24 @@ function progressPct(sentISO: string, etaISO: string) {
   return Math.round(clamp01((now - sent) / (eta - sent)) * 100);
 }
 
+/** ✅ Format an ISO date as a UTC string (consistent everywhere) */
+function formatUtc(iso: string) {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  // Example: "Jan 3, 2026, 20:22:10 UTC"
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZone: "UTC",
+    timeZoneName: "short",
+  }).format(d);
+}
+
 /** Escape any user content so it can't inject HTML into email */
 function escapeHtml(input: string) {
   return input
@@ -52,7 +70,6 @@ export async function GET(req: Request) {
   const { data: lettersToDeliver, error: deliverErr } = await supabaseServer
     .from("letters")
     .select(
-      // ✅ added body so the recipient email can include the message
       "id, public_token, eta_at, subject, body, from_name, from_email, to_name, to_email, delivered_notified_at, sender_receipt_sent_at"
     )
     .is("delivered_notified_at", null)
@@ -72,6 +89,9 @@ export async function GET(req: Request) {
     const safeBody = escapeHtml((letter.body || "").trim());
     const safeBodyWithBreaks = nl2br(safeBody);
 
+    // ✅ Consistent delivery timestamp in UTC (optional but nice)
+    const deliveredAtUtc = formatUtc(new Date().toISOString());
+
     // Recipient delivery email
     if (letter.to_email) {
       await resend.emails.send({
@@ -85,7 +105,10 @@ export async function GET(req: Request) {
               Your sealed letter from <strong>${escapeHtml(letter.from_name || "Someone")}</strong> is ready.
             </p>
 
-            <!-- ✅ Subject + message included -->
+            <p style="margin:0 0 12px; opacity:.75">
+              <strong>Delivered:</strong> ${deliveredAtUtc}
+            </p>
+
             <div style="margin:14px 0 14px; padding:12px; border:1px solid #e5e5e5; border-radius:12px; background:#fafafa;">
               <div style="font-weight:800; margin:0 0 8px;">Subject</div>
               <div style="margin:0 0 12px;">${safeSubject}</div>
@@ -127,6 +150,11 @@ export async function GET(req: Request) {
             <p style="margin:0 0 12px">
               Your letter to <strong>${escapeHtml(letter.to_name || "the recipient")}</strong> has been delivered.
             </p>
+
+            <p style="margin:0 0 12px; opacity:.75">
+              <strong>Delivered:</strong> ${deliveredAtUtc}
+            </p>
+
             <p style="margin:0 0 16px">
               <a href="${url}" style="display:inline-block;padding:10px 14px;border-radius:10px;text-decoration:none;border:1px solid #222">
                 View flight status
@@ -159,9 +187,9 @@ export async function GET(req: Request) {
     .select(
       "id, public_token, subject, from_name, to_email, sent_at, eta_at, progress_25_sent_at, progress_50_sent_at, progress_75_sent_at"
     )
-    .is("delivered_notified_at", null) // not delivered yet
-    .lte("sent_at", nowISO)            // already sent
-    .gt("eta_at", nowISO);             // eta still in the future
+    .is("delivered_notified_at", null)
+    .lte("sent_at", nowISO)
+    .gt("eta_at", nowISO);
 
   if (inflightErr) {
     return NextResponse.json({ error: inflightErr.message }, { status: 500 });
@@ -180,6 +208,9 @@ export async function GET(req: Request) {
 
     const pct = progressPct(letter.sent_at, letter.eta_at);
     const url = `${base}/l/${letter.public_token}`;
+
+    // ✅ Include ETA in UTC for consistency (optional but recommended)
+    const etaUtcText = formatUtc(letter.eta_at);
 
     const sendUpdate = async (
       milestone: 25 | 50 | 75,
@@ -209,7 +240,13 @@ export async function GET(req: Request) {
             <p style="margin:0 0 12px">
               Your sealed letter from <strong>${escapeHtml(letter.from_name || "Someone")}</strong> is still in flight.
             </p>
+
+            <p style="margin:0 0 12px; opacity:.75">
+              <strong>ETA (UTC):</strong> ${etaUtcText}
+            </p>
+
             <p style="margin:0 0 12px"><em>${escapeHtml(funLine)}</em></p>
+
             <p style="margin:0 0 16px">
               <a href="${url}" style="display:inline-block;padding:10px 14px;border-radius:10px;text-decoration:none;border:1px solid #222">
                 Check flight status (${pct}%)

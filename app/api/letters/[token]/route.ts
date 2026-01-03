@@ -1,6 +1,21 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "../../../lib/supabaseServer";
 
+function formatUtc(iso: string) {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZoneName: "short",
+  }).format(d);
+}
+
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ token: string }> }
@@ -74,6 +89,8 @@ export async function GET(
     letter: {
       ...meta,
       body,
+      // ✅ add this so the UI can display the same UTC string consistently
+      eta_utc_text: formatUtc(meta.eta_at),
     },
     checkpoints: checkpoints ?? [],
     delivered,
