@@ -8,9 +8,11 @@ import {
   Marker,
   Tooltip,
   useMap,
-  ImageOverlay,
 } from "react-leaflet";
 import L from "leaflet";
+
+// ✅ Match the LetterStatusPage values
+export type MapStyle = "carto-positron" | "carto-voyager" | "carto-dark";
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
@@ -18,6 +20,32 @@ function lerp(a: number, b: number, t: number) {
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
+}
+
+function getCarto(style: MapStyle) {
+  // CARTO raster tiles
+  if (style === "carto-voyager") {
+    return {
+      url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+      attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+      isDark: false,
+    };
+  }
+
+  if (style === "carto-dark") {
+    return {
+      url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+      isDark: true,
+    };
+  }
+
+  // carto-positron (light default)
+  return {
+    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+    isDark: false,
+  };
 }
 
 function FitBounds({ bounds }: { bounds: [number, number][] }) {
@@ -31,54 +59,17 @@ function FitBounds({ bounds }: { bounds: [number, number][] }) {
   return null;
 }
 
-type TileStyle = "osm" | "carto_light" | "carto_dark";
-
-function tileConfig(style: TileStyle) {
-  // Note: Carto tiles are great for “premium clean” without Mapbox complexity.
-  // If you want Mapbox/MapTiler later, we can add it here too.
-  switch (style) {
-    case "carto_light":
-      return {
-        url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      };
-    case "carto_dark":
-      return {
-        url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      };
-    case "osm":
-    default:
-      return {
-        url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        attribution: "&copy; OpenStreetMap contributors",
-      };
-  }
-}
-
 export default function MapView(props: {
   origin: { lat: number; lon: number };
   dest: { lat: number; lon: number };
   progress: number; // 0..1
   tooltipText?: string;
-
-  /** Change base map look */
-  tileStyle?: TileStyle;
-
-  /** A PNG/SVG overlay that sits on top of the map UI (branding/texture/frame) */
-  uiOverlayUrl?: string;
-
-  /**
-   * A geographic overlay (image is anchored to lat/lng bounds and moves with the map)
-   * Example: geoOverlayBounds: [[southLat, westLng],[northLat, eastLng]]
-   */
-  geoOverlayUrl?: string;
-  geoOverlayBounds?: [[number, number], [number, number]];
-  geoOverlayOpacity?: number;
+  mapStyle?: MapStyle;
 }) {
   const { origin, dest } = props;
+
+  const mapStyle: MapStyle = props.mapStyle ?? "carto-positron";
+  const tile = useMemo(() => getCarto(mapStyle), [mapStyle]);
 
   const [displayProgress, setDisplayProgress] = useState(() =>
     clamp01(props.progress)
@@ -98,7 +89,6 @@ export default function MapView(props: {
       const t = clamp01((now - start) / durationMs);
       const eased = 1 - Math.pow(1 - t, 3);
       setDisplayProgress(lerp(from, to, eased));
-
       if (t < 1) rafRef.current = requestAnimationFrame(tick);
     };
 
@@ -155,40 +145,36 @@ export default function MapView(props: {
     [dest.lat, dest.lon],
   ];
 
-  const tiles = tileConfig(props.tileStyle ?? "carto_light");
-
-  const showGeoOverlay =
-    !!props.geoOverlayUrl &&
-    !!props.geoOverlayBounds &&
-    props.geoOverlayBounds.length === 2;
+  // ✅ Optional: better contrast on dark tiles
+  const routeColor = tile.isDark ? "rgba(255,255,255,0.85)" : "#121212";
+  const routeOpacity = tile.isDark ? 0.8 : 0.55;
 
   return (
-    <div className="mapShell">
+    <div
+      style={{
+        height: 340,
+        borderRadius: 18,
+        overflow: "hidden",
+        border: "1px solid rgba(0,0,0,0.10)",
+        boxShadow: "0 12px 24px rgba(0,0,0,0.08)",
+      }}
+    >
       <MapContainer
         center={[current.lat, current.lon]}
         zoom={4}
         scrollWheelZoom={false}
-        className="map"
+        style={{ height: "100%", width: "100%" }}
       >
-        <TileLayer attribution={tiles.attribution} url={tiles.url} />
+        <TileLayer attribution={tile.attribution} url={tile.url} />
 
         <FitBounds bounds={line} />
-
-        {showGeoOverlay ? (
-          <ImageOverlay
-            url={props.geoOverlayUrl!}
-            bounds={props.geoOverlayBounds as any}
-            opacity={typeof props.geoOverlayOpacity === "number" ? props.geoOverlayOpacity : 0.35}
-            zIndex={300} // above tiles, below markers/tooltip usually
-          />
-        ) : null}
 
         <Polyline
           positions={line}
           pathOptions={{
-            color: "#121212",
+            color: routeColor,
             weight: 3,
-            opacity: 0.55,
+            opacity: routeOpacity,
           }}
         />
 
@@ -213,11 +199,6 @@ export default function MapView(props: {
           </Tooltip>
         </Marker>
       </MapContainer>
-
-      {/* UI overlay sits on top of everything (branding / texture / frame) */}
-      {props.uiOverlayUrl ? (
-        <img className="mapUiOverlay" src={props.uiOverlayUrl} alt="" />
-      ) : null}
     </div>
   );
 }

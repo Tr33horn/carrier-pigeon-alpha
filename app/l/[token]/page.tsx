@@ -32,6 +32,9 @@ type Checkpoint = {
   at: string;
 };
 
+// ✅ NEW: map style union
+type MapStyle = "carto-positron" | "carto-voyager" | "carto-dark";
+
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
 }
@@ -336,6 +339,18 @@ export default function LetterStatusPage() {
   const [revealStage, setRevealStage] = useState<"idle" | "crack" | "open">("idle");
   const [confetti, setConfetti] = useState(false);
 
+  // ✅ NEW: map style state (with persistence)
+  const [mapStyle, setMapStyle] = useState<MapStyle>("carto-positron");
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("pigeon_map_style") as MapStyle | null;
+    if (saved) setMapStyle(saved);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("pigeon_map_style", mapStyle);
+  }, [mapStyle]);
+
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
@@ -516,7 +531,8 @@ export default function LetterStatusPage() {
               <div className="subRow">
                 {showLive ? (
                   <>
-                    <div className="liveStack">
+                    {/* ✅ UPDATED: fixed width so it won’t shove the “Currently over” pill */}
+                    <div className="liveStack" style={{ minWidth: 230, flex: "0 0 auto" }}>
                       <div className="liveWrap">
                         <span className="liveDot" />
                         <span className="liveText">LIVE</span>
@@ -524,7 +540,8 @@ export default function LetterStatusPage() {
                       <div className="liveSub">Last updated: {secondsSinceFetch ?? 0}s ago</div>
                     </div>
 
-                    <div className="metaPill">
+                    {/* ✅ UPDATED: let this flex instead of being pushed around */}
+                    <div className="metaPill" style={{ flex: "1 1 auto" }}>
                       <span className="ico">
                         <Ico name="pin" />
                       </span>
@@ -636,13 +653,53 @@ export default function LetterStatusPage() {
         <div className="grid">
           {/* MAP CARD */}
           <div className="card">
-            <div className="kicker">Map</div>
+            {/* ✅ UPDATED: Map title + style switcher */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+                alignItems: "center",
+              }}
+            >
+              <div className="kicker">Map</div>
+
+              <div className="mapStyleRow" role="group" aria-label="Map style">
+                <button
+                  type="button"
+                  className={`mapStyleBtn ${mapStyle === "carto-positron" ? "on" : ""}`}
+                  onClick={() => setMapStyle("carto-positron")}
+                  aria-pressed={mapStyle === "carto-positron"}
+                >
+                  Light
+                </button>
+                <button
+                  type="button"
+                  className={`mapStyleBtn ${mapStyle === "carto-voyager" ? "on" : ""}`}
+                  onClick={() => setMapStyle("carto-voyager")}
+                  aria-pressed={mapStyle === "carto-voyager"}
+                >
+                  Voyager
+                </button>
+                <button
+                  type="button"
+                  className={`mapStyleBtn ${mapStyle === "carto-dark" ? "on" : ""}`}
+                  onClick={() => setMapStyle("carto-dark")}
+                  aria-pressed={mapStyle === "carto-dark"}
+                >
+                  Dark
+                </button>
+              </div>
+            </div>
+
             <div style={{ marginTop: 12 }}>
               <MapView
                 origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
                 dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
                 progress={progress}
                 tooltipText={`Currently over: ${currentlyOver}`}
+                // ✅ NEW: pass selected style
+                mapStyle={mapStyle}
               />
             </div>
 
@@ -655,7 +712,9 @@ export default function LetterStatusPage() {
               </div>
               <div className="barMeta">
                 <div className="mutedStrong">{Math.round(progress * 100)}%</div>
-                <div className="muted">{currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}</div>
+                <div className="muted">
+                  {currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}
+                </div>
               </div>
 
               <div className="chips">
