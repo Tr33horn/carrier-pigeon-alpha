@@ -155,6 +155,15 @@ function formatCountdown(ms: number) {
   return `${h}:${pad(m)}:${pad(s)}`;
 }
 
+// ✅ NEW: compute milestone timestamp between sent_at and eta_at
+function milestoneTimeISO(sentISO: string, etaISO: string, fraction: number) {
+  const sent = new Date(sentISO).getTime();
+  const eta = new Date(etaISO).getTime();
+  if (!Number.isFinite(sent) || !Number.isFinite(eta) || eta <= sent) return etaISO;
+  const t = sent + (eta - sent) * fraction;
+  return new Date(t).toISOString();
+}
+
 export default function LetterStatusPage() {
   const params = useParams();
   const raw = (params as any)?.token;
@@ -224,6 +233,22 @@ export default function LetterStatusPage() {
     return current ?? checkpoints[0];
   }, [checkpoints, letter, now]);
 
+  // ✅ NEW: milestone model (computed client-side)
+  const milestones = useMemo(() => {
+    if (!letter) return [];
+    const defs = [
+      { pct: 25, frac: 0.25, label: "25% reached" },
+      { pct: 50, frac: 0.5, label: "50% reached" },
+      { pct: 75, frac: 0.75, label: "75% reached" },
+    ];
+
+    return defs.map((m) => {
+      const atISO = milestoneTimeISO(letter.sent_at, letter.eta_at, m.frac);
+      const isPast = now.getTime() >= new Date(atISO).getTime();
+      return { ...m, atISO, isPast };
+    });
+  }, [letter, now]);
+
   if (error) {
     return (
       <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 760 }}>
@@ -283,10 +308,11 @@ export default function LetterStatusPage() {
         </div>
       </div>
 
-      {/* Progress bar */}
+      {/* ✅ Progress bar + milestone ticks + chips */}
       <div style={{ marginTop: 16 }}>
         <div
           style={{
+            position: "relative",
             height: 12,
             borderRadius: 999,
             background: "#222",
@@ -301,38 +327,96 @@ export default function LetterStatusPage() {
               background: "white",
             }}
           />
+
+          {[25, 50, 75].map((p) => (
+            <div
+              key={p}
+              style={{
+                position: "absolute",
+                left: `${p}%`,
+                top: 0,
+                bottom: 0,
+                width: 2,
+                background: "rgba(255,255,255,0.25)",
+                transform: "translateX(-1px)",
+              }}
+            />
+          ))}
         </div>
+
         <div style={{ marginTop: 6, opacity: 0.8 }}>
           {Math.round(progress * 100)}% •{" "}
           {currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}
         </div>
+
+        <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {milestones.map((m) => (
+            <div
+              key={m.pct}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid #333",
+                opacity: m.isPast ? 1 : 0.55,
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                fontSize: 12,
+              }}
+            >
+              <span style={{ fontWeight: 900 }}>{m.isPast ? "●" : "○"}</span>
+              <span style={{ fontWeight: 800 }}>{m.label}</span>
+              <span style={{ opacity: 0.75 }}>
+                {new Date(m.atISO).toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Timeline */}
+      {/* ✅ Timeline (checkpoints + milestones) */}
       <div style={{ marginTop: 18 }}>
         <h2 style={{ fontSize: 16, fontWeight: 900 }}>Checkpoint Timeline</h2>
         <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-          {checkpoints.map((cp) => {
-            const isPast = new Date(cp.at).getTime() <= now.getTime();
-            return (
-              <div
-                key={cp.id}
-                style={{
-                  padding: 10,
-                  borderRadius: 8,
-                  border: "1px solid #333",
-                  opacity: isPast ? 1 : 0.5,
-                }}
-              >
-                <div style={{ fontWeight: 800 }}>
-                  {isPast ? "●" : "○"} {cp.name}
+          {[
+            ...checkpoints.map((cp) => ({
+              key: `cp-${cp.id}`,
+              name: cp.name,
+              at: cp.at,
+              kind: "checkpoint" as const,
+            })),
+            ...milestones.map((m) => ({
+              key: `ms-${m.pct}`,
+              name: `🕊️ ${m.label}`,
+              at: m.atISO,
+              kind: "milestone" as const,
+            })),
+          ]
+            .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+            .map((item) => {
+              const isPast = new Date(item.at).getTime() <= now.getTime();
+              const isMilestone = item.kind === "milestone";
+
+              return (
+                <div
+                  key={item.key}
+                  style={{
+                    padding: 10,
+                    borderRadius: 8,
+                    border: "1px solid #333",
+                    opacity: isPast ? 1 : 0.5,
+                    background: isMilestone ? "rgba(255,255,255,0.04)" : "transparent",
+                  }}
+                >
+                  <div style={{ fontWeight: 800 }}>
+                    {isPast ? "●" : "○"} {item.name}
+                  </div>
+                  <div style={{ opacity: 0.8, marginTop: 4 }}>
+                    {new Date(item.at).toLocaleString()}
+                  </div>
                 </div>
-                <div style={{ opacity: 0.8, marginTop: 4 }}>
-                  {new Date(cp.at).toLocaleString()}
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
         </div>
       </div>
 
