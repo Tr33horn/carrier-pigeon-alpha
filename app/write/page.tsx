@@ -31,13 +31,20 @@ function isEmailValid(email: string) {
 
 /* ---------- page ---------- */
 export default function WritePage() {
+  // Step 1: who
   const [fromName, setFromName] = useState("You");
-  const [fromEmail, setFromEmail] = useState("");
   const [toName, setToName] = useState("");
+
+  // Step 4 (collapsed by default): email options (BUT required for now)
+  const [fromEmail, setFromEmail] = useState("");
   const [toEmail, setToEmail] = useState("");
+  const [showEmailOptions, setShowEmailOptions] = useState(false);
+
+  // Step 2: message
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
 
+  // Step 3: route
   const [origin, setOrigin] = useState(CITIES[0]);
   const [destination, setDestination] = useState(CITIES[CITIES.length - 1]);
 
@@ -52,8 +59,12 @@ export default function WritePage() {
   const [sending, setSending] = useState(false);
 
   /* ---------- validation ---------- */
-  const recipientEmailOk = !toEmail.trim() || isEmailValid(toEmail);
-  const senderEmailOk = !fromEmail.trim() || isEmailValid(fromEmail);
+  const senderEmailOk = isEmailValid(fromEmail);
+  const recipientEmailOk = isEmailValid(toEmail);
+
+  const fromNameOk = fromName.trim().length > 0;
+  const toNameOk = toName.trim().length > 0;
+  const messageOk = message.trim().length > 0;
 
   /* ---------- geolocation ---------- */
   function useMyLocationForOrigin() {
@@ -98,19 +109,38 @@ export default function WritePage() {
 
     // prevent same origin/destination
     if (origin.name === destination.name) {
-      setError("Origin and destination must be different (even pigeons get bored).");
+      setError(
+        "Origin and destination must be different (even pigeons get bored)."
+      );
       setSending(false);
       return;
     }
 
-    // validate optional emails if present
-    if (!recipientEmailOk) {
-      setError("Recipient email looks invalid.");
+    // required fields
+    if (!fromNameOk) {
+      setError("Please enter a sender name.");
       setSending(false);
       return;
     }
+    if (!toNameOk) {
+      setError("Please enter a recipient name.");
+      setSending(false);
+      return;
+    }
+    if (!messageOk) {
+      setError("Please write a message (it can be short, pigeons can’t carry novels).");
+      setSending(false);
+      return;
+    }
+
+    // required emails
     if (!senderEmailOk) {
-      setError("Sender email looks invalid.");
+      setError("Please enter a valid sender email address.");
+      setSending(false);
+      return;
+    }
+    if (!recipientEmailOk) {
+      setError("Please enter a valid recipient email address.");
       setSending(false);
       return;
     }
@@ -120,11 +150,11 @@ export default function WritePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          from_name: fromName,
-          from_email: fromEmail.trim() || null,
-          to_name: toName,
-          to_email: toEmail.trim() || null,
-          subject,
+          from_name: fromName.trim(),
+          from_email: fromEmail.trim(), // required
+          to_name: toName.trim(),
+          to_email: toEmail.trim(), // required
+          subject: subject.trim(),
           message,
           origin,
           destination,
@@ -148,10 +178,12 @@ export default function WritePage() {
   /* ---------- UI ---------- */
   const disableSend =
     sending ||
-    !message.trim() ||
-    !toName.trim() ||
+    !fromNameOk ||
+    !toNameOk ||
+    !messageOk ||
+    !senderEmailOk ||
     !recipientEmailOk ||
-    !senderEmailOk;
+    origin.name === destination.name;
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 720 }}>
@@ -164,123 +196,122 @@ export default function WritePage() {
         It’ll unlock for the recipient when the pigeon lands.
       </p>
 
-      <div style={{ display: "grid", gap: 12, marginTop: 18 }}>
-        <label>
-          From
-          <input
-            value={fromName}
-            onChange={(e) => setFromName(e.target.value)}
-            style={{
-              display: "block",
-              width: "100%",
-              padding: 10,
-              marginTop: 6,
-            }}
-          />
-        </label>
+      <div style={{ display: "grid", gap: 18, marginTop: 18 }}>
+        {/* ---------------- Step 1: WHO ---------------- */}
+        <section
+          style={{
+            border: "1px solid #333",
+            borderRadius: 12,
+            padding: 14,
+          }}
+        >
+          <div style={{ fontWeight: 900, marginBottom: 10 }}>1) Who</div>
 
-        <label>
-          Sender Email (optional)
-          <input
-            type="email"
-            value={fromEmail}
-            onChange={(e) => setFromEmail(e.target.value)}
-            placeholder="you@email.com"
-            style={{
-              display: "block",
-              width: "100%",
-              padding: 10,
-              marginTop: 6,
-              borderColor: fromEmail.trim() && !senderEmailOk ? "crimson" : undefined,
-            }}
-          />
-        </label>
-        {fromEmail.trim() && !senderEmailOk && (
-          <div style={{ fontSize: 12, color: "crimson" }}>
-            Please enter a valid sender email address.
+          <div style={{ display: "grid", gap: 12 }}>
+            <label>
+              From
+              <input
+                value={fromName}
+                onChange={(e) => setFromName(e.target.value)}
+                placeholder="Your name"
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: 10,
+                  marginTop: 6,
+                  borderColor: !fromNameOk ? "crimson" : undefined,
+                }}
+              />
+            </label>
+
+            <label>
+              To
+              <input
+                value={toName}
+                onChange={(e) => setToName(e.target.value)}
+                placeholder="Recipient name"
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: 10,
+                  marginTop: 6,
+                  borderColor: !toNameOk ? "crimson" : undefined,
+                }}
+              />
+            </label>
           </div>
-        )}
+        </section>
 
-        <label>
-          To
-          <input
-            value={toName}
-            onChange={(e) => setToName(e.target.value)}
-            placeholder="Recipient name"
-            style={{
-              display: "block",
-              width: "100%",
-              padding: 10,
-              marginTop: 6,
-            }}
-          />
-        </label>
+        {/* ---------------- Step 2: MESSAGE ---------------- */}
+        <section
+          style={{
+            border: "1px solid #333",
+            borderRadius: 12,
+            padding: 14,
+          }}
+        >
+          <div style={{ fontWeight: 900, marginBottom: 10 }}>2) Message</div>
 
-        <label>
-          Recipient Email (optional)
-          <input
-            type="email"
-            value={toEmail}
-            onChange={(e) => setToEmail(e.target.value)}
-            placeholder="name@email.com"
-            style={{
-              display: "block",
-              width: "100%",
-              padding: 10,
-              marginTop: 6,
-              borderColor: toEmail.trim() && !recipientEmailOk ? "crimson" : undefined,
-            }}
-          />
-        </label>
-        {toEmail.trim() && !recipientEmailOk && (
-          <div style={{ fontSize: 12, color: "crimson" }}>
-            Please enter a valid recipient email address.
+          <div style={{ display: "grid", gap: 12 }}>
+            <label>
+              Subject (optional)
+              <input
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: 10,
+                  marginTop: 6,
+                }}
+              />
+            </label>
+
+            <label>
+              Message (sealed until delivery)
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={6}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: 10,
+                  marginTop: 6,
+                  borderColor: !messageOk ? "crimson" : undefined,
+                }}
+              />
+            </label>
+            {!messageOk && (
+              <div style={{ fontSize: 12, color: "crimson" }}>
+                Message is required.
+              </div>
+            )}
           </div>
-        )}
+        </section>
 
-        <label>
-          Subject
-          <input
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            style={{
-              display: "block",
-              width: "100%",
-              padding: 10,
-              marginTop: 6,
-            }}
-          />
-        </label>
+        {/* ---------------- Step 3: ROUTE ---------------- */}
+        <section
+          style={{
+            border: "1px solid #333",
+            borderRadius: 12,
+            padding: 14,
+          }}
+        >
+          <div style={{ fontWeight: 900, marginBottom: 10 }}>3) Route</div>
 
-        <label>
-          Message (sealed until delivery)
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            rows={6}
-            style={{
-              display: "block",
-              width: "100%",
-              padding: 10,
-              marginTop: 6,
-            }}
-          />
-        </label>
-
-        {/* ---------- ORIGIN + DEST ---------- */}
-        <div style={{ marginTop: 6 }}>
-          {/* Swap + route preview */}
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
               gap: 12,
-              marginBottom: 8,
+              marginBottom: 10,
             }}
           >
             <div style={{ fontSize: 12, opacity: 0.75 }}>
-              Route: <strong>{origin.name}</strong> → <strong>{destination.name}</strong>
+              Route: <strong>{origin.name}</strong> →{" "}
+              <strong>{destination.name}</strong>
             </div>
 
             <button
@@ -299,6 +330,12 @@ export default function WritePage() {
               ⇄ Swap
             </button>
           </div>
+
+          {origin.name === destination.name && (
+            <div style={{ fontSize: 12, color: "crimson", marginBottom: 10 }}>
+              Origin and destination must be different.
+            </div>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             {/* ORIGIN */}
@@ -385,15 +422,122 @@ export default function WritePage() {
               />
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* ---------- SEND ---------- */}
+        {/* ---------------- Step 4: EMAIL OPTIONS (collapsed) ---------------- */}
+        <section
+          style={{
+            border: "1px solid #333",
+            borderRadius: 12,
+            padding: 14,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setShowEmailOptions((v) => !v)}
+            style={{
+              width: "100%",
+              textAlign: "left",
+              background: "transparent",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                gap: 12,
+              }}
+            >
+              <div style={{ fontWeight: 900 }}>4) Email options</div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>
+                {showEmailOptions ? "Hide" : "Show"} ▾
+              </div>
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
+              Required for now (until we add accounts).
+            </div>
+          </button>
+
+          {showEmailOptions && (
+            <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+              <label>
+                Sender Email <span style={{ opacity: 0.7 }}>(required)</span>
+                <input
+                  type="email"
+                  value={fromEmail}
+                  onChange={(e) => setFromEmail(e.target.value)}
+                  placeholder="you@email.com"
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: 10,
+                    marginTop: 6,
+                    borderColor: fromEmail.trim() && !senderEmailOk ? "crimson" : undefined,
+                  }}
+                />
+              </label>
+              {fromEmail.trim() && !senderEmailOk && (
+                <div style={{ fontSize: 12, color: "crimson" }}>
+                  Please enter a valid sender email address.
+                </div>
+              )}
+
+              <label>
+                Recipient Email <span style={{ opacity: 0.7 }}>(required)</span>
+                <input
+                  type="email"
+                  value={toEmail}
+                  onChange={(e) => setToEmail(e.target.value)}
+                  placeholder="name@email.com"
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: 10,
+                    marginTop: 6,
+                    borderColor: toEmail.trim() && !recipientEmailOk ? "crimson" : undefined,
+                  }}
+                />
+              </label>
+              {toEmail.trim() && !recipientEmailOk && (
+                <div style={{ fontSize: 12, color: "crimson" }}>
+                  Please enter a valid recipient email address.
+                </div>
+              )}
+            </div>
+          )}
+
+          {!showEmailOptions && (
+            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
+              {/* Tiny hint so users don’t forget */}
+              <div>
+                Sender email:{" "}
+                <strong>{fromEmail.trim() ? "✓" : "Missing"}</strong>
+              </div>
+              <div style={{ marginTop: 4 }}>
+                Recipient email:{" "}
+                <strong>{toEmail.trim() ? "✓" : "Missing"}</strong>
+              </div>
+              {(!fromEmail.trim() || !toEmail.trim()) && (
+                <div style={{ marginTop: 8, color: "crimson" }}>
+                  Open “Email options” to add the required email addresses.
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* ---------------- SEND ---------------- */}
         <button
           onClick={sendLetter}
           disabled={disableSend}
           style={{
             padding: "12px 14px",
-            fontWeight: 700,
+            fontWeight: 800,
+            borderRadius: 12,
             cursor: disableSend ? "not-allowed" : "pointer",
             opacity: disableSend ? 0.7 : 1,
           }}
