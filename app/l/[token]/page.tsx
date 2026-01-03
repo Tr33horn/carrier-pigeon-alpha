@@ -303,7 +303,12 @@ function RailTimeline({
               </div>
 
               <div className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${isCurrent ? "current" : ""}`}>
-                {isCurrent && <div className="pigeonTag">🕊️ Pigeon is here</div>}
+                {isCurrent && (
+  <div className="pigeonTag livePulseRow">
+    <span className="livePulseDot" aria-hidden />
+    <span>Pigeon is here</span>
+  </div>
+)}
 
                 <div className="railTitleRow">
                   <div className="railTitle">{it.name}</div>
