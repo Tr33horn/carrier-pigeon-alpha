@@ -899,6 +899,38 @@ export default function LetterStatusPage() {
           margin-top: 2px;
         }
 
+        .liveWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(204, 239, 253, 0.30); /* your Alpinhound blue @ 30% */
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  font-weight: 900;
+  font-size: 12px;
+}
+
+.liveText {
+  letter-spacing: 0.10em;
+}
+
+.liveDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #121212;
+  box-shadow: 0 0 0 0 rgba(18, 18, 18, 0.35);
+  animation: livePulse 1.4s ease-out infinite;
+  display: inline-block;
+}
+
+@keyframes livePulse {
+  0% { box-shadow: 0 0 0 0 rgba(18, 18, 18, 0.35); transform: scale(1); }
+  70% { box-shadow: 0 0 0 10px rgba(18, 18, 18, 0); transform: scale(1.05); }
+  100% { box-shadow: 0 0 0 0 rgba(18, 18, 18, 0); transform: scale(1); }
+}
+
         /* ---------- pills / buttons ---------- */
         .ico {
           display: inline-grid;
