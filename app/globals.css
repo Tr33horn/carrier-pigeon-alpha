@@ -988,6 +988,33 @@ body {
   100% { transform: scale(1.0); opacity: 0.0; }
 }
 
+/* ---- Route markers ---- */
+.routeMarker {
+  background: transparent;
+  border: none;
+}
+
+/* Origin = solid dot */
+.originDot span {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #111;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+}
+
+/* Destination = hollow ring */
+.destRing span {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid #111;
+  background: transparent;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+}
+
 
 /* Optional UI overlay image */
 .mapUiOverlay{

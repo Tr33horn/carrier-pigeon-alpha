@@ -124,27 +124,27 @@ const pigeonIcon = useMemo(
   [inFlight]
 );
 
-  const originIcon = useMemo(
-    () =>
-      L.divIcon({
-        className: "routeMarker",
-        html: "🏁",
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-      }),
-    []
-  );
+const originIcon = useMemo(
+  () =>
+    L.divIcon({
+      className: "routeMarker originDot",
+      html: `<span></span>`,
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
+    }),
+  []
+);
 
-  const destIcon = useMemo(
-    () =>
-      L.divIcon({
-        className: "routeMarker",
-        html: "📬",
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-      }),
-    []
-  );
+const destIcon = useMemo(
+  () =>
+    L.divIcon({
+      className: "routeMarker destRing",
+      html: `<span></span>`,
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+    }),
+  []
+);
 
   const line: [number, number][] = [
     [origin.lat, origin.lon],
