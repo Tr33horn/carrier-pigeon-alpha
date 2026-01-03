@@ -27,24 +27,18 @@ export default function MapView(props: {
   origin: { lat: number; lon: number };
   dest: { lat: number; lon: number };
   progress: number; // 0..1
-  tooltipText?: string;
+  tooltipText?: string; // NEW
 }) {
   const { origin, dest } = props;
 
   const [displayProgress, setDisplayProgress] = useState(() => clamp01(props.progress));
   const rafRef = useRef<number | null>(null);
 
-  // tiny “alive” bob
-  const [bob, setBob] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setBob((b) => (b === 0 ? 1 : 0)), 900);
-    return () => clearInterval(t);
-  }, []);
-
   useEffect(() => {
     const from = displayProgress;
     const to = clamp01(props.progress);
-    const durationMs = 420;
+
+    const durationMs = 400;
     const start = performance.now();
 
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -53,6 +47,7 @@ export default function MapView(props: {
       const t = clamp01((now - start) / durationMs);
       const eased = 1 - Math.pow(1 - t, 3);
       setDisplayProgress(lerp(from, to, eased));
+
       if (t < 1) rafRef.current = requestAnimationFrame(tick);
     };
 
@@ -70,21 +65,21 @@ export default function MapView(props: {
   };
 
   const pigeonIcon = L.divIcon({
-    className: "pigeon-marker",
-    html: `<div style="transform: translateY(${bob ? -2 : 0}px)">🕊️</div>`,
+    className: "pigeonMarker",
+    html: "🕊️",
     iconSize: [26, 26],
     iconAnchor: [13, 13],
   });
 
   const originIcon = L.divIcon({
-    className: "route-marker",
+    className: "routeMarker",
     html: "🏁",
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   });
 
   const destIcon = L.divIcon({
-    className: "route-marker",
+    className: "routeMarker",
     html: "📬",
     iconSize: [24, 24],
     iconAnchor: [12, 12],
@@ -101,8 +96,8 @@ export default function MapView(props: {
         height: 340,
         borderRadius: 18,
         overflow: "hidden",
-        background: "#FFFFFF",
-        boxShadow: "0 10px 28px rgba(0,0,0,0.10)",
+        border: "1px solid rgba(0,0,0,0.10)",
+        boxShadow: "0 12px 24px rgba(0,0,0,0.08)",
       }}
     >
       <MapContainer
@@ -125,36 +120,41 @@ export default function MapView(props: {
 
         <Marker position={[current.lat, current.lon]} icon={pigeonIcon}>
           <Tooltip
-            permanent
             direction="top"
             offset={[0, -10]}
-            className="pigeon-tooltip"
             opacity={1}
+            permanent
+            className="pigeonTooltip"
           >
-            <div style={{ fontWeight: 900, fontSize: 12 }}>
-              {props.tooltipText || "Currently over: somewhere suspicious"}
-            </div>
+            {props.tooltipText || "Currently over: somewhere over the U.S."}
           </Tooltip>
         </Marker>
       </MapContainer>
 
+      {/* Tooltip + marker styling */}
       <style jsx global>{`
-        /* Leaflet tooltip styling */
-        .leaflet-tooltip.pigeon-tooltip {
-          background: #ffffff;
-          color: #111;
-          border: none;
-          border-radius: 12px;
-          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.14);
-          padding: 8px 10px;
-        }
-        .leaflet-tooltip.pigeon-tooltip::before {
-          border-top-color: #ffffff;
+        .pigeonTooltip.leaflet-tooltip {
+          background: rgba(255, 255, 255, 0.92);
+          border: 1px solid rgba(0, 0, 0, 0.12);
+          border-radius: 999px;
+          padding: 8px 12px;
+          box-shadow: 0 10px 18px rgba(0,0,0,0.12);
+          color: #121212;
+          font-family: "Bricolage Grotesque", system-ui, -apple-system, Segoe UI, Roboto, Arial;
+          font-weight: 900;
+          font-size: 12px;
         }
 
-        /* Optional: reduce map UI noise */
-        .leaflet-control-attribution {
-          opacity: 0.45;
+        .pigeonTooltip.leaflet-tooltip::before {
+          border-top-color: rgba(255, 255, 255, 0.92);
+        }
+
+        .pigeonMarker {
+          filter: drop-shadow(0 8px 10px rgba(0,0,0,0.18));
+        }
+
+        .routeMarker {
+          filter: drop-shadow(0 8px 10px rgba(0,0,0,0.14));
         }
       `}</style>
     </div>

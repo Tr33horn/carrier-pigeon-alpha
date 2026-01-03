@@ -12,7 +12,7 @@ type Letter = {
   from_name: string | null;
   to_name: string | null;
   subject: string | null;
-  body: string | null; // body is null until delivered
+  body: string | null;
   origin_name: string;
   origin_lat: number;
   origin_lon: number;
@@ -62,107 +62,235 @@ function milestoneTimeISO(sentISO: string, etaISO: string, fraction: number) {
   return new Date(t).toISOString();
 }
 
-/* ---------- Wax Seal ---------- */
+/* ---------- tiny icon system (inline SVG) ---------- */
+function Ico({
+  name,
+  size = 16,
+}: {
+  name:
+    | "live"
+    | "pin"
+    | "clock"
+    | "speed"
+    | "distance"
+    | "arrow"
+    | "swap"
+    | "check"
+    | "mail"
+    | "timeline";
+  size?: number;
+}) {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    xmlns: "http://www.w3.org/2000/svg",
+    style: { display: "block" as const },
+  };
+
+  switch (name) {
+    case "clock":
+      return (
+        <svg {...common}>
+          <path
+            d="M12 7v6l4 2"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "pin":
+      return (
+        <svg {...common}>
+          <path
+            d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z"
+            stroke="currentColor"
+            strokeWidth="2.4"
+          />
+        </svg>
+      );
+    case "speed":
+      return (
+        <svg {...common}>
+          <path
+            d="M5 13a7 7 0 0 1 14 0"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M12 13l4.5-4.5"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M4 13h2M18 13h2"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "distance":
+      return (
+        <svg {...common}>
+          <path
+            d="M7 7h10M7 17h10"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M9 9l-2-2 2-2M15 15l2 2-2 2"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "arrow":
+      return (
+        <svg {...common}>
+          <path
+            d="M5 12h14"
+            stroke="currentColor"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+          />
+          <path
+            d="M13 6l6 6-6 6"
+            stroke="currentColor"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "swap":
+      return (
+        <svg {...common}>
+          <path
+            d="M7 7h11l-2-2M17 17H6l2 2"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "check":
+      return (
+        <svg {...common}>
+          <path
+            d="M20 6 9 17l-5-5"
+            stroke="currentColor"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "mail":
+      return (
+        <svg {...common}>
+          <path
+            d="M4 7h16v10H4V7Z"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
+          <path
+            d="m4 8 8 6 8-6"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "timeline":
+      return (
+        <svg {...common}>
+          <path
+            d="M7 6h10M7 12h10M7 18h10"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M4 6h.01M4 12h.01M4 18h.01"
+            stroke="currentColor"
+            strokeWidth="5"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "live":
+    default:
+      return (
+        <svg {...common}>
+          <path
+            d="M4 12a8 8 0 0 1 16 0"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M8 12a4 4 0 0 1 8 0"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M12 12h.01"
+            stroke="currentColor"
+            strokeWidth="6"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+  }
+}
+
+/* ---------- wax seal + delivery moment ---------- */
 function WaxSealOverlay({ etaText, cracking }: { etaText: string; cracking?: boolean }) {
   return (
     <div className={cracking ? "seal crack" : "seal"} style={{ position: "relative" }}>
-      <div
-        style={{
-          position: "relative",
-          borderRadius: 18,
-          padding: 18,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.40))",
-          overflow: "hidden",
-          boxShadow: "var(--shadow-lg)",
-          border: "1px solid rgba(0,0,0,0.06)",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            backdropFilter: "blur(10px)",
-            WebkitBackdropFilter: "blur(10px)",
-            background: "rgba(255,255,255,0.35)",
-          }}
-        />
-
-        <div
-          style={{
-            position: "relative",
-            zIndex: 2,
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-          }}
-        >
-          <div
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: "999px",
-              background:
-                "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.35), rgba(255,255,255,0) 40%)," +
-                "radial-gradient(circle at 70% 75%, rgba(0,0,0,0.20), rgba(0,0,0,0) 45%)," +
-                "linear-gradient(145deg, var(--brand-red), #8B1A12)",
-              boxShadow:
-                "0 10px 24px rgba(0,0,0,0.18), inset 0 2px 10px rgba(255,255,255,0.22)",
-              border: "1px solid rgba(255,255,255,0.55)",
-              display: "grid",
-              placeItems: "center",
-              transform: "rotate(-8deg)",
-            }}
-            aria-label="Wax seal"
-            title="Sealed until delivery"
-          >
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: "999px",
-                border: "1px dashed rgba(255,255,255,0.70)",
-                display: "grid",
-                placeItems: "center",
-                fontWeight: 900,
-                letterSpacing: 1,
-                color: "rgba(255,255,255,0.96)",
-                fontSize: 14,
-                textTransform: "uppercase",
-              }}
-            >
-              AH
-            </div>
+      <div className="sealCard">
+        <div className="sealVeil" />
+        <div className="sealRow">
+          <div className="wax" aria-label="Wax seal" title="Sealed until delivery">
+            <div className="waxInner">AH</div>
           </div>
-
-          <div style={{ position: "relative", zIndex: 2 }}>
-            <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 4 }}>
-              Sealed until delivery
-            </div>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>Opens at {etaText}</div>
-            <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>
-              No peeking. The bird is watching.
-            </div>
+          <div>
+            <div className="sealTitle">Sealed until delivery</div>
+            <div className="sealSub">Opens at {etaText}</div>
+            <div className="sealHint">No peeking. The bird is watching.</div>
           </div>
         </div>
-
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            opacity: 0.08,
-            backgroundImage:
-              "repeating-linear-gradient(0deg, rgba(0,0,0,0.10) 0px, rgba(0,0,0,0.10) 1px, rgba(0,0,0,0) 2px, rgba(0,0,0,0) 6px)",
-            mixBlendMode: "multiply",
-            pointerEvents: "none",
-          }}
-        />
+        <div className="sealNoise" />
       </div>
     </div>
   );
 }
 
-/* ---------- Confetti ---------- */
 function ConfettiBurst({ show }: { show: boolean }) {
   if (!show) return null;
   return (
@@ -170,6 +298,40 @@ function ConfettiBurst({ show }: { show: boolean }) {
       {Array.from({ length: 18 }).map((_, i) => (
         <span key={i} className="confetti-bit" />
       ))}
+    </div>
+  );
+}
+
+/* ---------- timeline rail component ---------- */
+function RailTimeline({
+  items,
+  now,
+}: {
+  items: { key: string; name: string; at: string; kind: "checkpoint" | "milestone" }[];
+  now: Date;
+}) {
+  return (
+    <div className="rail">
+      <div className="railLine" />
+      <div className="railList">
+        {items.map((it) => {
+          const isPast = new Date(it.at).getTime() <= now.getTime();
+          const isMilestone = it.kind === "milestone";
+          return (
+            <div key={it.key} className="railItem">
+              <div className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""}`}>
+                <span className="railDot" />
+              </div>
+              <div className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""}`}>
+                <div className="railTitleRow">
+                  <div className="railTitle">{it.name}</div>
+                  <div className="railTime">{new Date(it.at).toLocaleString()}</div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -230,7 +392,7 @@ export default function LetterStatusPage() {
 
     load();
 
-    // feels “live” while in flight
+    // “legit” live feel while in flight
     const interval = setInterval(() => load(), 15000);
 
     return () => {
@@ -304,39 +466,28 @@ export default function LetterStatusPage() {
 
   const showLive = !delivered;
 
-  const page = {
-    padding: 24,
-    fontFamily: `"Bricolage Grotesque", system-ui, -apple-system, Segoe UI, Roboto, Arial`,
-    maxWidth: 980,
-    margin: "0 auto",
-    color: "var(--ink)",
-  } as const;
-
-  const card = {
-    background: "var(--card)",
-    borderRadius: 18,
-    padding: 16,
-    boxShadow: "var(--shadow-lg)",
-    border: "1px solid rgba(0,0,0,0.06)",
-  } as const;
-
-  const soft = {
-    background: "var(--soft)",
-    borderRadius: 18,
-    padding: 16,
-    border: "1px solid rgba(0,0,0,0.06)",
-  } as const;
+  const timelineItems = useMemo(() => {
+    const cps = checkpoints.map((cp) => ({
+      key: `cp-${cp.id}`,
+      name: cp.name,
+      at: cp.at,
+      kind: "checkpoint" as const,
+    }));
+    const ms = milestones.map((m) => ({
+      key: `ms-${m.pct}`,
+      name: `🕊️ ${m.label}`,
+      at: m.atISO,
+      kind: "milestone" as const,
+    }));
+    return [...cps, ...ms].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  }, [checkpoints, milestones]);
 
   if (error) {
     return (
       <main className="pageBg">
-        <main style={page}>
-          <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.02em", margin: 0 }}>
-            Flight Status
-          </h1>
-          <p style={{ color: "var(--brand-red)", marginTop: 12, fontWeight: 800 }}>
-            ❌ {error}
-          </p>
+        <main className="wrap">
+          <h1 className="h1">Flight Status</h1>
+          <p className="err">❌ {error}</p>
         </main>
       </main>
     );
@@ -345,11 +496,9 @@ export default function LetterStatusPage() {
   if (!letter) {
     return (
       <main className="pageBg">
-        <main style={page}>
-          <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.02em", margin: 0 }}>
-            Flight Status
-          </h1>
-          <p style={{ marginTop: 12, opacity: 0.7, fontWeight: 700 }}>Loading…</p>
+        <main className="wrap">
+          <h1 className="h1">Flight Status</h1>
+          <p className="muted">Loading…</p>
         </main>
       </main>
     );
@@ -357,10 +506,10 @@ export default function LetterStatusPage() {
 
   return (
     <main className="pageBg">
-      <main style={page}>
-        {/* TOP BANNER BLOCK (Route) */}
+      <main className="wrap">
+        {/* TOP ROUTE BANNER */}
         <section className="routeBanner">
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start" }}>
+          <div className="bannerTop">
             <div>
               <div className="kicker">Flight status</div>
 
@@ -375,16 +524,29 @@ export default function LetterStatusPage() {
                       <span className="liveDot" />
                       <span className="liveText">LIVE</span>
                     </div>
-                    <div className="metaText">
-                      Currently over: <strong>{currentlyOver}</strong>
+                    <div className="metaPill">
+                      <span className="ico">
+                        <Ico name="pin" />
+                      </span>
+                      <span>
+                        Currently over: <strong>{currentlyOver}</strong>
+                      </span>
                     </div>
-                    <div className="metaText faint">
-                      Last updated: {secondsSinceFetch ?? 0}s ago
+                    <div className="metaPill faint">
+                      <span className="ico">
+                        <Ico name="clock" />
+                      </span>
+                      <span>Last updated: {secondsSinceFetch ?? 0}s ago</span>
                     </div>
                   </>
                 ) : (
-                  <div className="metaText">
-                    <strong>✅ Delivered</strong> — the bird has clocked out.
+                  <div className="metaPill">
+                    <span className="ico">
+                      <Ico name="check" />
+                    </span>
+                    <span>
+                      <strong>Delivered</strong> — the bird has clocked out.
+                    </span>
                   </div>
                 )}
               </div>
@@ -396,12 +558,45 @@ export default function LetterStatusPage() {
               {!delivered && <div className="etaSub">T-minus {countdown}</div>}
             </div>
           </div>
+
+          {/* stats row */}
+          <div className="statsRow">
+            <div className="stat">
+              <span className="ico">
+                <Ico name="distance" />
+              </span>
+              <div>
+                <div className="statLabel">Distance</div>
+                <div className="statValue">{letter.distance_km.toFixed(0)} km</div>
+              </div>
+            </div>
+
+            <div className="stat">
+              <span className="ico">
+                <Ico name="speed" />
+              </span>
+              <div>
+                <div className="statLabel">Speed</div>
+                <div className="statValue">{letter.speed_kmh.toFixed(0)} km/h</div>
+              </div>
+            </div>
+
+            <div className="stat">
+              <span className="ico">
+                <Ico name="timeline" />
+              </span>
+              <div>
+                <div className="statLabel">Progress</div>
+                <div className="statValue">{Math.round(progress * 100)}%</div>
+              </div>
+            </div>
+          </div>
         </section>
 
         {/* GRID */}
-        <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 14, marginTop: 14 }}>
+        <div className="grid">
           {/* MAP CARD */}
-          <div style={card}>
+          <div className="card">
             <div className="kicker">Map</div>
             <div style={{ marginTop: 12 }}>
               <MapView
@@ -412,172 +607,77 @@ export default function LetterStatusPage() {
               />
             </div>
 
-            <div style={{ display: "flex", gap: 14, marginTop: 12, flexWrap: "wrap" }}>
-              <div className="metaText faint">
-                Distance: <strong>{letter.distance_km.toFixed(0)} km</strong>
+            {/* progress bar */}
+            <div style={{ marginTop: 14 }}>
+              <div className="bar">
+                <div className="barFill" style={{ width: `${Math.round(progress * 100)}%` }} />
+                {[25, 50, 75].map((p) => (
+                  <span key={p} className="barTick" style={{ left: `${p}%` }} />
+                ))}
               </div>
-              <div className="metaText faint">
-                Speed: <strong>{letter.speed_kmh.toFixed(0)} km/h</strong>
-              </div>
-            </div>
-          </div>
-
-          {/* PROGRESS CARD */}
-          <div style={card}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <div>
-                <div className="kicker">Progress</div>
-                <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.02em", marginTop: 4 }}>
-                  {Math.round(progress * 100)}%
+              <div className="barMeta">
+                <div className="mutedStrong">{Math.round(progress * 100)}%</div>
+                <div className="muted">
+                  {currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}
                 </div>
               </div>
-              <div className="metaText faint" style={{ textAlign: "right" }}>
-                {currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}
-              </div>
-            </div>
 
-            <div style={{ marginTop: 12 }}>
-              <div
-                style={{
-                  position: "relative",
-                  height: 12,
-                  borderRadius: 999,
-                  background: "rgba(0,0,0,0.10)",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    height: "100%",
-                    width: `${Math.round(progress * 100)}%`,
-                    background: "var(--ink)",
-                    transition: "width 0.4s ease",
-                  }}
-                />
-                {[25, 50, 75].map((p) => (
-                  <div
-                    key={p}
-                    style={{
-                      position: "absolute",
-                      left: `${p}%`,
-                      top: 0,
-                      bottom: 0,
-                      width: 2,
-                      background: "rgba(0,0,0,0.16)",
-                      transform: "translateX(-1px)",
-                    }}
-                  />
+              <div className="chips">
+                {milestones.map((m) => (
+                  <div key={m.pct} className={`chip ${m.isPast ? "on" : ""}`}>
+                    <span className="chipDot">{m.isPast ? "●" : "○"}</span>
+                    <span className="chipLabel">{m.label}</span>
+                  </div>
                 ))}
               </div>
             </div>
+          </div>
 
-            <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-              {milestones.map((m) => (
-                <div
-                  key={m.pct}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "10px 12px",
-                    borderRadius: 14,
-                    background: m.isPast ? "var(--card)" : "var(--soft)",
-                    border: "1px solid rgba(0,0,0,0.06)",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                    <span style={{ fontWeight: 900 }}>{m.isPast ? "●" : "○"}</span>
-                    <div style={{ fontWeight: 900, fontSize: 13 }}>{m.label}</div>
-                  </div>
-                  <div className="metaText faint">{new Date(m.atISO).toLocaleString()}</div>
-                </div>
-              ))}
+          {/* TIMELINE CARD (rail) */}
+          <div className="card">
+            <div className="cardHead">
+              <div>
+                <div className="kicker">Timeline</div>
+                <div className="h2">Flight log</div>
+              </div>
+              <div className="pillBtn subtle" title="Refresh">
+                <span className="ico">
+                  <Ico name="live" />
+                </span>
+                {delivered ? "Final" : "Auto"}
+              </div>
             </div>
+
+            <RailTimeline items={timelineItems} now={now} />
           </div>
         </div>
 
-        {/* TIMELINE */}
-        <div style={{ marginTop: 14, ...card }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <h2 style={{ fontSize: 16, fontWeight: 900, letterSpacing: "-0.01em", margin: 0 }}>
-              Timeline
-            </h2>
-            <div className="metaText faint">
-              {delivered ? "Final log" : "Auto-updating"}
-            </div>
-          </div>
-
-          <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-            {[
-              ...checkpoints.map((cp) => ({
-                key: `cp-${cp.id}`,
-                name: cp.name,
-                at: cp.at,
-                kind: "checkpoint" as const,
-              })),
-              ...milestones.map((m) => ({
-                key: `ms-${m.pct}`,
-                name: `🕊️ ${m.label}`,
-                at: m.atISO,
-                kind: "milestone" as const,
-              })),
-            ]
-              .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
-              .map((item) => {
-                const isPast = new Date(item.at).getTime() <= now.getTime();
-                const isMilestone = item.kind === "milestone";
-
-                return (
-                  <div
-                    key={item.key}
-                    style={{
-                      padding: 12,
-                      borderRadius: 14,
-                      background: isMilestone ? "rgba(217,45,32,0.06)" : isPast ? "var(--card)" : "var(--soft)",
-                      border: "1px solid rgba(0,0,0,0.06)",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      alignItems: "center",
-                    }}
-                  >
-                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                      <span style={{ fontWeight: 900 }}>{isPast ? "●" : "○"}</span>
-                      <div style={{ fontWeight: 900 }}>{item.name}</div>
-                    </div>
-                    <div className="metaText faint">{new Date(item.at).toLocaleString()}</div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-
-        {/* MESSAGE */}
-        <div style={{ marginTop: 14, position: "relative", ...card }}>
+        {/* MESSAGE CARD */}
+        <div className="card" style={{ marginTop: 14, position: "relative" }}>
           <ConfettiBurst show={confetti} />
 
-          <h2 style={{ fontSize: 16, fontWeight: 900, letterSpacing: "-0.01em", margin: 0 }}>
-            Letter from {letter.from_name || "Sender"} to {letter.to_name || "Recipient"}
-          </h2>
-
-          <div style={{ marginTop: 10, ...soft }}>
-            <div style={{ fontWeight: 900, marginBottom: 10, fontSize: 14 }}>
-              {letter.subject || "(No subject)"}
+          <div className="cardHead" style={{ marginBottom: 8 }}>
+            <div>
+              <div className="kicker">Letter</div>
+              <div className="h2">
+                From {letter.from_name || "Sender"} to {letter.to_name || "Recipient"}
+              </div>
             </div>
 
+            <div className="metaPill faint">
+              <span className="ico">
+                <Ico name="mail" />
+              </span>
+              <span>Sealed until delivery</span>
+            </div>
+          </div>
+
+          <div className="soft">
+            <div className="subject">{letter.subject || "(No subject)"}</div>
+
             <div style={{ position: "relative" }}>
-              <div
-                className={delivered && revealStage === "open" ? "bodyReveal" : ""}
-                style={{
-                  whiteSpace: "pre-wrap",
-                  lineHeight: 1.55,
-                  fontSize: 14,
-                  fontWeight: 650,
-                  opacity: delivered ? 1 : 0,
-                }}
-              >
-                {delivered ? (letter.body ?? "") : ""}
+              <div className={delivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: delivered ? 1 : 0 }}>
+                <div className="body">{delivered ? (letter.body ?? "") : ""}</div>
               </div>
 
               {!delivered || revealStage !== "open" ? (
@@ -591,34 +691,36 @@ export default function LetterStatusPage() {
             </div>
           </div>
 
-          <div style={{ marginTop: 14, opacity: 0.55, fontSize: 11, fontWeight: 800 }}>
-            Token: {letter.public_token}
-          </div>
+          <div className="token">Token: {letter.public_token}</div>
         </div>
       </main>
 
-      {/* ✅ Brand tokens + subtle grain + banner styles */}
+      {/* ---------- global styles: tokens, cards, pills, rail ---------- */}
       <style jsx global>{`
         :root {
           --bg: #f6f6f4;
           --card: #ffffff;
           --soft: #f0f0ed;
           --ink: #121212;
-
-          /* brand tokens */
-          --brand-cream: #f6f6f4;
           --brand-red: #d92d20;
 
+          --border: rgba(0, 0, 0, 0.08);
           --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.10);
+          --shadow-md: 0 8px 18px rgba(0, 0, 0, 0.10);
+        }
+
+        body {
+          color: var(--ink);
+          background: var(--bg);
         }
 
         .pageBg {
           min-height: 100vh;
-          background: var(--brand-cream);
+          background: var(--bg);
           position: relative;
         }
 
-        /* Subtle grain overlay */
+        /* subtle grain */
         .pageBg::before {
           content: "";
           position: fixed;
@@ -633,57 +735,107 @@ export default function LetterStatusPage() {
           background-size: 6px 6px;
         }
 
+        .wrap {
+          padding: 24px;
+          max-width: 1050px;
+          margin: 0 auto;
+          font-family: "Bricolage Grotesque", system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        }
+
+        .h1 {
+          font-size: 34px;
+          font-weight: 900;
+          letter-spacing: -0.03em;
+          margin: 0;
+        }
+
+        .h2 {
+          font-size: 18px;
+          font-weight: 900;
+          letter-spacing: -0.02em;
+          margin-top: 4px;
+        }
+
         .kicker {
           font-size: 12px;
           font-weight: 900;
           opacity: 0.6;
-          letter-spacing: 0.06em;
+          letter-spacing: 0.08em;
           text-transform: uppercase;
         }
 
-        .metaText {
+        .muted {
+          opacity: 0.65;
+          font-weight: 750;
           font-size: 12px;
-          font-weight: 800;
-          opacity: 0.8;
-        }
-        .metaText.faint {
-          opacity: 0.6;
-          font-weight: 800;
         }
 
-        /* Route banner */
+        .mutedStrong {
+          opacity: 0.75;
+          font-weight: 900;
+          font-size: 12px;
+        }
+
+        .err {
+          color: var(--brand-red);
+          margin-top: 12px;
+          font-weight: 900;
+        }
+
+        .card {
+          background: var(--card);
+          border-radius: 20px;
+          padding: 16px;
+          box-shadow: var(--shadow-lg);
+          border: 1px solid var(--border);
+        }
+
+        .soft {
+          background: var(--soft);
+          border-radius: 18px;
+          padding: 14px;
+          border: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        /* ---------- banner ---------- */
         .routeBanner {
-          border-radius: 22px;
+          border-radius: 24px;
           padding: 18px;
           background: #ffffff;
-          border: 1px solid rgba(0,0,0,0.06);
+          border: 1px solid var(--border);
           box-shadow: var(--shadow-lg);
           position: relative;
           overflow: hidden;
         }
 
-        /* solid block accent (Alpinhound-y) */
         .routeBanner::after {
           content: "";
           position: absolute;
           inset: 0;
           background:
-            linear-gradient(135deg, rgba(217,45,32,0.10), rgba(217,45,32,0.00) 55%),
+            linear-gradient(135deg, rgba(217,45,32,0.12), rgba(217,45,32,0.00) 55%),
             linear-gradient(0deg, rgba(0,0,0,0.03), rgba(0,0,0,0));
           pointer-events: none;
         }
 
-        .routeHeadline {
-          font-size: 34px;
-          font-weight: 900;
-          letter-spacing: -0.03em;
-          margin-top: 8px;
+        .bannerTop {
+          display: flex;
+          justify-content: space-between;
+          gap: 14px;
+          align-items: flex-start;
           position: relative;
           z-index: 1;
         }
 
-        .routeHeadline .arrow {
-          opacity: 0.4;
+        .routeHeadline {
+          font-size: 36px;
+          font-weight: 900;
+          letter-spacing: -0.035em;
+          margin-top: 8px;
+        }
+
+        .arrow {
+          opacity: 0.35;
           margin: 0 8px;
         }
 
@@ -691,20 +843,16 @@ export default function LetterStatusPage() {
           margin-top: 10px;
           display: flex;
           flex-wrap: wrap;
-          gap: 12px;
+          gap: 10px;
           align-items: center;
-          position: relative;
-          z-index: 1;
         }
 
         .etaBox {
           padding: 12px 14px;
-          border-radius: 16px;
-          background: rgba(0,0,0,0.04);
-          border: 1px solid rgba(0,0,0,0.06);
-          min-width: 260px;
-          position: relative;
-          z-index: 1;
+          border-radius: 18px;
+          background: rgba(0, 0, 0, 0.04);
+          border: 1px solid rgba(0, 0, 0, 0.06);
+          min-width: 280px;
         }
 
         .etaTime {
@@ -713,28 +861,71 @@ export default function LetterStatusPage() {
           letter-spacing: -0.01em;
           margin-top: 4px;
         }
+
         .etaSub {
           font-size: 12px;
-          font-weight: 800;
+          font-weight: 900;
           opacity: 0.7;
           margin-top: 2px;
         }
 
-        /* LIVE dot pulse */
-        .liveWrap {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-          padding: 6px 10px;
-          border-radius: 999px;
-          background: rgba(217,45,32,0.10);
-          border: 1px solid rgba(217,45,32,0.18);
+        /* ---------- pills / buttons ---------- */
+        .ico {
+          display: inline-grid;
+          place-items: center;
+          width: 18px;
+          height: 18px;
         }
-        .liveText {
+
+        .pillBtn {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          border-radius: 999px;
+          padding: 10px 14px;
           font-weight: 900;
-          letter-spacing: 0.08em;
+          border: 1px solid rgba(0, 0, 0, 0.14);
+          background: #fff;
+          box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+          user-select: none;
+        }
+        .pillBtn.subtle {
+          background: rgba(0, 0, 0, 0.04);
+          border: 1px solid rgba(0, 0, 0, 0.10);
+          box-shadow: none;
+        }
+
+        .metaPill {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          border-radius: 999px;
+          padding: 8px 12px;
+          font-weight: 850;
+          font-size: 12px;
+          background: rgba(0, 0, 0, 0.04);
+          border: 1px solid rgba(0, 0, 0, 0.10);
+        }
+        .metaPill.faint {
+          opacity: 0.75;
+        }
+
+        .liveWrap {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          border-radius: 999px;
+          background: rgba(217, 45, 32, 0.10);
+          border: 1px solid rgba(217, 45, 32, 0.18);
+          font-weight: 900;
           font-size: 12px;
         }
+
+        .liveText {
+          letter-spacing: 0.10em;
+        }
+
         .liveDot {
           width: 10px;
           height: 10px;
@@ -744,6 +935,7 @@ export default function LetterStatusPage() {
           animation: pulse 1.4s ease-out infinite;
           display: inline-block;
         }
+
         @keyframes pulse {
           0% {
             box-shadow: 0 0 0 0 rgba(217, 45, 32, 0.35);
@@ -759,11 +951,346 @@ export default function LetterStatusPage() {
           }
         }
 
-        /* seal crack */
+        /* ---------- stats ---------- */
+        .statsRow {
+          margin-top: 14px;
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+          position: relative;
+          z-index: 1;
+        }
+
+        .stat {
+          display: flex;
+          gap: 10px;
+          align-items: center;
+          padding: 12px 12px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.75);
+          border: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        .statLabel {
+          font-size: 11px;
+          font-weight: 900;
+          opacity: 0.6;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+
+        .statValue {
+          font-size: 14px;
+          font-weight: 900;
+          letter-spacing: -0.01em;
+          margin-top: 2px;
+        }
+
+        /* ---------- grid ---------- */
+        .grid {
+          display: grid;
+          grid-template-columns: 1.15fr 0.85fr;
+          gap: 14px;
+          margin-top: 14px;
+        }
+
+        @media (max-width: 980px) {
+          .grid {
+            grid-template-columns: 1fr;
+          }
+          .etaBox {
+            min-width: unset;
+            width: 100%;
+          }
+          .bannerTop {
+            flex-direction: column;
+          }
+          .statsRow {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        .cardHead {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+        }
+
+        /* ---------- progress bar ---------- */
+        .bar {
+          position: relative;
+          height: 12px;
+          border-radius: 999px;
+          background: rgba(0, 0, 0, 0.10);
+          overflow: hidden;
+        }
+
+        .barFill {
+          height: 100%;
+          background: var(--ink);
+          transition: width 0.4s ease;
+        }
+
+        .barTick {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 2px;
+          background: rgba(0, 0, 0, 0.16);
+          transform: translateX(-1px);
+        }
+
+        .barMeta {
+          margin-top: 8px;
+          display: flex;
+          justify-content: space-between;
+          align-items: baseline;
+          gap: 12px;
+        }
+
+        .chips {
+          margin-top: 10px;
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .chip {
+          display: inline-flex;
+          gap: 8px;
+          align-items: center;
+          padding: 8px 12px;
+          border-radius: 999px;
+          border: 1px solid rgba(0, 0, 0, 0.10);
+          background: rgba(255, 255, 255, 0.70);
+          font-size: 12px;
+          font-weight: 900;
+          opacity: 0.55;
+        }
+
+        .chip.on {
+          opacity: 1;
+          border-color: rgba(217, 45, 32, 0.22);
+          background: rgba(217, 45, 32, 0.08);
+        }
+
+        .chipDot {
+          font-weight: 900;
+        }
+
+        .chipLabel {
+          letter-spacing: -0.01em;
+        }
+
+        /* ---------- rail timeline (single vertical line + nodes) ---------- */
+        .rail {
+          position: relative;
+          margin-top: 14px;
+          padding-left: 16px;
+        }
+
+        .railLine {
+          position: absolute;
+          left: 10px;
+          top: 4px;
+          bottom: 4px;
+          width: 2px;
+          background: rgba(0, 0, 0, 0.10);
+          border-radius: 999px;
+        }
+
+        .railList {
+          display: grid;
+          gap: 10px;
+        }
+
+        .railItem {
+          display: grid;
+          grid-template-columns: 24px 1fr;
+          gap: 10px;
+          align-items: stretch;
+        }
+
+        .railNode {
+          position: relative;
+          display: grid;
+          place-items: center;
+          width: 24px;
+        }
+
+        .railDot {
+          width: 12px;
+          height: 12px;
+          border-radius: 999px;
+          background: rgba(0, 0, 0, 0.22);
+          box-shadow: 0 0 0 6px rgba(0, 0, 0, 0.04);
+        }
+
+        .railNode.past .railDot {
+          background: var(--ink);
+          box-shadow: 0 0 0 6px rgba(0, 0, 0, 0.06);
+        }
+
+        .railNode.milestone .railDot {
+          background: rgba(217, 45, 32, 0.9);
+          box-shadow: 0 0 0 6px rgba(217, 45, 32, 0.10);
+        }
+
+        .railCard {
+          border-radius: 16px;
+          padding: 12px;
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          background: rgba(0, 0, 0, 0.035);
+        }
+
+        .railCard.past {
+          background: rgba(255, 255, 255, 0.85);
+          box-shadow: 0 10px 20px rgba(0,0,0,0.06);
+        }
+
+        .railCard.milestone {
+          background: rgba(217, 45, 32, 0.06);
+          border-color: rgba(217, 45, 32, 0.18);
+        }
+
+        .railTitleRow {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          align-items: baseline;
+        }
+
+        .railTitle {
+          font-weight: 900;
+          letter-spacing: -0.01em;
+          font-size: 13px;
+        }
+
+        .railTime {
+          font-size: 12px;
+          font-weight: 850;
+          opacity: 0.65;
+          white-space: nowrap;
+        }
+
+        /* ---------- letter ---------- */
+        .subject {
+          font-weight: 900;
+          margin-bottom: 10px;
+          font-size: 14px;
+          letter-spacing: -0.01em;
+        }
+
+        .body {
+          white-space: pre-wrap;
+          line-height: 1.55;
+          font-size: 14px;
+          font-weight: 650;
+        }
+
+        .token {
+          margin-top: 14px;
+          opacity: 0.55;
+          font-size: 11px;
+          font-weight: 900;
+        }
+
+        /* ---------- seal ---------- */
+        .sealCard {
+          position: relative;
+          border-radius: 18px;
+          padding: 18px;
+          background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.40));
+          overflow: hidden;
+          box-shadow: var(--shadow-md);
+          border: 1px solid rgba(0,0,0,0.06);
+        }
+
+        .sealVeil {
+          position: absolute;
+          inset: 0;
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          background: rgba(255,255,255,0.35);
+        }
+
+        .sealRow {
+          position: relative;
+          z-index: 2;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+        }
+
+        .wax {
+          width: 64px;
+          height: 64px;
+          border-radius: 999px;
+          background:
+            radial-gradient(circle at 30% 30%, rgba(255,255,255,0.35), rgba(255,255,255,0) 40%),
+            radial-gradient(circle at 70% 75%, rgba(0,0,0,0.20), rgba(0,0,0,0) 45%),
+            linear-gradient(145deg, var(--brand-red), #8B1A12);
+          box-shadow: 0 10px 24px rgba(0,0,0,0.18), inset 0 2px 10px rgba(255,255,255,0.22);
+          border: 1px solid rgba(255,255,255,0.55);
+          display: grid;
+          place-items: center;
+          transform: rotate(-8deg);
+        }
+
+        .waxInner {
+          width: 40px;
+          height: 40px;
+          border-radius: 999px;
+          border: 1px dashed rgba(255,255,255,0.70);
+          display: grid;
+          place-items: center;
+          font-weight: 900;
+          letter-spacing: 1px;
+          color: rgba(255,255,255,0.96);
+          font-size: 14px;
+          text-transform: uppercase;
+        }
+
+        .sealTitle {
+          font-size: 14px;
+          font-weight: 900;
+          margin-bottom: 4px;
+        }
+
+        .sealSub {
+          font-size: 12px;
+          opacity: 0.75;
+          font-weight: 850;
+        }
+
+        .sealHint {
+          font-size: 12px;
+          opacity: 0.6;
+          margin-top: 6px;
+          font-weight: 850;
+        }
+
+        .sealNoise {
+          position: absolute;
+          inset: 0;
+          opacity: 0.08;
+          background-image: repeating-linear-gradient(
+            0deg,
+            rgba(0, 0, 0, 0.10) 0px,
+            rgba(0, 0, 0, 0.10) 1px,
+            rgba(0, 0, 0, 0) 2px,
+            rgba(0, 0, 0, 0) 6px
+          );
+          mix-blend-mode: multiply;
+          pointer-events: none;
+        }
+
         .seal.crack {
           animation: crack 520ms ease-out forwards;
           transform-origin: 50% 60%;
         }
+
         @keyframes crack {
           0% {
             transform: scale(1) rotate(0deg);
@@ -782,10 +1309,10 @@ export default function LetterStatusPage() {
           }
         }
 
-        /* body reveal */
         .bodyReveal {
           animation: reveal 420ms ease-out forwards;
         }
+
         @keyframes reveal {
           from {
             opacity: 0;
@@ -797,14 +1324,15 @@ export default function LetterStatusPage() {
           }
         }
 
-        /* confetti */
+        /* ---------- confetti ---------- */
         .confetti {
           position: absolute;
           inset: 0;
           pointer-events: none;
           overflow: hidden;
-          border-radius: 18px;
+          border-radius: 20px;
         }
+
         .confetti-bit {
           position: absolute;
           top: -10px;
@@ -816,9 +1344,11 @@ export default function LetterStatusPage() {
           transform: translateX(-50%);
           animation: confettiFall 1100ms ease-out forwards;
         }
+
         .confetti-bit:nth-child(3n) {
           background: rgba(217, 45, 32, 0.92);
         }
+
         .confetti-bit:nth-child(4n) {
           background: rgba(0, 0, 0, 0.35);
         }
