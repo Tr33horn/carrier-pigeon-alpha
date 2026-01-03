@@ -1,0 +1,15 @@
+name: Deliveries Cron
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call deliveries endpoint
+        run: |
+          curl -sS -X GET "https://pigeon.humanrobotalliance.com/api/cron/deliveries" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
