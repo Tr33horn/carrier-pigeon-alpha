@@ -656,3 +656,99 @@ body {
   70% { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(22, 163, 74, 0); }
   100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
 }
+
+/* -------------------------------------------------
+   Missing shared UI pieces (Write + Dashboard)
+------------------------------------------------- */
+
+/* Dashboard/Status pill button */
+.pillBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 900;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  background: #fff;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+  user-select: none;
+}
+.pillBtn.subtle {
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  box-shadow: none;
+}
+
+/* Icon wrapper used in a few spots */
+.ico {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+}
+
+/* -------------------------------------------------
+   CityTypeahead (if you removed the component-local styles)
+   NOTE: If CityTypeahead still includes <style jsx>, you can skip this,
+   but it won’t hurt to have it here either.
+------------------------------------------------- */
+.typeahead {
+  position: relative;
+}
+
+.typeLabel {
+  font-weight: 900;
+  display: block;
+}
+
+.typeMenu {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  margin-top: 8px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  padding: 6px;
+}
+
+.typeEmpty {
+  padding: 10px 12px;
+  opacity: 0.7;
+  font-weight: 850;
+  font-size: 12px;
+}
+
+.typeItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+.typeItem:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.typeItem.active {
+  background: var(--alp-blue-30);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.typeSelected {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-top: 8px;
+  font-weight: 850;
+}
