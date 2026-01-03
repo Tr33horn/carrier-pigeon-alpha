@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseServer } from "../../../lib/supabaseServer";
+import { Resend } from "resend";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 function toRad(deg: number) {
   return (deg * Math.PI) / 180;
@@ -60,11 +63,11 @@ function generateCheckpoints(
 export async function POST(req: Request) {
   const body = await req.json();
 
-  // ✅ NEW: accept to_email from client
-  const { from_name, to_name, to_email, subject, message, origin, destination } = body;
+  const { from_name, to_name, to_email, subject, message, origin, destination } =
+    body;
 
-  const SPEED_KMH = 72; // ~45 mph
-  const REST_FACTOR = 1.15; // “pigeon reality tax”
+  const SPEED_KMH = 72;
+  const REST_FACTOR = 1.15;
 
   const km = distanceKm(origin.lat, origin.lon, destination.lat, destination.lon);
   const hours = (km / SPEED_KMH) * REST_FACTOR;
@@ -85,8 +88,8 @@ export async function POST(req: Request) {
       public_token: publicToken,
       from_name,
       to_name,
-      to_email: normalizedEmail, // ✅ NEW
-      delivered_notified_at: null, // ✅ NEW (optional but explicit)
+      to_email: normalizedEmail,
+      delivered_notified_at: null,
       subject,
       body: message,
       origin_name: origin.name,
@@ -132,6 +135,42 @@ export async function POST(req: Request) {
 
   if (cpErr) {
     return NextResponse.json({ error: cpErr.message }, { status: 500 });
+  }
+
+  // ✅ NEW: send "Pigeon launched" email immediately (if recipient email provided)
+  if (normalizedEmail) {
+    try {
+      const base = process.env.APP_BASE_URL || "http://localhost:3000";
+      const statusUrl = `${base}/l/${publicToken}`;
+      const etaText = new Date(letter.eta_at).toLocaleString();
+
+      await resend.emails.send({
+        from: process.env.MAIL_FROM || "Carrier Pigeon <no-reply@localhost>",
+        to: normalizedEmail,
+        subject: "🕊️ A sealed letter is on the way",
+        html: `
+          <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height: 1.5">
+            <h2 style="margin: 0 0 8px">A pigeon has departed.</h2>
+            <p style="margin: 0 0 12px">
+              You have a letter from <strong>${from_name || "Someone"}</strong>.
+              It stays sealed until delivery.
+            </p>
+            <p style="margin: 0 0 12px"><strong>ETA:</strong> ${etaText}</p>
+            <p style="margin: 0 0 16px">
+              <a href="${statusUrl}" style="display:inline-block;padding:10px 14px;border-radius:10px;text-decoration:none;border:1px solid #222">
+                Track flight status
+              </a>
+            </p>
+            <p style="opacity: 0.7; margin: 0">
+              (No peeking. The bird is watching.)
+            </p>
+          </div>
+        `,
+      });
+    } catch (e) {
+      // Don't fail the whole send if email fails — just log it.
+      console.error("LAUNCH EMAIL ERROR:", e);
+    }
   }
 
   return NextResponse.json({ public_token: publicToken, eta_at: letter.eta_at });
