@@ -32,7 +32,6 @@ type Checkpoint = {
   at: string;
 };
 
-/* ----------------- helpers ----------------- */
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
 }
@@ -41,7 +40,7 @@ function progressFraction(sentISO: string, etaISO: string, now = new Date()) {
   const sent = new Date(sentISO).getTime();
   const eta = new Date(etaISO).getTime();
   const t = now.getTime();
-  if (eta <= sent) return 1;
+  if (!Number.isFinite(sent) || !Number.isFinite(eta) || eta <= sent) return 1;
   return clamp01((t - sent) / (eta - sent));
 }
 
@@ -67,245 +66,51 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
-function fakeOverText(p: number, origin: string, dest: string) {
-  if (p < 0.08) return `Leaving ${origin}… (wings warming up)`;
-  if (p < 0.25) return "Low altitude cruise • suspicious bread crumbs detected";
-  if (p < 0.5) return "Over the plains • tailwind acquired (allegedly)";
-  if (p < 0.75) return "Crossing the big stuff • mountains, vibes, drama";
-  if (p < 0.92) return `Approaching ${dest} • practicing landing swagger`;
-  return `Final approach to ${dest} • do not startle the bird`;
-}
-
-/* ----------------- UI bits ----------------- */
-function LivePill() {
-  return (
-    <div
-      style={{
-        display: "inline-flex",
-        gap: 8,
-        alignItems: "center",
-        padding: "8px 12px",
-        borderRadius: 999,
-        border: "1px solid rgba(255,255,255,0.18)",
-        background: "rgba(255,255,255,0.06)",
-        fontWeight: 900,
-        fontSize: 12,
-        letterSpacing: 0.3,
-      }}
-      title="Updates are refreshing"
-      aria-label="Live indicator"
-    >
-      <span
-        style={{
-          width: 10,
-          height: 10,
-          borderRadius: 999,
-          background: "rgba(80, 220, 140, 0.9)",
-          boxShadow: "0 0 0 0 rgba(80, 220, 140, 0.55)",
-          animation: "pulse 1400ms ease-out infinite",
-        }}
-      />
-      LIVE
-    </div>
-  );
-}
-
-function ConfettiBurst({ active }: { active: boolean }) {
-  const pieces = useMemo(() => {
-    // deterministic-ish random
-    const out: Array<{
-      left: number;
-      rotate: number;
-      delay: number;
-      duration: number;
-      size: number;
-      hue: number;
-      drift: number;
-    }> = [];
-
-    for (let i = 0; i < 26; i++) {
-      out.push({
-        left: 45 + (i % 8) * 2 + (Math.random() * 10 - 5),
-        rotate: Math.random() * 360,
-        delay: Math.random() * 120,
-        duration: 650 + Math.random() * 650,
-        size: 6 + Math.random() * 7,
-        hue: Math.floor(Math.random() * 360),
-        drift: (Math.random() * 2 - 1) * 120,
-      });
-    }
-    return out;
-  }, []);
-
-  if (!active) return null;
-
-  return (
-    <div
-      aria-hidden
-      style={{
-        position: "fixed",
-        inset: 0,
-        pointerEvents: "none",
-        zIndex: 9999,
-      }}
-    >
-      {pieces.map((p, idx) => (
-        <div
-          key={idx}
-          style={{
-            position: "absolute",
-            top: 90,
-            left: `${p.left}%`,
-            width: p.size,
-            height: p.size * 0.55,
-            borderRadius: 2,
-            background: `hsl(${p.hue} 85% 65%)`,
-            transform: `rotate(${p.rotate}deg)`,
-            animation: `confetti-fall ${p.duration}ms ease-out forwards`,
-            animationDelay: `${p.delay}ms`,
-            // stash drift in CSS var
-            ["--drift" as any]: `${p.drift}px`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function SealCrackOverlay({ active }: { active: boolean }) {
-  if (!active) return null;
-  return (
-    <div
-      aria-hidden
-      style={{
-        position: "absolute",
-        inset: 0,
-        borderRadius: 14,
-        overflow: "hidden",
-        display: "grid",
-        placeItems: "center",
-        background: "rgba(0,0,0,0.35)",
-        backdropFilter: "blur(6px)",
-        WebkitBackdropFilter: "blur(6px)",
-        zIndex: 5,
-      }}
-    >
-      <div style={{ position: "relative", width: 84, height: 84 }}>
-        <div
-          style={{
-            width: 84,
-            height: 84,
-            borderRadius: 999,
-            background:
-              "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.35), rgba(255,255,255,0) 40%)," +
-              "radial-gradient(circle at 70% 75%, rgba(0,0,0,0.35), rgba(0,0,0,0) 45%)," +
-              "linear-gradient(145deg, #8b0f18, #5b0a10)",
-            boxShadow:
-              "0 18px 40px rgba(0,0,0,0.55), inset 0 2px 12px rgba(255,255,255,0.18)",
-            border: "1px solid rgba(255,255,255,0.18)",
-            display: "grid",
-            placeItems: "center",
-            transform: "rotate(-8deg)",
-            animation: "seal-pop 520ms ease-out forwards",
-          }}
-        >
-          <div
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: 999,
-              border: "1px dashed rgba(255,255,255,0.35)",
-              display: "grid",
-              placeItems: "center",
-              fontWeight: 900,
-              letterSpacing: 1,
-              color: "rgba(255,255,255,0.92)",
-              fontSize: 14,
-              textTransform: "uppercase",
-            }}
-          >
-            AH
-          </div>
-        </div>
-
-        {/* crack line */}
-        <div
-          style={{
-            position: "absolute",
-            left: "50%",
-            top: "14%",
-            width: 2,
-            height: "72%",
-            background: "rgba(255,255,255,0.75)",
-            transform: "translateX(-50%) rotate(14deg) scaleY(0)",
-            transformOrigin: "top",
-            animation: "crack 520ms ease-out forwards",
-          }}
-        />
-
-        {/* tiny “chip” bits */}
-        <div
-          style={{
-            position: "absolute",
-            left: "18%",
-            top: "58%",
-            width: 10,
-            height: 10,
-            borderRadius: 3,
-            background: "rgba(255,255,255,0.35)",
-            transform: "rotate(18deg) scale(0)",
-            animation: "chip 520ms ease-out forwards",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            right: "16%",
-            top: "38%",
-            width: 8,
-            height: 8,
-            borderRadius: 3,
-            background: "rgba(255,255,255,0.28)",
-            transform: "rotate(-22deg) scale(0)",
-            animation: "chip2 520ms ease-out forwards",
-          }}
-        />
-      </div>
-
-      <div style={{ marginTop: 14, fontWeight: 900, opacity: 0.9 }}>
-        Seal broken. Letter unlocked.
-      </div>
-      <div style={{ marginTop: 6, fontSize: 12, opacity: 0.65 }}>
-        (the pigeon approves this message)
-      </div>
-    </div>
-  );
-}
-
-function WaxSealOverlay({ etaText }: { etaText: string }) {
+function WaxSealOverlay({
+  etaText,
+  cracking = false,
+}: {
+  etaText: string;
+  cracking?: boolean;
+}) {
   return (
     <div style={{ position: "relative" }}>
       <div
         style={{
           position: "relative",
-          borderRadius: 14,
+          borderRadius: 16,
           padding: 18,
-          border: "1px solid rgba(255,255,255,0.12)",
+          border: "1px solid rgba(255,255,255,0.10)",
           background:
             "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
           overflow: "hidden",
         }}
       >
+        {/* Blur veil */}
         <div
           style={{
             position: "absolute",
             inset: 0,
             backdropFilter: "blur(10px)",
             WebkitBackdropFilter: "blur(10px)",
-            background: "rgba(0,0,0,0.25)",
+            background: "rgba(0,0,0,0.28)",
           }}
         />
 
+        {/* subtle fibers */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            opacity: 0.06,
+            backgroundImage:
+              "repeating-linear-gradient(0deg, rgba(255,255,255,0.25) 0px, rgba(255,255,255,0.25) 1px, rgba(0,0,0,0) 2px, rgba(0,0,0,0) 6px)",
+            mixBlendMode: "overlay",
+            pointerEvents: "none",
+          }}
+        />
+
+        {/* Seal row */}
         <div
           style={{
             position: "relative",
@@ -317,44 +122,61 @@ function WaxSealOverlay({ etaText }: { etaText: string }) {
         >
           <div
             style={{
-              width: 64,
-              height: 64,
-              borderRadius: "999px",
+              width: 70,
+              height: 70,
+              borderRadius: 999,
               background:
                 "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.35), rgba(255,255,255,0) 40%)," +
                 "radial-gradient(circle at 70% 75%, rgba(0,0,0,0.35), rgba(0,0,0,0) 45%)," +
-                "linear-gradient(145deg, #8b0f18, #5b0a10)",
+                "linear-gradient(145deg, #b0121e, #5b0a10)",
               boxShadow:
-                "0 10px 30px rgba(0,0,0,0.45), inset 0 2px 10px rgba(255,255,255,0.18)",
+                "0 14px 40px rgba(0,0,0,0.55), inset 0 2px 12px rgba(255,255,255,0.18)",
               border: "1px solid rgba(255,255,255,0.18)",
               display: "grid",
               placeItems: "center",
-              transform: "rotate(-8deg)",
+              transform: cracking ? "rotate(-8deg) scale(1.02)" : "rotate(-8deg)",
+              animation: cracking ? "sealCrack 520ms ease-out" : undefined,
             }}
             aria-label="Wax seal"
             title="Sealed until delivery"
           >
             <div
               style={{
-                width: 40,
-                height: 40,
-                borderRadius: "999px",
-                border: "1px dashed rgba(255,255,255,0.35)",
+                width: 44,
+                height: 44,
+                borderRadius: 999,
+                border: "1px dashed rgba(255,255,255,0.38)",
                 display: "grid",
                 placeItems: "center",
-                fontWeight: 800,
+                fontWeight: 900,
                 letterSpacing: 1,
-                color: "rgba(255,255,255,0.9)",
+                color: "rgba(255,255,255,0.92)",
                 fontSize: 14,
                 textTransform: "uppercase",
               }}
             >
               AH
             </div>
+
+            {/* crack line */}
+            {cracking && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 10,
+                  borderRadius: 999,
+                  background:
+                    "linear-gradient(120deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.65) 50%, rgba(255,255,255,0) 60%)",
+                  opacity: 0.55,
+                  transform: "rotate(18deg)",
+                  pointerEvents: "none",
+                }}
+              />
+            )}
           </div>
 
           <div style={{ position: "relative", zIndex: 2 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>
+            <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 4 }}>
               Sealed until delivery
             </div>
             <div style={{ fontSize: 12, opacity: 0.75 }}>Opens at {etaText}</div>
@@ -363,24 +185,60 @@ function WaxSealOverlay({ etaText }: { etaText: string }) {
             </div>
           </div>
         </div>
-
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            opacity: 0.07,
-            backgroundImage:
-              "repeating-linear-gradient(0deg, rgba(255,255,255,0.25) 0px, rgba(255,255,255,0.25) 1px, rgba(0,0,0,0) 2px, rgba(0,0,0,0) 6px)",
-            mixBlendMode: "overlay",
-            pointerEvents: "none",
-          }}
-        />
       </div>
     </div>
   );
 }
 
-/* ----------------- page ----------------- */
+/** tiny confetti burst */
+function ConfettiBurst({ show }: { show: boolean }) {
+  if (!show) return null;
+
+  const pieces = Array.from({ length: 22 }, (_, i) => i);
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "absolute",
+        inset: 0,
+        pointerEvents: "none",
+        overflow: "hidden",
+        borderRadius: 16,
+      }}
+    >
+      {pieces.map((i) => {
+        const left = (i * 97) % 100; // pseudo-random but stable
+        const delay = (i % 6) * 25;
+        const rot = (i * 43) % 360;
+        const drift = ((i % 7) - 3) * 18;
+        return (
+          <div
+            key={i}
+            style={{
+              position: "absolute",
+              left: `${left}%`,
+              top: -10,
+              width: 8,
+              height: 14,
+              borderRadius: 2,
+              background:
+                i % 3 === 0
+                  ? "#ffffff"
+                  : i % 3 === 1
+                  ? "rgba(255,255,255,0.55)"
+                  : "rgba(176,18,30,0.95)",
+              transform: `rotate(${rot}deg)`,
+              animation: `confettiDrop 900ms ease-out ${delay}ms forwards`,
+              filter: "drop-shadow(0 8px 10px rgba(0,0,0,0.35))",
+              "--drift": `${drift}px`,
+            } as any}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 export default function LetterStatusPage() {
   const params = useParams();
   const raw = (params as any)?.token;
@@ -390,102 +248,92 @@ export default function LetterStatusPage() {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
-
   const [delivered, setDelivered] = useState(false);
-  const prevDeliveredRef = useRef(false);
 
-  // delivery FX
-  const [showConfetti, setShowConfetti] = useState(false);
-  const [sealCrack, setSealCrack] = useState(false);
-  const [revealBody, setRevealBody] = useState(false);
+  // “legit” last-updated timer
+  const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
-  // copy UX
-  const [copied, setCopied] = useState(false);
+  // delivery celebration + seal crack
+  const [celebrate, setCelebrate] = useState(false);
+  const [sealCracking, setSealCracking] = useState(false);
+  const prevDeliveredRef = useRef<boolean>(false);
 
-  // clock tick (for ETA countdown)
+  // tick for countdown + last-updated
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // load letter + checkpoints from API
+  // fetch function (shared by initial load + polling)
+  async function fetchStatus() {
+    if (!token) return;
+
+    const res = await fetch(`/api/letters/${encodeURIComponent(token)}`, {
+      cache: "no-store",
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error ?? "Letter not found");
+
+    setLetter(data.letter as Letter);
+    setDelivered(!!data.delivered);
+    setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
+    setLastFetchedAt(new Date());
+  }
+
+  // initial load + polling while in-flight
   useEffect(() => {
     if (!token) return;
 
-    const load = async () => {
+    let mounted = true;
+
+    (async () => {
       try {
         setError(null);
-
-        const res = await fetch(`/api/letters/${encodeURIComponent(token)}`, {
-          cache: "no-store",
-        });
-
-        const data = await res.json();
-
-        if (!res.ok) {
-          setError(data?.error ?? "Letter not found");
-          return;
-        }
-
-        setLetter(data.letter as Letter);
-        setDelivered(!!data.delivered);
-        setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
+        await fetchStatus();
       } catch (e: any) {
+        if (!mounted) return;
         console.error("LOAD ERROR:", e);
         setError(e?.message ?? String(e));
       }
-    };
+    })();
 
-    load();
-  }, [token]);
-
-  // poll a bit while in-flight so it feels "live"
-  useEffect(() => {
-    if (!token || delivered) return;
-
+    // poll every 10s while in-flight (feels live)
     const poll = setInterval(async () => {
       try {
-        const res = await fetch(`/api/letters/${encodeURIComponent(token)}`, {
-          cache: "no-store",
-        });
-        const data = await res.json();
-        if (res.ok) {
-          setLetter(data.letter as Letter);
-          setDelivered(!!data.delivered);
-          setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
+        // only poll if not delivered (keeps it cheap)
+        if (!prevDeliveredRef.current) {
+          await fetchStatus();
         }
-      } catch {
-        // ignore polling errors quietly
+      } catch (e) {
+        // ignore poll errors (don’t spam UI)
+        console.warn("POLL ERROR:", e);
       }
-    }, 15000);
+    }, 10000);
 
-    return () => clearInterval(poll);
-  }, [token, delivered]);
+    return () => {
+      mounted = false;
+      clearInterval(poll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
-  // delivery moment: confetti + seal crack, then reveal body
+  // trigger delivery moment
   useEffect(() => {
     const prev = prevDeliveredRef.current;
     if (!prev && delivered) {
-      // trigger once
-      setShowConfetti(true);
-      setSealCrack(true);
+      setSealCracking(true);
+      setCelebrate(true);
 
-      const t1 = setTimeout(() => setSealCrack(false), 900);
-      const t2 = setTimeout(() => setShowConfetti(false), 1200);
-      const t3 = setTimeout(() => setRevealBody(true), 650);
+      const t1 = setTimeout(() => setSealCracking(false), 650);
+      const t2 = setTimeout(() => setCelebrate(false), 1400);
 
       return () => {
         clearTimeout(t1);
         clearTimeout(t2);
-        clearTimeout(t3);
       };
     }
     prevDeliveredRef.current = delivered;
-  }, [delivered]);
-
-  // if page loads already delivered, show body immediately
-  useEffect(() => {
-    if (delivered) setRevealBody(true);
   }, [delivered]);
 
   const progress = useMemo(() => {
@@ -524,564 +372,398 @@ export default function LetterStatusPage() {
     });
   }, [letter, now]);
 
-  const statusUrl = useMemo(() => {
-    if (!letter) return "";
-    return `${window.location.origin}/l/${letter.public_token}`;
-  }, [letter]);
-
   const pigeon = useMemo(() => {
     if (!letter) return null;
     const lat = lerp(letter.origin_lat, letter.dest_lat, progress);
     const lon = lerp(letter.origin_lon, letter.dest_lon, progress);
-    const text = fakeOverText(progress, letter.origin_name, letter.dest_name);
-    return { lat, lon, text };
-  }, [letter, progress]);
 
-  const timelineItems = useMemo(() => {
-    const cps = checkpoints.map((cp) => ({
-      key: `cp-${cp.id}`,
-      name: cp.name,
-      at: cp.at,
-      kind: "checkpoint" as const,
-      id: cp.id,
-    }));
+    const over = currentCheckpoint?.name
+      ? `Currently over: ${currentCheckpoint.name}`
+      : "Currently over: Somewhere majestic";
 
-    const ms = milestones.map((m) => ({
-      key: `ms-${m.pct}`,
-      name: `🕊️ ${m.label}`,
-      at: m.atISO,
-      kind: "milestone" as const,
-      id: `m-${m.pct}`,
-    }));
+    return { lat, lon, label: over };
+  }, [letter, progress, currentCheckpoint]);
 
-    return [...cps, ...ms].sort(
-      (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()
-    );
-  }, [checkpoints, milestones]);
+  const secondsSinceUpdate = useMemo(() => {
+    if (!lastFetchedAt) return null;
+    const s = Math.max(0, Math.floor((now.getTime() - lastFetchedAt.getTime()) / 1000));
+    return s;
+  }, [now, lastFetchedAt]);
 
   if (error) {
     return (
-      <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800 }}>Flight Status</h1>
-        <p style={{ color: "crimson", marginTop: 12 }}>❌ {error}</p>
+      <main style={{ padding: 24, fontFamily: '"Bricolage Grotesque", system-ui, -apple-system, Segoe UI, Roboto, Arial', maxWidth: 900, margin: "0 auto", color: "#fff" }}>
+        <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.3 }}>Flight Status</h1>
+        <p style={{ color: "#ff4d4d", marginTop: 12 }}>❌ {error}</p>
       </main>
     );
   }
 
   if (!letter) {
     return (
-      <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800 }}>Flight Status</h1>
+      <main style={{ padding: 24, fontFamily: '"Bricolage Grotesque", system-ui, -apple-system, Segoe UI, Roboto, Arial', maxWidth: 900, margin: "0 auto", color: "#fff" }}>
+        <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.3 }}>Flight Status</h1>
         <p style={{ marginTop: 12, opacity: 0.7 }}>Loading…</p>
       </main>
     );
   }
 
+  const isLive = !delivered;
+
   return (
-    <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860, margin: "0 auto" }}>
-      <ConfettiBurst active={showConfetti} />
-
-      {/* ---------- Top header card ---------- */}
-      <div
-        style={{
-          border: "1px solid rgba(255,255,255,0.12)",
-          borderRadius: 16,
-          padding: 18,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
-              Flight Status
+    <main
+      style={{
+        minHeight: "100vh",
+        padding: 24,
+        fontFamily: '"Bricolage Grotesque", system-ui, -apple-system, Segoe UI, Roboto, Arial',
+        color: "rgba(255,255,255,0.92)",
+        background:
+          "radial-gradient(1200px 700px at 20% 10%, rgba(176,18,30,0.20), rgba(0,0,0,0) 55%)," +
+          "radial-gradient(900px 600px at 80% 30%, rgba(255,255,255,0.06), rgba(0,0,0,0) 60%)," +
+          "linear-gradient(180deg, #0a0a0b, #050506)",
+      }}
+    >
+      <div style={{ maxWidth: 980, margin: "0 auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+          <div>
+            <div style={{ opacity: 0.75, fontSize: 12, letterSpacing: 0.4, textTransform: "uppercase" }}>
+              Carrier Pigeon • Flight Status
             </div>
-
-            <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0, lineHeight: 1.15 }}>
+            <h1 style={{ fontSize: 34, fontWeight: 900, letterSpacing: -0.8, marginTop: 8, marginBottom: 0 }}>
               {letter.origin_name} → {letter.dest_name}
             </h1>
-
-            <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ fontSize: 13, opacity: 0.85 }}>
-                <strong>ETA:</strong> {new Date(letter.eta_at).toLocaleString()}
-                {!delivered && (
-                  <span style={{ marginLeft: 8, opacity: 0.75 }}>
-                    (T-minus {countdown})
-                  </span>
-                )}
-              </div>
-
-              <div style={{ fontSize: 13, opacity: 0.85 }}>
-                <strong>Distance:</strong> {letter.distance_km.toFixed(0)} km
-              </div>
-
-              <div style={{ fontSize: 13, opacity: 0.85 }}>
-                <strong>Speed:</strong> {letter.speed_kmh.toFixed(0)} km/h
-              </div>
-            </div>
           </div>
 
-          <div style={{ display: "grid", gap: 10, justifyItems: "end" }}>
-            {/* LIVE + status pill */}
-            {!delivered ? (
-              <LivePill />
-            ) : (
-              <div
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(255,255,255,0.18)",
-                  fontWeight: 900,
-                  fontSize: 12,
-                  background: "rgba(80, 220, 140, 0.12)",
-                }}
-              >
-                ✅ Delivered
-              </div>
-            )}
-
-            {/* copy link */}
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard?.writeText(statusUrl);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1200);
-                } catch {
-                  // ignore
-                }
-              }}
+          {/* LIVE pill */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              gap: 6,
+              marginTop: 4,
+            }}
+          >
+            <div
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
                 padding: "10px 12px",
-                borderRadius: 12,
-                border: "1px solid rgba(255,255,255,0.18)",
-                background: "transparent",
-                fontWeight: 900,
-                cursor: "pointer",
-                fontSize: 12,
-                opacity: 0.9,
-                minWidth: 120,
-              }}
-              title="Copy share link"
-            >
-              {copied ? "✅ Copied" : "🔗 Copy link"}
-            </button>
-          </div>
-        </div>
-
-        {/* progress bar + ticks */}
-        <div style={{ marginTop: 16 }}>
-          <div
-            style={{
-              position: "relative",
-              height: 12,
-              borderRadius: 999,
-              background: "rgba(255,255,255,0.08)",
-              overflow: "hidden",
-              border: "1px solid rgba(255,255,255,0.12)",
-            }}
-          >
-            <div
-              style={{
-                height: "100%",
-                width: `${Math.round(progress * 100)}%`,
-                background: "white",
-                opacity: 0.95,
-              }}
-            />
-
-            {[25, 50, 75].map((p) => (
-              <div
-                key={p}
-                style={{
-                  position: "absolute",
-                  left: `${p}%`,
-                  top: 0,
-                  bottom: 0,
-                  width: 2,
-                  background: "rgba(255,255,255,0.25)",
-                  transform: "translateX(-1px)",
-                }}
-              />
-            ))}
-          </div>
-
-          <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
-            {Math.round(progress * 100)}%{" "}
-            {currentCheckpoint ? `• Current: ${currentCheckpoint.name}` : ""}
-          </div>
-
-          {/* milestone chips */}
-          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {milestones.map((m) => (
-              <div
-                key={m.pct}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(255,255,255,0.14)",
-                  background: "rgba(255,255,255,0.03)",
-                  opacity: m.isPast ? 1 : 0.55,
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "center",
-                  fontSize: 12,
-                }}
-              >
-                <span style={{ fontWeight: 900 }}>{m.isPast ? "●" : "○"}</span>
-                <span style={{ fontWeight: 900 }}>{m.label}</span>
-                <span style={{ opacity: 0.75 }}>
-                  {new Date(m.atISO).toLocaleString()}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ---------- Map card (with fake marker + tooltip) ---------- */}
-      <div
-        style={{
-          marginTop: 16,
-          borderRadius: 16,
-          overflow: "hidden",
-          border: "1px solid rgba(255,255,255,0.12)",
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
-        }}
-      >
-        <div style={{ padding: 12, borderBottom: "1px solid rgba(255,255,255,0.10)" }}>
-          <div style={{ fontWeight: 900 }}>Route Map</div>
-          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-            We’re faking GPS. The pigeon demanded privacy.
-          </div>
-        </div>
-
-        <div style={{ padding: 12 }}>
-          {/* wrapper so we can overlay a marker without touching MapView */}
-          <div style={{ position: "relative" }}>
-            <MapView
-              origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-              dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-              progress={progress}
-            />
-
-            {/* fake marker that “moves” across the map area */}
-            {!delivered && pigeon && (
-              <div
-                style={{
-                  position: "absolute",
-                  left: `${8 + progress * 84}%`,
-                  top: `${52 + Math.sin(progress * Math.PI * 2) * 6}%`,
-                  transform: "translate(-50%, -50%)",
-                  zIndex: 4,
-                }}
-              >
-                <div
-                  style={{
-                    position: "relative",
-                    width: 18,
-                    height: 18,
-                    borderRadius: 999,
-                    background: "rgba(255,255,255,0.92)",
-                    border: "2px solid rgba(0,0,0,0.6)",
-                    boxShadow: "0 10px 22px rgba(0,0,0,0.35)",
-                    cursor: "default",
-                  }}
-                  title={`${pigeon.text}\nLat/Lon: ${pigeon.lat.toFixed(2)}, ${pigeon.lon.toFixed(2)}`}
-                >
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: "50%",
-                      top: "50%",
-                      width: 6,
-                      height: 6,
-                      borderRadius: 999,
-                      background: "rgba(0,0,0,0.8)",
-                      transform: "translate(-50%, -50%)",
-                    }}
-                  />
-                  {/* tooltip bubble */}
-                  <div
-                    style={{
-                      position: "absolute",
-                      bottom: 26,
-                      left: "50%",
-                      transform: "translateX(-50%)",
-                      padding: "8px 10px",
-                      borderRadius: 12,
-                      border: "1px solid rgba(255,255,255,0.16)",
-                      background: "rgba(0,0,0,0.62)",
-                      color: "rgba(255,255,255,0.95)",
-                      fontSize: 12,
-                      whiteSpace: "nowrap",
-                      opacity: 0.92,
-                      pointerEvents: "none",
-                    }}
-                  >
-                    🕊️ {pigeon.text}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div
-          style={{
-            padding: 12,
-            borderTop: "1px solid rgba(255,255,255,0.10)",
-            display: "flex",
-            gap: 10,
-            flexWrap: "wrap",
-            fontSize: 12,
-            opacity: 0.85,
-          }}
-        >
-          <div>
-            <strong>Route:</strong> {letter.origin_name} → {letter.dest_name}
-          </div>
-          <div>
-            <strong>Distance:</strong> {letter.distance_km.toFixed(0)} km
-          </div>
-          <div>
-            <strong>Speed:</strong> {letter.speed_kmh.toFixed(0)} km/h
-          </div>
-        </div>
-      </div>
-
-      {/* ---------- Two-column area (timeline + letter) ---------- */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr",
-          gap: 16,
-          marginTop: 16,
-        }}
-      >
-        {/* Timeline */}
-        <div
-          style={{
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 16,
-            padding: 14,
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
-          }}
-        >
-          <div style={{ fontWeight: 900, fontSize: 16 }}>Flight Log</div>
-          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-            A tasteful illusion of logistics.
-          </div>
-
-          <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-            {timelineItems.map((item) => {
-              const isPast = new Date(item.at).getTime() <= now.getTime();
-              const isMilestone = item.kind === "milestone";
-              const isCurrentCheckpoint =
-                item.kind === "checkpoint" && currentCheckpoint?.id === item.id;
-
-              return (
-                <div
-                  key={item.key}
-                  style={{
-                    padding: 10,
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: isCurrentCheckpoint
-                      ? "rgba(255,255,255,0.10)"
-                      : isMilestone
-                      ? "rgba(255,255,255,0.04)"
-                      : "rgba(255,255,255,0.02)",
-                    opacity: isPast ? 1 : 0.55,
-                    transform: isCurrentCheckpoint ? "translateY(-1px)" : undefined,
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                    <div style={{ fontWeight: 900 }}>
-                      {isCurrentCheckpoint ? "🟡" : isPast ? "●" : "○"} {item.name}
-                    </div>
-
-                    {isCurrentCheckpoint && (
-                      <div style={{ fontSize: 12, opacity: 0.8, fontWeight: 900 }}>
-                        current
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ opacity: 0.75, marginTop: 6, fontSize: 12 }}>
-                    {new Date(item.at).toLocaleString()}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Letter */}
-        <div
-          style={{
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 16,
-            padding: 14,
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
-          }}
-        >
-          <div style={{ fontWeight: 900, fontSize: 16 }}>
-            Letter from {letter.from_name || "Sender"} to {letter.to_name || "Recipient"}
-          </div>
-
-          <div
-            style={{
-              marginTop: 12,
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.12)",
-              overflow: "hidden",
-              background: "rgba(0,0,0,0.15)",
-              position: "relative",
-            }}
-          >
-            <div
-              style={{
-                padding: 14,
-                borderBottom: "1px solid rgba(255,255,255,0.10)",
+                borderRadius: 999,
+                border: "1px solid rgba(255,255,255,0.14)",
+                background: "rgba(255,255,255,0.06)",
+                backdropFilter: "blur(10px)",
+                WebkitBackdropFilter: "blur(10px)",
               }}
             >
-              <div style={{ fontWeight: 900 }}>{letter.subject || "(No subject)"}</div>
-            </div>
-
-            <div style={{ padding: 14, position: "relative" }}>
-              <SealCrackOverlay active={sealCrack} />
-
-              {revealBody ? (
-                <div
-                  style={{
-                    whiteSpace: "pre-wrap",
-                    lineHeight: 1.55,
-                    animation: "reveal 420ms ease-out",
-                  }}
-                >
-                  {letter.body ?? ""}
-                </div>
+              {isLive ? (
+                <>
+                  <span className="liveDot" />
+                  <span style={{ fontWeight: 900, letterSpacing: 0.3 }}>LIVE</span>
+                  <span style={{ opacity: 0.8, fontWeight: 800 }}>In Flight</span>
+                </>
               ) : (
-                <WaxSealOverlay etaText={new Date(letter.eta_at).toLocaleString()} />
+                <>
+                  <span style={{ width: 10, height: 10, borderRadius: 999, background: "rgba(255,255,255,0.75)" }} />
+                  <span style={{ fontWeight: 900, letterSpacing: 0.3 }}>DONE</span>
+                  <span style={{ opacity: 0.8, fontWeight: 800 }}>Delivered</span>
+                </>
               )}
             </div>
+
+            <div style={{ fontSize: 12, opacity: 0.7 }}>
+              {secondsSinceUpdate === null ? "Last updated: —" : `Last updated: ${secondsSinceUpdate}s ago`}
+            </div>
+          </div>
+        </div>
+
+        {/* top stats cards */}
+        <div
+          style={{
+            marginTop: 18,
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr",
+            gap: 12,
+          }}
+        >
+          <div style={card()}>
+            <div style={label()}>ETA</div>
+            <div style={value()}>{new Date(letter.eta_at).toLocaleString()}</div>
+            {!delivered && <div style={subtle()}>(T-minus {countdown})</div>}
           </div>
 
-          <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6 }}>
-            Token: {letter.public_token}
+          <div style={card()}>
+            <div style={label()}>Distance</div>
+            <div style={value()}>{letter.distance_km.toFixed(0)} km</div>
+            <div style={subtle()}>Speed: {letter.speed_kmh.toFixed(0)} km/h</div>
           </div>
+
+          <div style={card()}>
+            <div style={label()}>Progress</div>
+            <div style={value()}>{Math.round(progress * 100)}%</div>
+            <div style={subtle()}>{currentCheckpoint ? `Currently: ${currentCheckpoint.name}` : "In transit"}</div>
+          </div>
+        </div>
+
+        {/* map + progress */}
+        <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 12 }}>
+          <div style={{ ...card(), padding: 12, position: "relative" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+              <div style={{ fontWeight: 900, letterSpacing: -0.2 }}>Flight Path</div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>
+                {pigeon?.label ?? ""}
+              </div>
+            </div>
+
+            <div style={{ borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.10)" }}>
+              <MapView
+                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+                progress={progress}
+                pigeon={pigeon || undefined} // ✅ requires MapView tiny update (below)
+              />
+            </div>
+
+            {/* delivery confetti over the map card */}
+            <ConfettiBurst show={celebrate} />
+          </div>
+
+          <div style={{ ...card(), padding: 14 }}>
+            <div style={{ fontWeight: 900, letterSpacing: -0.2 }}>Milestones</div>
+            <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+              {milestones.map((m) => (
+                <div
+                  key={m.pct}
+                  style={{
+                    padding: "10px 10px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: m.isPast ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)",
+                    opacity: m.isPast ? 1 : 0.6,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontWeight: 900 }}>{m.isPast ? "●" : "○"}</span>
+                    <div style={{ fontWeight: 900 }}>{m.label}</div>
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.8 }}>
+                    {new Date(m.atISO).toLocaleTimeString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* progress bar */}
+            <div style={{ marginTop: 14 }}>
+              <div
+                style={{
+                  position: "relative",
+                  height: 12,
+                  borderRadius: 999,
+                  background: "rgba(255,255,255,0.10)",
+                  overflow: "hidden",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                }}
+              >
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${Math.round(progress * 100)}%`,
+                    background: "linear-gradient(90deg, rgba(255,255,255,0.9), rgba(176,18,30,0.95))",
+                  }}
+                />
+
+                {[25, 50, 75].map((p) => (
+                  <div
+                    key={p}
+                    style={{
+                      position: "absolute",
+                      left: `${p}%`,
+                      top: 0,
+                      bottom: 0,
+                      width: 2,
+                      background: "rgba(0,0,0,0.25)",
+                      transform: "translateX(-1px)",
+                    }}
+                  />
+                ))}
+              </div>
+
+              <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
+                {Math.round(progress * 100)}% • {currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* timeline */}
+        <div style={{ marginTop: 14, ...card(), padding: 14 }}>
+          <div style={{ fontWeight: 900, letterSpacing: -0.2 }}>Timeline</div>
+          <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+            {[
+              ...checkpoints.map((cp) => ({
+                key: `cp-${cp.id}`,
+                name: cp.name,
+                at: cp.at,
+                kind: "checkpoint" as const,
+              })),
+              ...milestones.map((m) => ({
+                key: `ms-${m.pct}`,
+                name: `🕊️ ${m.label}`,
+                at: m.atISO,
+                kind: "milestone" as const,
+              })),
+            ]
+              .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+              .map((item) => {
+                const isPast = new Date(item.at).getTime() <= now.getTime();
+                const isMilestone = item.kind === "milestone";
+
+                return (
+                  <div
+                    key={item.key}
+                    style={{
+                      padding: 12,
+                      borderRadius: 14,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: isMilestone ? "rgba(176,18,30,0.10)" : "rgba(255,255,255,0.03)",
+                      opacity: isPast ? 1 : 0.55,
+                      display: "flex",
+                      alignItems: "baseline",
+                      justifyContent: "space-between",
+                      gap: 12,
+                    }}
+                  >
+                    <div style={{ fontWeight: 900 }}>
+                      {isPast ? "●" : "○"} {item.name}
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>
+                      {new Date(item.at).toLocaleString()}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+
+        {/* message */}
+        <div style={{ marginTop: 14, ...card(), padding: 14, position: "relative" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+            <div style={{ fontWeight: 900, letterSpacing: -0.2 }}>
+              Letter from {letter.from_name || "Sender"} to {letter.to_name || "Recipient"}
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>Token: {letter.public_token}</div>
+          </div>
+
+          <div style={{ marginTop: 10, fontWeight: 900, opacity: 0.95 }}>
+            {letter.subject || "(No subject)"}
+          </div>
+
+          <div style={{ marginTop: 10 }}>
+            {delivered ? (
+              <div
+                style={{
+                  whiteSpace: "pre-wrap",
+                  lineHeight: 1.6,
+                  animation: "reveal 420ms ease-out",
+                  padding: 14,
+                  borderRadius: 16,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.03)",
+                }}
+              >
+                {letter.body ?? ""}
+              </div>
+            ) : (
+              <div style={{ position: "relative" }}>
+                <WaxSealOverlay
+                  etaText={new Date(letter.eta_at).toLocaleString()}
+                  cracking={sealCracking}
+                />
+                <ConfettiBurst show={celebrate} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 18, fontSize: 12, opacity: 0.55 }}>
+          Built for the pack • powered by extremely motivated pigeons.
         </div>
       </div>
 
-      {/* Desktop layout: timeline + letter side-by-side */}
       <style jsx global>{`
+        .liveDot {
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          background: rgba(176, 18, 30, 0.95);
+          box-shadow: 0 0 0 0 rgba(176, 18, 30, 0.55);
+          animation: livePulse 1.2s ease-out infinite;
+        }
+
+        @keyframes livePulse {
+          0% { box-shadow: 0 0 0 0 rgba(176, 18, 30, 0.55); transform: scale(1); }
+          70% { box-shadow: 0 0 0 10px rgba(176, 18, 30, 0); transform: scale(1.06); }
+          100% { box-shadow: 0 0 0 0 rgba(176, 18, 30, 0); transform: scale(1); }
+        }
+
         @keyframes reveal {
-          from {
-            opacity: 0;
-            transform: translateY(6px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
         }
 
-        @keyframes pulse {
-          0% {
-            box-shadow: 0 0 0 0 rgba(80, 220, 140, 0.55);
-          }
-          70% {
-            box-shadow: 0 0 0 10px rgba(80, 220, 140, 0);
-          }
-          100% {
-            box-shadow: 0 0 0 0 rgba(80, 220, 140, 0);
-          }
+        @keyframes confettiDrop {
+          from { transform: translateY(0) rotate(0deg); opacity: 1; }
+          to { transform: translateY(420px) translateX(var(--drift)) rotate(180deg); opacity: 0; }
         }
 
-        @keyframes confetti-fall {
-          0% {
-            opacity: 0;
-            transform: translate3d(0, 0, 0) rotate(0deg);
-          }
-          10% {
-            opacity: 1;
-          }
-          100% {
-            opacity: 0;
-            transform: translate3d(var(--drift), 520px, 0) rotate(220deg);
-          }
-        }
-
-        @keyframes seal-pop {
-          0% {
-            transform: rotate(-8deg) scale(0.92);
-            filter: blur(0.2px);
-          }
-          60% {
-            transform: rotate(-8deg) scale(1.03);
-          }
-          100% {
-            transform: rotate(-8deg) scale(1);
-          }
-        }
-
-        @keyframes crack {
-          0% {
-            transform: translateX(-50%) rotate(14deg) scaleY(0);
-            opacity: 0.2;
-          }
-          55% {
-            transform: translateX(-50%) rotate(14deg) scaleY(1);
-            opacity: 1;
-          }
-          100% {
-            transform: translateX(-50%) rotate(14deg) scaleY(1);
-            opacity: 0.85;
-          }
-        }
-
-        @keyframes chip {
-          0% {
-            transform: rotate(18deg) scale(0);
-            opacity: 0;
-          }
-          65% {
-            transform: rotate(18deg) scale(1);
-            opacity: 1;
-          }
-          100% {
-            transform: rotate(18deg) translate(10px, 8px) scale(1);
-            opacity: 0;
-          }
-        }
-
-        @keyframes chip2 {
-          0% {
-            transform: rotate(-22deg) scale(0);
-            opacity: 0;
-          }
-          60% {
-            transform: rotate(-22deg) scale(1);
-            opacity: 1;
-          }
-          100% {
-            transform: rotate(-22deg) translate(-10px, 10px) scale(1);
-            opacity: 0;
-          }
-        }
-
-        @media (min-width: 980px) {
-          main > div:nth-of-type(4) {
-            grid-template-columns: 1fr 1fr;
-            align-items: start;
-          }
+        @keyframes sealCrack {
+          0% { transform: rotate(-8deg) scale(1); filter: brightness(1); }
+          45% { transform: rotate(-10deg) scale(1.04); filter: brightness(1.06); }
+          100% { transform: rotate(-8deg) scale(1.02); filter: brightness(1); }
         }
       `}</style>
     </main>
   );
+}
+
+/* tiny style helpers */
+function card(): React.CSSProperties {
+  return {
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.04)",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+    backdropFilter: "blur(10px)",
+    WebkitBackdropFilter: "blur(10px)",
+    padding: 14,
+  };
+}
+
+function label(): React.CSSProperties {
+  return {
+    fontSize: 12,
+    opacity: 0.7,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    fontWeight: 900,
+  };
+}
+
+function value(): React.CSSProperties {
+  return {
+    fontSize: 18,
+    fontWeight: 900,
+    letterSpacing: -0.2,
+    marginTop: 6,
+  };
+}
+
+function subtle(): React.CSSProperties {
+  return { marginTop: 6, fontSize: 12, opacity: 0.7 };
 }
