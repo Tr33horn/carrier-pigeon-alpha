@@ -8,6 +8,7 @@ import {
   Marker,
   Tooltip,
   useMap,
+  ImageOverlay,
 } from "react-leaflet";
 import L from "leaflet";
 
@@ -30,11 +31,52 @@ function FitBounds({ bounds }: { bounds: [number, number][] }) {
   return null;
 }
 
+type TileStyle = "osm" | "carto_light" | "carto_dark";
+
+function tileConfig(style: TileStyle) {
+  // Note: Carto tiles are great for “premium clean” without Mapbox complexity.
+  // If you want Mapbox/MapTiler later, we can add it here too.
+  switch (style) {
+    case "carto_light":
+      return {
+        url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      };
+    case "carto_dark":
+      return {
+        url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      };
+    case "osm":
+    default:
+      return {
+        url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        attribution: "&copy; OpenStreetMap contributors",
+      };
+  }
+}
+
 export default function MapView(props: {
   origin: { lat: number; lon: number };
   dest: { lat: number; lon: number };
   progress: number; // 0..1
   tooltipText?: string;
+
+  /** Change base map look */
+  tileStyle?: TileStyle;
+
+  /** A PNG/SVG overlay that sits on top of the map UI (branding/texture/frame) */
+  uiOverlayUrl?: string;
+
+  /**
+   * A geographic overlay (image is anchored to lat/lng bounds and moves with the map)
+   * Example: geoOverlayBounds: [[southLat, westLng],[northLat, eastLng]]
+   */
+  geoOverlayUrl?: string;
+  geoOverlayBounds?: [[number, number], [number, number]];
+  geoOverlayOpacity?: number;
 }) {
   const { origin, dest } = props;
 
@@ -86,49 +128,61 @@ export default function MapView(props: {
     [inFlight]
   );
 
-  const originIcon = L.divIcon({
-    className: "routeMarker",
-    html: "🏁",
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-  });
+  const originIcon = useMemo(
+    () =>
+      L.divIcon({
+        className: "routeMarker",
+        html: "🏁",
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      }),
+    []
+  );
 
-  const destIcon = L.divIcon({
-    className: "routeMarker",
-    html: "📬",
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-  });
+  const destIcon = useMemo(
+    () =>
+      L.divIcon({
+        className: "routeMarker",
+        html: "📬",
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      }),
+    []
+  );
 
   const line: [number, number][] = [
     [origin.lat, origin.lon],
     [dest.lat, dest.lon],
   ];
 
+  const tiles = tileConfig(props.tileStyle ?? "carto_light");
+
+  const showGeoOverlay =
+    !!props.geoOverlayUrl &&
+    !!props.geoOverlayBounds &&
+    props.geoOverlayBounds.length === 2;
+
   return (
-    <div
-      style={{
-        height: 340,
-        borderRadius: 18,
-        overflow: "hidden",
-        border: "1px solid rgba(0,0,0,0.10)",
-        boxShadow: "0 12px 24px rgba(0,0,0,0.08)",
-      }}
-    >
+    <div className="mapShell">
       <MapContainer
         center={[current.lat, current.lon]}
         zoom={4}
         scrollWheelZoom={false}
-        style={{ height: "100%", width: "100%" }}
+        className="map"
       >
-        <TileLayer
-          attribution='&copy; OpenStreetMap contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <TileLayer attribution={tiles.attribution} url={tiles.url} />
 
         <FitBounds bounds={line} />
 
-        {/* Route line */}
+        {showGeoOverlay ? (
+          <ImageOverlay
+            url={props.geoOverlayUrl!}
+            bounds={props.geoOverlayBounds as any}
+            opacity={typeof props.geoOverlayOpacity === "number" ? props.geoOverlayOpacity : 0.35}
+            zIndex={300} // above tiles, below markers/tooltip usually
+          />
+        ) : null}
+
         <Polyline
           positions={line}
           pathOptions={{
@@ -160,84 +214,10 @@ export default function MapView(props: {
         </Marker>
       </MapContainer>
 
-      <style jsx global>{`
-        /* Tooltip */
-        .pigeonTooltip.leaflet-tooltip {
-          background: rgba(204, 239, 253, 0.3);
-          border: 1px solid rgba(0, 0, 0, 0.12);
-          border-radius: 999px;
-          padding: 8px 12px;
-          box-shadow: 0 12px 18px rgba(0, 0, 0, 0.14);
-          color: #121212;
-          font-family: "Bricolage Grotesque", system-ui, -apple-system, Segoe UI,
-            Roboto, Arial;
-          font-weight: 900;
-          font-size: 12px;
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-          white-space: nowrap;
-        }
-
-        .pigeonTooltip.leaflet-tooltip::before {
-          border-top-color: rgba(204, 239, 253, 0.3);
-        }
-
-        .pigeonTooltipRow {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .pigeonLiveDot {
-          width: 10px;
-          height: 10px;
-          border-radius: 999px;
-          background: #121212;
-          box-shadow: 0 0 0 0 rgba(204, 239, 253, 0.85);
-          animation: pulseBlue 1.4s ease-out infinite;
-          display: inline-block;
-        }
-
-        @keyframes pulseBlue {
-          0% {
-            box-shadow: 0 0 0 0 rgba(204, 239, 253, 0.75);
-            transform: scale(1);
-          }
-          70% {
-            box-shadow: 0 0 0 10px rgba(204, 239, 253, 0);
-            transform: scale(1.05);
-          }
-          100% {
-            box-shadow: 0 0 0 0 rgba(204, 239, 253, 0);
-            transform: scale(1);
-          }
-        }
-
-        /* Markers */
-        .pigeonMarker {
-          filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.18));
-        }
-
-        .pigeonMarkerFloat {
-          animation: pigeonFloat 1.6s ease-in-out infinite;
-        }
-
-        @keyframes pigeonFloat {
-          0% {
-            transform: translateY(0px);
-          }
-          50% {
-            transform: translateY(-2px);
-          }
-          100% {
-            transform: translateY(0px);
-          }
-        }
-
-        .routeMarker {
-          filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.14));
-        }
-      `}</style>
+      {/* UI overlay sits on top of everything (branding / texture / frame) */}
+      {props.uiOverlayUrl ? (
+        <img className="mapUiOverlay" src={props.uiOverlayUrl} alt="" />
+      ) : null}
     </div>
   );
 }
