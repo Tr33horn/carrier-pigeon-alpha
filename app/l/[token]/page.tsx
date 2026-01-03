@@ -307,10 +307,29 @@ function RailTimeline({
   items,
   now,
 }: {
-  items: { key: string; name: string; at: string; kind: "checkpoint" | "milestone" }[];
+  items: {
+    key: string;
+    name: string;
+    at: string;
+    kind: "checkpoint" | "milestone";
+    badge?: string;
+  }[];
   now: Date;
 }) {
   const [popped, setPopped] = useState<Record<string, boolean>>({});
+
+  const currentKey = useMemo(() => {
+    if (!items.length) return null;
+    const t = now.getTime();
+
+    let lastPastIdx = -1;
+    for (let i = 0; i < items.length; i++) {
+      if (new Date(items[i].at).getTime() <= t) lastPastIdx = i;
+    }
+
+    const idx = lastPastIdx >= 0 ? lastPastIdx : 0;
+    return items[idx]?.key ?? null;
+  }, [items, now]);
 
   useEffect(() => {
     const updates: Record<string, boolean> = {};
@@ -335,19 +354,32 @@ function RailTimeline({
         {items.map((it) => {
           const isPast = new Date(it.at).getTime() <= now.getTime();
           const isMilestone = it.kind === "milestone";
+          const isCurrent = currentKey === it.key;
           const shouldPop = popped[it.key] && isPast;
 
           return (
             <div key={it.key} className="railItem">
               <div
-                className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${
-                  shouldPop ? "pop" : ""
-                }`}
+                className={[
+                  "railNode",
+                  isPast ? "done" : "future",
+                  isMilestone ? "milestone" : "checkpoint",
+                  isCurrent ? "current" : "",
+                  shouldPop ? "pop" : "",
+                ].join(" ")}
               >
-                <span className="railDot" />
+                <div className="railBadge">{isPast ? "✓" : it.badge ?? "•"}</div>
+                {isCurrent && <div className="railPigeonTag">🕊️ Pigeon is here</div>}
               </div>
 
-              <div className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""}`}>
+              <div
+                className={[
+                  "railCard",
+                  isPast ? "done" : "future",
+                  isMilestone ? "milestone" : "",
+                  isCurrent ? "current" : "",
+                ].join(" ")}
+              >
                 <div className="railTitleRow">
                   <div className="railTitle">{it.name}</div>
                   <div className="railTime">{new Date(it.at).toLocaleString()}</div>
@@ -416,7 +448,6 @@ export default function LetterStatusPage() {
     };
 
     load();
-
     const interval = setInterval(() => load(), 15000);
 
     return () => {
@@ -496,13 +527,17 @@ export default function LetterStatusPage() {
       name: cp.name,
       at: cp.at,
       kind: "checkpoint" as const,
+      badge: String(cp.idx + 1),
     }));
+
     const ms = milestones.map((m) => ({
       key: `ms-${m.pct}`,
       name: `🕊️ ${m.label}`,
       at: m.atISO,
       kind: "milestone" as const,
+      badge: `${m.pct}%`,
     }));
+
     return [...cps, ...ms].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
   }, [checkpoints, milestones]);
 
@@ -639,10 +674,7 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div
-                className={delivered && revealStage === "open" ? "bodyReveal" : ""}
-                style={{ opacity: delivered ? 1 : 0 }}
-              >
+              <div className={delivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: delivered ? 1 : 0 }}>
                 <div className="body">{delivered ? (letter.body ?? "") : ""}</div>
               </div>
 
@@ -681,6 +713,7 @@ export default function LetterStatusPage() {
                   <span key={p} className="barTick" style={{ left: `${p}%` }} />
                 ))}
               </div>
+
               <div className="barMeta">
                 <div className="mutedStrong">{Math.round(progress * 100)}%</div>
                 <div className="muted">{currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}</div>
@@ -704,6 +737,7 @@ export default function LetterStatusPage() {
                 <div className="kicker">Timeline</div>
                 <div className="h2">Flight log</div>
               </div>
+
               <div className="pillBtn subtle" title="Auto refresh">
                 <span className="ico">
                   <Ico name="live" />
@@ -716,737 +750,6 @@ export default function LetterStatusPage() {
           </div>
         </div>
       </main>
-
-      {/* ---------- global styles ---------- */}
-      <style jsx global>{`
-        :root {
-          --bg: #f6f6f4;
-          --card: #ffffff;
-          --soft: #f0f0ed;
-          --ink: #121212;
-
-          /* Alpinhound blue wash */
-          --alp-blue: #cceffd;
-          --alp-blue-30: rgba(204, 239, 253, 0.3);
-          --alp-blue-18: rgba(204, 239, 253, 0.18);
-          --alp-blue-12: rgba(204, 239, 253, 0.12);
-
-          /* LIVE pulse green */
-          --live-green: #16a34a;
-          --live-green-30: rgba(22, 163, 74, 0.30);
-          --live-green-55: rgba(22, 163, 74, 0.55);
-
-          --border: rgba(0, 0, 0, 0.08);
-          --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.10);
-          --shadow-md: 0 8px 18px rgba(0, 0, 0, 0.10);
-        }
-
-        body {
-          color: var(--ink);
-          background: var(--bg);
-        }
-
-        .pageBg {
-          min-height: 100vh;
-          background: var(--bg);
-          position: relative;
-        }
-
-        .pageBg::before {
-          content: "";
-          position: fixed;
-          inset: 0;
-          pointer-events: none;
-          opacity: 0.06;
-          mix-blend-mode: multiply;
-          background-image:
-            radial-gradient(circle at 20% 30%, rgba(0,0,0,0.10) 0.5px, transparent 0.6px),
-            radial-gradient(circle at 80% 70%, rgba(0,0,0,0.08) 0.5px, transparent 0.6px),
-            radial-gradient(circle at 50% 50%, rgba(0,0,0,0.07) 0.5px, transparent 0.6px);
-          background-size: 6px 6px;
-        }
-
-        .wrap {
-          padding: 24px;
-          max-width: 1050px;
-          margin: 0 auto;
-          font-family: "Bricolage Grotesque", system-ui, -apple-system, Segoe UI, Roboto, Arial;
-        }
-
-        .h1 {
-          font-size: 34px;
-          font-weight: 900;
-          letter-spacing: -0.03em;
-          margin: 0;
-        }
-
-        .h2 {
-          font-size: 18px;
-          font-weight: 900;
-          letter-spacing: -0.02em;
-          margin-top: 4px;
-        }
-
-        .kicker {
-          font-size: 12px;
-          font-weight: 900;
-          opacity: 0.6;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-        }
-
-        .muted {
-          opacity: 0.65;
-          font-weight: 750;
-          font-size: 12px;
-        }
-
-        .mutedStrong {
-          opacity: 0.75;
-          font-weight: 900;
-          font-size: 12px;
-        }
-
-        .err {
-          color: #d92d20;
-          margin-top: 12px;
-          font-weight: 900;
-        }
-
-        .card {
-          background: var(--card);
-          border-radius: 20px;
-          padding: 16px;
-          box-shadow: var(--shadow-lg);
-          border: 1px solid var(--border);
-        }
-
-        .soft {
-          background: var(--soft);
-          border-radius: 18px;
-          padding: 14px;
-          border: 1px solid rgba(0, 0, 0, 0.06);
-        }
-
-        .routeBanner {
-          border-radius: 24px;
-          padding: 18px;
-          background: #ffffff;
-          border: 1px solid var(--border);
-          box-shadow: var(--shadow-lg);
-          position: relative;
-          overflow: hidden;
-        }
-
-        .routeBanner::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background:
-            linear-gradient(135deg, var(--alp-blue-30), rgba(204,239,253,0) 58%),
-            linear-gradient(0deg, rgba(0,0,0,0.03), rgba(0,0,0,0));
-          pointer-events: none;
-        }
-
-        .bannerTop {
-          display: flex;
-          justify-content: space-between;
-          gap: 14px;
-          align-items: flex-start;
-          position: relative;
-          z-index: 1;
-        }
-
-        .routeHeadline {
-          font-size: 34px;
-          font-weight: 900;
-          letter-spacing: -0.035em;
-          margin-top: 8px;
-          line-height: 1.05;
-        }
-
-        .arrow {
-          opacity: 0.35;
-          margin: 0 8px;
-        }
-
-        .subRow {
-          margin-top: 10px;
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
-          align-items: flex-start;
-        }
-
-        .etaBox {
-          padding: 12px 14px;
-          border-radius: 18px;
-          background: rgba(0, 0, 0, 0.04);
-          border: 1px solid rgba(0, 0, 0, 0.06);
-          min-width: 280px;
-        }
-
-        .etaTime {
-          font-size: 14px;
-          font-weight: 900;
-          letter-spacing: -0.01em;
-          margin-top: 4px;
-          line-height: 1.2;
-        }
-
-        .etaSub {
-          font-size: 12px;
-          font-weight: 900;
-          opacity: 0.7;
-          margin-top: 2px;
-        }
-
-        /* ---------- pills / buttons ---------- */
-        .ico {
-          display: inline-grid;
-          place-items: center;
-          width: 18px;
-          height: 18px;
-        }
-
-        .pillBtn {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          border-radius: 999px;
-          padding: 10px 14px;
-          font-weight: 900;
-          border: 1px solid rgba(0, 0, 0, 0.14);
-          background: #fff;
-          box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
-          user-select: none;
-        }
-        .pillBtn.subtle {
-          background: rgba(0, 0, 0, 0.04);
-          border: 1px solid rgba(0, 0, 0, 0.10);
-          box-shadow: none;
-        }
-
-        .metaPill {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          border-radius: 999px;
-          padding: 8px 12px;
-          font-weight: 850;
-          font-size: 12px;
-          background: rgba(0, 0, 0, 0.04);
-          border: 1px solid rgba(0, 0, 0, 0.10);
-        }
-        .metaPill.faint {
-          opacity: 0.75;
-        }
-
-        /* ---------- LIVE stack: black pill + green pulse dot ---------- */
-        .liveStack {
-          display: grid;
-          gap: 6px;
-        }
-
-        .liveSub {
-          font-size: 12px;
-          font-weight: 850;
-          opacity: 0.65;
-          padding-left: 10px;
-        }
-
-        .liveWrap {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 12px;
-          border-radius: 999px;
-
-          /* KEEP PILL BLACK */
-          background: var(--ink);
-          border: 1px solid rgba(0, 0, 0, 0.20);
-          color: #fff;
-
-          font-weight: 900;
-          font-size: 12px;
-        }
-
-        .liveText {
-          letter-spacing: 0.10em;
-        }
-
-        .liveDot {
-          width: 10px;
-          height: 10px;
-          border-radius: 999px;
-
-          /* DOT GREEN */
-          background: var(--live-green);
-
-          /* Make the pulse obvious even on black pill */
-          box-shadow: 0 0 0 0 var(--live-green-55);
-          animation: livePulseGreen 1.15s ease-out infinite;
-          display: inline-block;
-        }
-
-        @keyframes livePulseGreen {
-          0% {
-            transform: scale(1);
-            box-shadow: 0 0 0 0 var(--live-green-55);
-          }
-          70% {
-            transform: scale(1.08);
-            box-shadow: 0 0 0 10px rgba(22, 163, 74, 0);
-          }
-          100% {
-            transform: scale(1);
-            box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
-          }
-        }
-
-        /* ---------- stats ---------- */
-        .statsRow {
-          margin-top: 14px;
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 10px;
-          position: relative;
-          z-index: 1;
-        }
-
-        .stat {
-          display: flex;
-          gap: 10px;
-          align-items: center;
-          padding: 12px 12px;
-          border-radius: 18px;
-          background: rgba(255, 255, 255, 0.75);
-          border: 1px solid rgba(0, 0, 0, 0.06);
-        }
-
-        .statLabel {
-          font-size: 11px;
-          font-weight: 900;
-          opacity: 0.6;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-        }
-
-        .statValue {
-          font-size: 14px;
-          font-weight: 900;
-          letter-spacing: -0.01em;
-          margin-top: 2px;
-        }
-
-        /* ---------- grid ---------- */
-        .grid {
-          display: grid;
-          grid-template-columns: 1.15fr 0.85fr;
-          gap: 14px;
-          margin-top: 14px;
-        }
-
-        @media (max-width: 980px) {
-          .grid {
-            grid-template-columns: 1fr;
-          }
-          .etaBox {
-            min-width: unset;
-            width: 100%;
-          }
-          .bannerTop {
-            flex-direction: column;
-          }
-          .statsRow {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        .cardHead {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 12px;
-        }
-
-        /* ---------- progress bar ---------- */
-        .bar {
-          position: relative;
-          height: 12px;
-          border-radius: 999px;
-          background: rgba(0, 0, 0, 0.10);
-          overflow: hidden;
-        }
-
-        .barFill {
-          height: 100%;
-          background: var(--ink);
-          transition: width 0.4s ease;
-        }
-
-        .barTick {
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          width: 2px;
-          background: rgba(0, 0, 0, 0.16);
-          transform: translateX(-1px);
-        }
-
-        .barMeta {
-          margin-top: 8px;
-          display: flex;
-          justify-content: space-between;
-          align-items: baseline;
-          gap: 12px;
-        }
-
-        .chips {
-          margin-top: 10px;
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-
-        .chip {
-          display: inline-flex;
-          gap: 8px;
-          align-items: center;
-          padding: 8px 12px;
-          border-radius: 999px;
-          border: 1px solid rgba(0, 0, 0, 0.10);
-          background: rgba(255, 255, 255, 0.70);
-          font-size: 12px;
-          font-weight: 900;
-          opacity: 0.55;
-        }
-
-        .chip.on {
-          opacity: 1;
-          border-color: rgba(0, 0, 0, 0.12);
-          background: var(--alp-blue-30);
-        }
-
-        .chipDot {
-          font-weight: 900;
-        }
-
-        .chipLabel {
-          letter-spacing: -0.01em;
-        }
-
-        /* ---------- rail timeline ---------- */
-        .rail {
-          position: relative;
-          margin-top: 14px;
-          padding-left: 16px;
-        }
-
-        .railLine {
-          position: absolute;
-          left: 10px;
-          top: 4px;
-          bottom: 4px;
-          width: 2px;
-          background: rgba(0, 0, 0, 0.10);
-          border-radius: 999px;
-        }
-
-        .railList {
-          display: grid;
-          gap: 10px;
-        }
-
-        .railItem {
-          display: grid;
-          grid-template-columns: 24px 1fr;
-          gap: 10px;
-          align-items: stretch;
-        }
-
-        .railNode {
-          position: relative;
-          display: grid;
-          place-items: center;
-          width: 24px;
-        }
-
-        .railDot {
-          width: 12px;
-          height: 12px;
-          border-radius: 999px;
-          background: rgba(0, 0, 0, 0.22);
-          box-shadow: 0 0 0 6px rgba(0, 0, 0, 0.04);
-        }
-
-        .railNode.past .railDot {
-          background: var(--ink);
-          box-shadow: 0 0 0 6px rgba(0, 0, 0, 0.06);
-        }
-
-        .railNode.milestone .railDot {
-          background: var(--ink);
-          box-shadow: 0 0 0 6px var(--alp-blue-30);
-        }
-
-        .railNode.pop .railDot {
-          animation: pop 420ms ease-out both;
-        }
-        @keyframes pop {
-          0% { transform: scale(0.75); }
-          55% { transform: scale(1.25); }
-          100% { transform: scale(1); }
-        }
-
-        .railCard {
-          border-radius: 16px;
-          padding: 12px;
-          border: 1px solid rgba(0, 0, 0, 0.08);
-          background: rgba(0, 0, 0, 0.035);
-        }
-
-        .railCard.past {
-          background: rgba(255, 255, 255, 0.85);
-          box-shadow: 0 10px 20px rgba(0,0,0,0.06);
-        }
-
-        .railCard.milestone {
-          background: var(--alp-blue-30);
-          border-color: rgba(0, 0, 0, 0.08);
-        }
-
-        .railTitleRow {
-          display: flex;
-          justify-content: space-between;
-          gap: 12px;
-          align-items: baseline;
-        }
-
-        .railTitle {
-          font-weight: 900;
-          letter-spacing: -0.01em;
-          font-size: 13px;
-        }
-
-        .railTime {
-          font-size: 12px;
-          font-weight: 850;
-          opacity: 0.65;
-          white-space: nowrap;
-        }
-
-        /* ---------- letter ---------- */
-        .subject {
-          font-weight: 900;
-          margin-bottom: 10px;
-          font-size: 14px;
-          letter-spacing: -0.01em;
-        }
-
-        .body {
-          white-space: pre-wrap;
-          line-height: 1.55;
-          font-size: 14px;
-          font-weight: 650;
-        }
-
-        .token {
-          margin-top: 14px;
-          opacity: 0.55;
-          font-size: 11px;
-          font-weight: 900;
-        }
-
-        /* ---------- seal ---------- */
-        .sealCard {
-          position: relative;
-          border-radius: 18px;
-          padding: 18px;
-          background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.40));
-          overflow: hidden;
-          box-shadow: var(--shadow-md);
-          border: 1px solid rgba(0,0,0,0.06);
-        }
-
-        .sealVeil {
-          position: absolute;
-          inset: 0;
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
-          background: rgba(255,255,255,0.35);
-        }
-
-        .sealRow {
-          position: relative;
-          z-index: 2;
-          display: flex;
-          align-items: center;
-          gap: 14px;
-        }
-
-        .wax {
-          width: 64px;
-          height: 64px;
-          border-radius: 999px;
-          background:
-            radial-gradient(circle at 30% 30%, rgba(255,255,255,0.35), rgba(255,255,255,0) 40%),
-            radial-gradient(circle at 70% 75%, rgba(0,0,0,0.20), rgba(0,0,0,0) 45%),
-            linear-gradient(145deg, #d92d20, #8B1A12);
-          box-shadow: 0 10px 24px rgba(0,0,0,0.18), inset 0 2px 10px rgba(255,255,255,0.22);
-          border: 1px solid rgba(255,255,255,0.55);
-          display: grid;
-          place-items: center;
-          transform: rotate(-8deg);
-        }
-
-        .waxInner {
-          width: 40px;
-          height: 40px;
-          border-radius: 999px;
-          border: 1px dashed rgba(255,255,255,0.70);
-          display: grid;
-          place-items: center;
-          font-weight: 900;
-          letter-spacing: 1px;
-          color: rgba(255,255,255,0.96);
-          font-size: 14px;
-          text-transform: uppercase;
-        }
-
-        .sealTitle {
-          font-size: 14px;
-          font-weight: 900;
-          margin-bottom: 4px;
-        }
-
-        .sealSub {
-          font-size: 12px;
-          opacity: 0.75;
-          font-weight: 850;
-        }
-
-        .sealHint {
-          font-size: 12px;
-          opacity: 0.6;
-          margin-top: 6px;
-          font-weight: 850;
-        }
-
-        .sealNoise {
-          position: absolute;
-          inset: 0;
-          opacity: 0.08;
-          background-image: repeating-linear-gradient(
-            0deg,
-            rgba(0, 0, 0, 0.10) 0px,
-            rgba(0, 0, 0, 0.10) 1px,
-            rgba(0, 0, 0, 0) 2px,
-            rgba(0, 0, 0, 0) 6px
-          );
-          mix-blend-mode: multiply;
-          pointer-events: none;
-        }
-
-        .seal.crack {
-          animation: crack 520ms ease-out forwards;
-          transform-origin: 50% 60%;
-        }
-
-        @keyframes crack {
-          0% {
-            transform: scale(1) rotate(0deg);
-            opacity: 1;
-            filter: none;
-          }
-          55% {
-            transform: scale(1.02) rotate(-1deg);
-            opacity: 1;
-            filter: brightness(1.02);
-          }
-          100% {
-            transform: scale(0.98) rotate(3deg) translateY(10px);
-            opacity: 0;
-            filter: blur(2px);
-          }
-        }
-
-        .bodyReveal {
-          animation: reveal 420ms ease-out forwards;
-        }
-
-        @keyframes reveal {
-          from {
-            opacity: 0;
-            transform: translateY(6px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        /* ---------- confetti ---------- */
-        .confetti {
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          overflow: hidden;
-          border-radius: 20px;
-        }
-
-        .confetti-bit {
-          position: absolute;
-          top: -10px;
-          left: 50%;
-          width: 10px;
-          height: 6px;
-          border-radius: 3px;
-          background: rgba(18, 18, 18, 0.9);
-          transform: translateX(-50%);
-          animation: confettiFall 1100ms ease-out forwards;
-        }
-
-        .confetti-bit:nth-child(3n) {
-          background: rgba(204, 239, 253, 0.95);
-          border: 1px solid rgba(0,0,0,0.08);
-        }
-
-        .confetti-bit:nth-child(4n) {
-          background: rgba(0, 0, 0, 0.35);
-        }
-
-        .confetti-bit:nth-child(1) { left: 10%; animation-delay: 0ms; }
-        .confetti-bit:nth-child(2) { left: 18%; animation-delay: 40ms; }
-        .confetti-bit:nth-child(3) { left: 28%; animation-delay: 80ms; }
-        .confetti-bit:nth-child(4) { left: 36%; animation-delay: 20ms; }
-        .confetti-bit:nth-child(5) { left: 44%; animation-delay: 120ms; }
-        .confetti-bit:nth-child(6) { left: 52%; animation-delay: 60ms; }
-        .confetti-bit:nth-child(7) { left: 60%; animation-delay: 140ms; }
-        .confetti-bit:nth-child(8) { left: 68%; animation-delay: 30ms; }
-        .confetti-bit:nth-child(9) { left: 76%; animation-delay: 90ms; }
-        .confetti-bit:nth-child(10){ left: 84%; animation-delay: 10ms; }
-        .confetti-bit:nth-child(11){ left: 92%; animation-delay: 110ms; }
-        .confetti-bit:nth-child(12){ left: 14%; animation-delay: 150ms; }
-        .confetti-bit:nth-child(13){ left: 24%; animation-delay: 170ms; }
-        .confetti-bit:nth-child(14){ left: 34%; animation-delay: 190ms; }
-        .confetti-bit:nth-child(15){ left: 54%; animation-delay: 210ms; }
-        .confetti-bit:nth-child(16){ left: 64%; animation-delay: 230ms; }
-        .confetti-bit:nth-child(17){ left: 74%; animation-delay: 250ms; }
-        .confetti-bit:nth-child(18){ left: 88%; animation-delay: 270ms; }
-
-        @keyframes confettiFall {
-          0% {
-            transform: translateX(-50%) translateY(0) rotate(0deg);
-            opacity: 0;
-          }
-          10% { opacity: 1; }
-          100% {
-            transform: translateX(-50%) translateY(220px) rotate(160deg);
-            opacity: 0;
-          }
-        }
-      `}</style>
     </main>
   );
 }
