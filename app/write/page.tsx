@@ -34,10 +34,9 @@ export default function WritePage() {
   const [fromName, setFromName] = useState("You");
   const [toName, setToName] = useState("");
 
-  // Step 4: email options (collapsed by default): required for now
+  // Emails now live directly under names (no separate Step 4)
   const [fromEmail, setFromEmail] = useState("");
   const [toEmail, setToEmail] = useState("");
-  const [showEmailOptions, setShowEmailOptions] = useState(false);
 
   // Step 2: message
   const [subject, setSubject] = useState("");
@@ -113,23 +112,23 @@ export default function WritePage() {
       setSending(false);
       return;
     }
-    if (!toNameOk) {
-      setError("Please enter a recipient name.");
-      setSending(false);
-      return;
-    }
-    if (!messageOk) {
-      setError("Please write a message (pigeons can’t carry novels).");
-      setSending(false);
-      return;
-    }
     if (!senderEmailOk) {
       setError("Please enter a valid sender email address.");
       setSending(false);
       return;
     }
+    if (!toNameOk) {
+      setError("Please enter a recipient name.");
+      setSending(false);
+      return;
+    }
     if (!recipientEmailOk) {
       setError("Please enter a valid recipient email address.");
+      setSending(false);
+      return;
+    }
+    if (!messageOk) {
+      setError("Please write a message (pigeons can’t carry novels).");
       setSending(false);
       return;
     }
@@ -207,26 +206,65 @@ export default function WritePage() {
               </div>
             </div>
 
+            {/* Names stay where they are; emails directly under each */}
             <div className="twoCol">
-              <label className="field">
-                <span className="fieldLabel">From</span>
-                <input
-                  className={`input ${!fromNameOk ? "invalid" : ""}`}
-                  value={fromName}
-                  onChange={(e) => setFromName(e.target.value)}
-                  placeholder="Your name"
-                />
-              </label>
+              {/* FROM column */}
+              <div className="stack" style={{ gap: 10 }}>
+                <label className="field">
+                  <span className="fieldLabel">From</span>
+                  <input
+                    className={`input ${!fromNameOk ? "invalid" : ""}`}
+                    value={fromName}
+                    onChange={(e) => setFromName(e.target.value)}
+                    placeholder="Your name"
+                  />
+                </label>
 
-              <label className="field">
-                <span className="fieldLabel">To</span>
-                <input
-                  className={`input ${!toNameOk ? "invalid" : ""}`}
-                  value={toName}
-                  onChange={(e) => setToName(e.target.value)}
-                  placeholder="Recipient name"
-                />
-              </label>
+                <label className="field">
+                  <span className="fieldLabel">
+                    Sender Email <span className="muted">(required)</span>
+                  </span>
+                  <input
+                    className={`input ${fromEmail.trim() && !senderEmailOk ? "invalid" : ""}`}
+                    type="email"
+                    value={fromEmail}
+                    onChange={(e) => setFromEmail(e.target.value)}
+                    placeholder="you@email.com"
+                  />
+                  {fromEmail.trim() && !senderEmailOk && (
+                    <div className="errorText">Please enter a valid sender email address.</div>
+                  )}
+                </label>
+              </div>
+
+              {/* TO column */}
+              <div className="stack" style={{ gap: 10 }}>
+                <label className="field">
+                  <span className="fieldLabel">To</span>
+                  <input
+                    className={`input ${!toNameOk ? "invalid" : ""}`}
+                    value={toName}
+                    onChange={(e) => setToName(e.target.value)}
+                    placeholder="Recipient name"
+                  />
+                </label>
+
+                <label className="field">
+                  <span className="fieldLabel">
+                    Recipient Email <span className="muted">(required)</span>
+                  </span>
+                  <input
+                    className={`input ${toEmail.trim() && !recipientEmailOk ? "invalid" : ""}`}
+                    type="email"
+                    value={toEmail}
+                    onChange={(e) => setToEmail(e.target.value)}
+                    placeholder="name@email.com"
+                  />
+                  {toEmail.trim() && !recipientEmailOk && (
+                    <div className="errorText">Please enter a valid recipient email address.</div>
+                  )}
+                </label>
+              </div>
             </div>
           </section>
 
@@ -342,76 +380,6 @@ export default function WritePage() {
                 />
               </div>
             </div>
-          </section>
-
-          {/* Step 4 */}
-          <section className="card">
-            <button
-              type="button"
-              onClick={() => setShowEmailOptions((v) => !v)}
-              className="collapseHead"
-            >
-              <div>
-                <div className="kicker">Step 4</div>
-                <div className="h2">Email options</div>
-                <div className="muted" style={{ marginTop: 4 }}>
-                  Required for now (until we add accounts).
-                </div>
-              </div>
-              <div className="collapseRight">
-                {showEmailOptions ? "Hide" : "Show"} ▾
-              </div>
-            </button>
-
-            {showEmailOptions ? (
-              <div className="twoCol" style={{ marginTop: 12 }}>
-                <label className="field">
-                  <span className="fieldLabel">
-                    Sender Email <span className="muted">(required)</span>
-                  </span>
-                  <input
-                    className={`input ${fromEmail.trim() && !senderEmailOk ? "invalid" : ""}`}
-                    type="email"
-                    value={fromEmail}
-                    onChange={(e) => setFromEmail(e.target.value)}
-                    placeholder="you@email.com"
-                  />
-                  {fromEmail.trim() && !senderEmailOk && (
-                    <div className="errorText">Please enter a valid sender email address.</div>
-                  )}
-                </label>
-
-                <label className="field">
-                  <span className="fieldLabel">
-                    Recipient Email <span className="muted">(required)</span>
-                  </span>
-                  <input
-                    className={`input ${toEmail.trim() && !recipientEmailOk ? "invalid" : ""}`}
-                    type="email"
-                    value={toEmail}
-                    onChange={(e) => setToEmail(e.target.value)}
-                    placeholder="name@email.com"
-                  />
-                  {toEmail.trim() && !recipientEmailOk && (
-                    <div className="errorText">Please enter a valid recipient email address.</div>
-                  )}
-                </label>
-              </div>
-            ) : (
-              <div className="soft" style={{ marginTop: 12 }}>
-                <div className="mutedStrong">
-                  Sender email: <strong>{fromEmail.trim() ? "✓" : "Missing"}</strong>
-                </div>
-                <div className="mutedStrong" style={{ marginTop: 6 }}>
-                  Recipient email: <strong>{toEmail.trim() ? "✓" : "Missing"}</strong>
-                </div>
-                {(!fromEmail.trim() || !toEmail.trim()) && (
-                  <div className="errorText" style={{ marginTop: 10 }}>
-                    Open “Email options” to add the required email addresses.
-                  </div>
-                )}
-              </div>
-            )}
           </section>
 
           {/* Send */}
