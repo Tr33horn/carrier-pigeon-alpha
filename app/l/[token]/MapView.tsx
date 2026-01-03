@@ -107,16 +107,22 @@ export default function MapView(props: {
 
   const inFlight = useMemo(() => clamp01(props.progress) < 1, [props.progress]);
 
-  const pigeonIcon = useMemo(
-    () =>
-      L.divIcon({
-        className: inFlight ? "pigeonMarker pigeonMarkerFloat" : "pigeonMarker",
-        html: "🕊️",
-        iconSize: [26, 26],
-        iconAnchor: [13, 13],
-      }),
-    [inFlight]
-  );
+const pigeonIcon = useMemo(
+  () =>
+    L.divIcon({
+      className: inFlight ? "pigeonMarker live" : "pigeonMarker",
+      html: `
+        <div class="pigeonPulseWrap">
+          <span class="pigeonPulseRing"></span>
+          <span class="pigeonPulseRing ring2"></span>
+          <div class="pigeonDot"></div>
+        </div>
+      `,
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+    }),
+  [inFlight]
+);
 
   const originIcon = useMemo(
     () =>
