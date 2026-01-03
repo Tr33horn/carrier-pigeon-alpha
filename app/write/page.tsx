@@ -4,7 +4,8 @@ import { useState } from "react";
 import { CITIES } from "../lib/cities";
 
 export default function WritePage() {
-  const [fromName, setFromName] = useState("Greggor");
+  const [fromName, setFromName] = useState("You");
+  const [fromEmail, setFromEmail] = useState("");
   const [toName, setToName] = useState("");
   const [toEmail, setToEmail] = useState("");
   const [subject, setSubject] = useState("");
@@ -33,15 +34,16 @@ export default function WritePage() {
       const res = await fetch("/api/letters/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          from_name: fromName,
-          to_name: toName,
-          to_email: toEmail.trim() || null,
-          subject,
-          message,
-          origin,
-          destination,
-        }),
+body: JSON.stringify({
+  from_name: fromName,
+  from_email: fromEmail.trim() || null, // ✅ NEW
+  to_name: toName,
+  to_email: toEmail.trim() || null,
+  subject,
+  message,
+  origin,
+  destination,
+}),
       });
 
       const data = await res.json();
@@ -79,6 +81,28 @@ export default function WritePage() {
             }}
           />
         </label>
+
+        <label style={{ display: "block", marginTop: 12, fontWeight: 700 }}>
+  Sender Email (optional)
+</label>
+<input
+  type="email"
+  value={fromEmail}
+  onChange={(e) => setFromEmail(e.target.value)}
+  placeholder="you@email.com"
+  style={{
+    width: "100%",
+    marginTop: 6,
+    padding: 10,
+    borderRadius: 10,
+    border: "1px solid #333",
+    background: "transparent",
+    color: "inherit",
+  }}
+/>
+<div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
+  We’ll send you a delivery receipt when it lands.
+</div>
 
         <label>
           To

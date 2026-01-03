@@ -3,8 +3,6 @@ import crypto from "crypto";
 import { supabaseServer } from "../../../lib/supabaseServer";
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 function toRad(deg: number) {
   return (deg * Math.PI) / 180;
 }
@@ -63,8 +61,16 @@ function generateCheckpoints(
 export async function POST(req: Request) {
   const body = await req.json();
 
-  const { from_name, to_name, to_email, subject, message, origin, destination } =
-    body;
+  const {
+    from_name,
+    from_email, // ✅ sender email from client
+    to_name,
+    to_email,
+    subject,
+    message,
+    origin,
+    destination,
+  } = body;
 
   const SPEED_KMH = 72;
   const REST_FACTOR = 1.15;
@@ -77,9 +83,16 @@ export async function POST(req: Request) {
   const etaAt = new Date(sentAt.getTime() + ms);
   const publicToken = crypto.randomBytes(16).toString("hex");
 
+  // ✅ existing recipient normalize
   const normalizedEmail =
     typeof to_email === "string" && to_email.trim().length > 0
       ? to_email.trim()
+      : null;
+
+  // ✅ B) NEW: normalize sender email
+  const normalizedFromEmail =
+    typeof from_email === "string" && from_email.trim().length > 0
+      ? from_email.trim()
       : null;
 
   const { data: letter, error: letterErr } = await supabaseServer
@@ -87,6 +100,8 @@ export async function POST(req: Request) {
     .insert({
       public_token: publicToken,
       from_name,
+      from_email: normalizedFromEmail, // ✅ C) NEW: store sender email
+      sender_receipt_sent_at: null,     // ✅ C) NEW: receipt flag (requires column)
       to_name,
       to_email: normalizedEmail,
       delivered_notified_at: null,
@@ -140,6 +155,10 @@ export async function POST(req: Request) {
   // ✅ NEW: send "Pigeon launched" email immediately (if recipient email provided)
   if (normalizedEmail) {
     try {
+      const key = process.env.RESEND_API_KEY;
+      if (!key) throw new Error("Missing RESEND_API_KEY");
+      const resend = new Resend(key);
+
       const base = process.env.APP_BASE_URL || "http://localhost:3000";
       const statusUrl = `${base}/l/${publicToken}`;
       const etaText = new Date(letter.eta_at).toLocaleString();
