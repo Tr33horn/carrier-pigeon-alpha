@@ -14,6 +14,21 @@ function progressPct(sentISO: string, etaISO: string) {
   return Math.round(clamp01((now - sent) / (eta - sent)) * 100);
 }
 
+/** Escape any user content so it can't inject HTML into email */
+function escapeHtml(input: string) {
+  return input
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+/** Preserve newlines in email */
+function nl2br(input: string) {
+  return input.replace(/\r\n|\r|\n/g, "<br/>");
+}
+
 export async function GET(req: Request) {
   // Auth first
   const auth = req.headers.get("authorization");
@@ -31,13 +46,14 @@ export async function GET(req: Request) {
   const mailFrom = process.env.MAIL_FROM || "Carrier Pigeon <no-reply@localhost>";
 
   /* --------------------------
-     A) DELIVERIES (your existing behavior)
+     A) DELIVERIES
   -------------------------- */
 
   const { data: lettersToDeliver, error: deliverErr } = await supabaseServer
     .from("letters")
     .select(
-      "id, public_token, eta_at, subject, from_name, from_email, to_name, to_email, delivered_notified_at, sender_receipt_sent_at"
+      // ✅ added body so the recipient email can include the message
+      "id, public_token, eta_at, subject, body, from_name, from_email, to_name, to_email, delivered_notified_at, sender_receipt_sent_at"
     )
     .is("delivered_notified_at", null)
     .lte("eta_at", new Date().toISOString());
@@ -52,6 +68,10 @@ export async function GET(req: Request) {
   for (const letter of lettersToDeliver ?? []) {
     const url = `${base}/l/${letter.public_token}`;
 
+    const safeSubject = escapeHtml((letter.subject || "(No subject)").trim() || "(No subject)");
+    const safeBody = escapeHtml((letter.body || "").trim());
+    const safeBodyWithBreaks = nl2br(safeBody);
+
     // Recipient delivery email
     if (letter.to_email) {
       await resend.emails.send({
@@ -62,13 +82,26 @@ export async function GET(req: Request) {
           <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height: 1.5">
             <h2 style="margin:0 0 8px">The pigeon has landed.</h2>
             <p style="margin:0 0 12px">
-              Your sealed letter from <strong>${letter.from_name || "Someone"}</strong> is ready.
+              Your sealed letter from <strong>${escapeHtml(letter.from_name || "Someone")}</strong> is ready.
             </p>
+
+            <!-- ✅ Subject + message included -->
+            <div style="margin:14px 0 14px; padding:12px; border:1px solid #e5e5e5; border-radius:12px; background:#fafafa;">
+              <div style="font-weight:800; margin:0 0 8px;">Subject</div>
+              <div style="margin:0 0 12px;">${safeSubject}</div>
+
+              <div style="font-weight:800; margin:0 0 8px;">Message</div>
+              <div style="white-space: normal; margin:0;">
+                ${safeBodyWithBreaks || "<em>(No message)</em>"}
+              </div>
+            </div>
+
             <p style="margin:0 0 16px">
               <a href="${url}" style="display:inline-block;padding:10px 14px;border-radius:10px;text-decoration:none;border:1px solid #222">
-                Open your letter
+                Open on the flight log
               </a>
             </p>
+
             <p style="opacity:.7;margin:0">No further pecking required.</p>
           </div>
         `,
@@ -92,7 +125,7 @@ export async function GET(req: Request) {
           <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height: 1.5">
             <h2 style="margin:0 0 8px">Delivery confirmed.</h2>
             <p style="margin:0 0 12px">
-              Your letter to <strong>${letter.to_name || "the recipient"}</strong> has been delivered.
+              Your letter to <strong>${escapeHtml(letter.to_name || "the recipient")}</strong> has been delivered.
             </p>
             <p style="margin:0 0 16px">
               <a href="${url}" style="display:inline-block;padding:10px 14px;border-radius:10px;text-decoration:none;border:1px solid #222">
@@ -148,8 +181,10 @@ export async function GET(req: Request) {
     const pct = progressPct(letter.sent_at, letter.eta_at);
     const url = `${base}/l/${letter.public_token}`;
 
-    // helper to send + mark
-    const sendUpdate = async (milestone: 25 | 50 | 75, column: "progress_25_sent_at" | "progress_50_sent_at" | "progress_75_sent_at") => {
+    const sendUpdate = async (
+      milestone: 25 | 50 | 75,
+      column: "progress_25_sent_at" | "progress_50_sent_at" | "progress_75_sent_at"
+    ) => {
       const subjectLine =
         milestone === 25
           ? "🕊️ Update: 25% of the way there"
@@ -172,9 +207,9 @@ export async function GET(req: Request) {
           <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height: 1.5">
             <h2 style="margin:0 0 8px">${milestone}% progress</h2>
             <p style="margin:0 0 12px">
-              Your sealed letter from <strong>${letter.from_name || "Someone"}</strong> is still in flight.
+              Your sealed letter from <strong>${escapeHtml(letter.from_name || "Someone")}</strong> is still in flight.
             </p>
-            <p style="margin:0 0 12px"><em>${funLine}</em></p>
+            <p style="margin:0 0 12px"><em>${escapeHtml(funLine)}</em></p>
             <p style="margin:0 0 16px">
               <a href="${url}" style="display:inline-block;padding:10px 14px;border-radius:10px;text-decoration:none;border:1px solid #222">
                 Check flight status (${pct}%)
@@ -191,11 +226,10 @@ export async function GET(req: Request) {
         .eq("id", letter.id);
     };
 
-    // milestone logic (send each once)
     if (pct >= 75 && !letter.progress_75_sent_at) {
       await sendUpdate(75, "progress_75_sent_at");
       midflight_75++;
-      continue; // avoid sending multiple milestones in one run
+      continue;
     }
 
     if (pct >= 50 && !letter.progress_50_sent_at) {
