@@ -1,14 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  Polyline,
-  Marker,
-  Tooltip,
-  useMap,
-} from "react-leaflet";
+import { MapContainer, TileLayer, Polyline, Marker, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 
 function lerp(a: number, b: number, t: number) {
@@ -19,7 +12,6 @@ function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
 }
 
-// This makes the map auto-zoom so the full route fits on screen.
 function FitBounds({ bounds }: { bounds: [number, number][] }) {
   const map = useMap();
 
@@ -35,29 +27,31 @@ export default function MapView(props: {
   origin: { lat: number; lon: number };
   dest: { lat: number; lon: number };
   progress: number; // 0..1
-  pigeon?: { lat: number; lon: number; label: string }; // optional override
+  tooltipText?: string;
 }) {
   const { origin, dest } = props;
 
-  // Smoothed progress (glide)
-  const [displayProgress, setDisplayProgress] = useState(() =>
-    clamp01(props.progress)
-  );
-
+  const [displayProgress, setDisplayProgress] = useState(() => clamp01(props.progress));
   const rafRef = useRef<number | null>(null);
+
+  // tiny “alive” bob
+  const [bob, setBob] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setBob((b) => (b === 0 ? 1 : 0)), 900);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     const from = displayProgress;
     const to = clamp01(props.progress);
-
-    const durationMs = 400;
+    const durationMs = 420;
     const start = performance.now();
 
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
     const tick = (now: number) => {
       const t = clamp01((now - start) / durationMs);
-      const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+      const eased = 1 - Math.pow(1 - t, 3);
       setDisplayProgress(lerp(from, to, eased));
       if (t < 1) rafRef.current = requestAnimationFrame(tick);
     };
@@ -70,38 +64,27 @@ export default function MapView(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.progress]);
 
-  const computed = {
+  const current = {
     lat: lerp(origin.lat, dest.lat, displayProgress),
     lon: lerp(origin.lon, dest.lon, displayProgress),
   };
 
-  const current = props.pigeon
-    ? { lat: props.pigeon.lat, lon: props.pigeon.lon }
-    : computed;
-
-  const pigeonLabel =
-    props.pigeon?.label ??
-    "Currently over: Somewhere majestic (pigeon declined to elaborate)";
-
-  const inFlight = clamp01(props.progress) < 0.999; // close enough = delivered
-
-  // Emoji icons (no missing Leaflet images)
   const pigeonIcon = L.divIcon({
-    className: "",
-    html: "🕊️",
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
+    className: "pigeon-marker",
+    html: `<div style="transform: translateY(${bob ? -2 : 0}px)">🕊️</div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
   });
 
   const originIcon = L.divIcon({
-    className: "",
+    className: "route-marker",
     html: "🏁",
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   });
 
   const destIcon = L.divIcon({
-    className: "",
+    className: "route-marker",
     html: "📬",
     iconSize: [24, 24],
     iconAnchor: [12, 12],
@@ -115,11 +98,11 @@ export default function MapView(props: {
   return (
     <div
       style={{
-        height: 320,
-        borderRadius: 14,
+        height: 340,
+        borderRadius: 18,
         overflow: "hidden",
-        border: "1px solid #333",
-        boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+        background: "#FFFFFF",
+        boxShadow: "0 10px 28px rgba(0,0,0,0.10)",
       }}
     >
       <MapContainer
@@ -129,110 +112,49 @@ export default function MapView(props: {
         style={{ height: "100%", width: "100%" }}
       >
         <TileLayer
-          attribution="&copy; OpenStreetMap contributors"
+          attribution='&copy; OpenStreetMap contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
         <FitBounds bounds={line} />
+
         <Polyline positions={line} />
 
         <Marker position={[origin.lat, origin.lon]} icon={originIcon} />
         <Marker position={[dest.lat, dest.lon]} icon={destIcon} />
 
-        {/* Pigeon marker + ALWAYS-ON tooltip */}
         <Marker position={[current.lat, current.lon]} icon={pigeonIcon}>
           <Tooltip
             permanent
             direction="top"
-            offset={[0, -14]}
-            opacity={1}
+            offset={[0, -10]}
             className="pigeon-tooltip"
+            opacity={1}
           >
-            <span className="pigeon-tooltip-row">
-              {inFlight && (
-                <>
-                  <span className="pigeon-live-dot" aria-hidden="true" />
-                  <span className="pigeon-live-text">LIVE</span>
-                  <span className="pigeon-sep" aria-hidden="true">
-                    •
-                  </span>
-                </>
-              )}
-              <span className="pigeon-label">{pigeonLabel}</span>
-            </span>
+            <div style={{ fontWeight: 900, fontSize: 12 }}>
+              {props.tooltipText || "Currently over: somewhere suspicious"}
+            </div>
           </Tooltip>
         </Marker>
       </MapContainer>
 
       <style jsx global>{`
-        /* Leaflet tooltip lives outside React tree, so style globally */
+        /* Leaflet tooltip styling */
         .leaflet-tooltip.pigeon-tooltip {
-          background: rgba(0, 0, 0, 0.78);
-          color: rgba(255, 255, 255, 0.92);
-          border: 1px solid rgba(255, 255, 255, 0.18);
-          border-radius: 999px;
-          padding: 7px 10px;
-          font-size: 12px;
-          font-weight: 700;
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-
-          /* Alpinhound-ish type */
-          font-family: "Bricolage Grotesque", system-ui, -apple-system,
-            Segoe UI, Roboto, Arial;
-          letter-spacing: 0.2px;
+          background: #ffffff;
+          color: #111;
+          border: none;
+          border-radius: 12px;
+          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.14);
+          padding: 8px 10px;
         }
-
         .leaflet-tooltip.pigeon-tooltip::before {
-          border-top-color: rgba(255, 255, 255, 0.18);
+          border-top-color: #ffffff;
         }
 
-        .pigeon-tooltip-row {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          white-space: nowrap;
-        }
-
-        .pigeon-live-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 999px;
-          background: #ff3b30;
-          box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.55);
-          animation: pigeonPulse 1.15s ease-out infinite;
-        }
-
-        .pigeon-live-text {
-          font-weight: 900;
-          letter-spacing: 0.6px;
-          font-size: 11px;
-          opacity: 0.95;
-        }
-
-        .pigeon-sep {
-          opacity: 0.55;
-          font-weight: 900;
-        }
-
-        .pigeon-label {
-          opacity: 0.95;
-        }
-
-        @keyframes pigeonPulse {
-          0% {
-            box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.55);
-            transform: scale(1);
-          }
-          70% {
-            box-shadow: 0 0 0 10px rgba(255, 59, 48, 0);
-            transform: scale(1.05);
-          }
-          100% {
-            box-shadow: 0 0 0 0 rgba(255, 59, 48, 0);
-            transform: scale(1);
-          }
+        /* Optional: reduce map UI noise */
+        .leaflet-control-attribution {
+          opacity: 0.45;
         }
       `}</style>
     </div>
