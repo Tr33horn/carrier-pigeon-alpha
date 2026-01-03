@@ -310,6 +310,24 @@ function RailTimeline({
   items: { key: string; name: string; at: string; kind: "checkpoint" | "milestone" }[];
   now: Date;
 }) {
+  const [popped, setPopped] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const updates: Record<string, boolean> = {};
+    let changed = false;
+
+    for (const it of items) {
+      const isPast = new Date(it.at).getTime() <= now.getTime();
+      if (isPast && !popped[it.key]) {
+        updates[it.key] = true;
+        changed = true;
+      }
+    }
+
+    if (changed) setPopped((prev) => ({ ...prev, ...updates }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, now]);
+
   return (
     <div className="rail">
       <div className="railLine" />
@@ -317,11 +335,18 @@ function RailTimeline({
         {items.map((it) => {
           const isPast = new Date(it.at).getTime() <= now.getTime();
           const isMilestone = it.kind === "milestone";
+          const shouldPop = popped[it.key] && isPast;
+
           return (
             <div key={it.key} className="railItem">
-              <div className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""}`}>
+              <div
+                className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${
+                  shouldPop ? "pop" : ""
+                }`}
+              >
                 <span className="railDot" />
               </div>
+
               <div className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""}`}>
                 <div className="railTitleRow">
                   <div className="railTitle">{it.name}</div>
@@ -392,7 +417,6 @@ export default function LetterStatusPage() {
 
     load();
 
-    // “legit” live feel while in flight
     const interval = setInterval(() => load(), 15000);
 
     return () => {
@@ -520,10 +544,14 @@ export default function LetterStatusPage() {
               <div className="subRow">
                 {showLive ? (
                   <>
-                    <div className="liveWrap">
-                      <span className="liveDot" />
-                      <span className="liveText">LIVE</span>
+                    <div className="liveStack">
+                      <div className="liveWrap">
+                        <span className="liveDot" />
+                        <span className="liveText">LIVE</span>
+                      </div>
+                      <div className="liveSub">Last updated: {secondsSinceFetch ?? 0}s ago</div>
                     </div>
+
                     <div className="metaPill">
                       <span className="ico">
                         <Ico name="pin" />
@@ -531,12 +559,6 @@ export default function LetterStatusPage() {
                       <span>
                         Currently over: <strong>{currentlyOver}</strong>
                       </span>
-                    </div>
-                    <div className="metaPill faint">
-                      <span className="ico">
-                        <Ico name="clock" />
-                      </span>
-                      <span>Last updated: {secondsSinceFetch ?? 0}s ago</span>
                     </div>
                   </>
                 ) : (
@@ -593,6 +615,51 @@ export default function LetterStatusPage() {
           </div>
         </section>
 
+        {/* LETTER directly under Flight Status (better flow) */}
+        <div className="card" style={{ marginTop: 14, position: "relative" }}>
+          <ConfettiBurst show={confetti} />
+
+          <div className="cardHead" style={{ marginBottom: 8 }}>
+            <div>
+              <div className="kicker">Letter</div>
+              <div className="h2">
+                From {letter.from_name || "Sender"} to {letter.to_name || "Recipient"}
+              </div>
+            </div>
+
+            <div className="metaPill faint">
+              <span className="ico">
+                <Ico name="mail" />
+              </span>
+              <span>Sealed until delivery</span>
+            </div>
+          </div>
+
+          <div className="soft">
+            <div className="subject">{letter.subject || "(No subject)"}</div>
+
+            <div style={{ position: "relative" }}>
+              <div
+                className={delivered && revealStage === "open" ? "bodyReveal" : ""}
+                style={{ opacity: delivered ? 1 : 0 }}
+              >
+                <div className="body">{delivered ? (letter.body ?? "") : ""}</div>
+              </div>
+
+              {!delivered || revealStage !== "open" ? (
+                <div style={{ position: delivered ? "absolute" : "relative", inset: 0 }}>
+                  <WaxSealOverlay
+                    etaText={new Date(letter.eta_at).toLocaleString()}
+                    cracking={delivered && revealStage === "crack"}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="token">Token: {letter.public_token}</div>
+        </div>
+
         {/* GRID */}
         <div className="grid">
           {/* MAP CARD */}
@@ -617,9 +684,7 @@ export default function LetterStatusPage() {
               </div>
               <div className="barMeta">
                 <div className="mutedStrong">{Math.round(progress * 100)}%</div>
-                <div className="muted">
-                  {currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}
-                </div>
+                <div className="muted">{currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}</div>
               </div>
 
               <div className="chips">
@@ -640,7 +705,7 @@ export default function LetterStatusPage() {
                 <div className="kicker">Timeline</div>
                 <div className="h2">Flight log</div>
               </div>
-              <div className="pillBtn subtle" title="Refresh">
+              <div className="pillBtn subtle" title="Auto refresh">
                 <span className="ico">
                   <Ico name="live" />
                 </span>
@@ -651,58 +716,21 @@ export default function LetterStatusPage() {
             <RailTimeline items={timelineItems} now={now} />
           </div>
         </div>
-
-        {/* MESSAGE CARD */}
-        <div className="card" style={{ marginTop: 14, position: "relative" }}>
-          <ConfettiBurst show={confetti} />
-
-          <div className="cardHead" style={{ marginBottom: 8 }}>
-            <div>
-              <div className="kicker">Letter</div>
-              <div className="h2">
-                From {letter.from_name || "Sender"} to {letter.to_name || "Recipient"}
-              </div>
-            </div>
-
-            <div className="metaPill faint">
-              <span className="ico">
-                <Ico name="mail" />
-              </span>
-              <span>Sealed until delivery</span>
-            </div>
-          </div>
-
-          <div className="soft">
-            <div className="subject">{letter.subject || "(No subject)"}</div>
-
-            <div style={{ position: "relative" }}>
-              <div className={delivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: delivered ? 1 : 0 }}>
-                <div className="body">{delivered ? (letter.body ?? "") : ""}</div>
-              </div>
-
-              {!delivered || revealStage !== "open" ? (
-                <div style={{ position: delivered ? "absolute" : "relative", inset: 0 }}>
-                  <WaxSealOverlay
-                    etaText={new Date(letter.eta_at).toLocaleString()}
-                    cracking={delivered && revealStage === "crack"}
-                  />
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="token">Token: {letter.public_token}</div>
-        </div>
       </main>
 
-      {/* ---------- global styles: tokens, cards, pills, rail ---------- */}
+      {/* ---------- global styles ---------- */}
       <style jsx global>{`
         :root {
           --bg: #f6f6f4;
           --card: #ffffff;
           --soft: #f0f0ed;
           --ink: #121212;
-          --brand-red: #d92d20;
+
+          /* Alpinhound blue wash */
+          --alp-blue: #cceffd;
+          --alp-blue-30: rgba(204, 239, 253, 0.3);
+          --alp-blue-18: rgba(204, 239, 253, 0.18);
+          --alp-blue-12: rgba(204, 239, 253, 0.12);
 
           --border: rgba(0, 0, 0, 0.08);
           --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.10);
@@ -777,7 +805,7 @@ export default function LetterStatusPage() {
         }
 
         .err {
-          color: var(--brand-red);
+          color: #d92d20;
           margin-top: 12px;
           font-weight: 900;
         }
@@ -813,7 +841,7 @@ export default function LetterStatusPage() {
           position: absolute;
           inset: 0;
           background:
-            linear-gradient(135deg, rgba(217,45,32,0.12), rgba(217,45,32,0.00) 55%),
+            linear-gradient(135deg, var(--alp-blue-30), rgba(204,239,253,0) 58%),
             linear-gradient(0deg, rgba(0,0,0,0.03), rgba(0,0,0,0));
           pointer-events: none;
         }
@@ -828,10 +856,11 @@ export default function LetterStatusPage() {
         }
 
         .routeHeadline {
-          font-size: 36px;
+          font-size: 34px; /* tightened a touch */
           font-weight: 900;
           letter-spacing: -0.035em;
           margin-top: 8px;
+          line-height: 1.05;
         }
 
         .arrow {
@@ -844,7 +873,7 @@ export default function LetterStatusPage() {
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
-          align-items: center;
+          align-items: flex-start;
         }
 
         .etaBox {
@@ -860,6 +889,7 @@ export default function LetterStatusPage() {
           font-weight: 900;
           letter-spacing: -0.01em;
           margin-top: 4px;
+          line-height: 1.2;
         }
 
         .etaSub {
@@ -910,14 +940,26 @@ export default function LetterStatusPage() {
           opacity: 0.75;
         }
 
+        /* LIVE stack: pill + last updated under it */
+        .liveStack {
+          display: grid;
+          gap: 6px;
+        }
+        .liveSub {
+          font-size: 12px;
+          font-weight: 850;
+          opacity: 0.65;
+          padding-left: 10px;
+        }
+
         .liveWrap {
           display: inline-flex;
           align-items: center;
           gap: 8px;
           padding: 8px 12px;
           border-radius: 999px;
-          background: rgba(217, 45, 32, 0.10);
-          border: 1px solid rgba(217, 45, 32, 0.18);
+          background: var(--alp-blue-30);
+          border: 1px solid rgba(0, 0, 0, 0.10);
           font-weight: 900;
           font-size: 12px;
         }
@@ -930,23 +972,23 @@ export default function LetterStatusPage() {
           width: 10px;
           height: 10px;
           border-radius: 999px;
-          background: var(--brand-red);
-          box-shadow: 0 0 0 0 rgba(217, 45, 32, 0.40);
-          animation: pulse 1.4s ease-out infinite;
+          background: var(--ink);
+          box-shadow: 0 0 0 0 rgba(204, 239, 253, 0.9);
+          animation: pulseBlue 1.4s ease-out infinite;
           display: inline-block;
         }
 
-        @keyframes pulse {
+        @keyframes pulseBlue {
           0% {
-            box-shadow: 0 0 0 0 rgba(217, 45, 32, 0.35);
+            box-shadow: 0 0 0 0 rgba(204, 239, 253, 0.75);
             transform: scale(1);
           }
           70% {
-            box-shadow: 0 0 0 10px rgba(217, 45, 32, 0);
+            box-shadow: 0 0 0 10px rgba(204, 239, 253, 0);
             transform: scale(1.05);
           }
           100% {
-            box-shadow: 0 0 0 0 rgba(217, 45, 32, 0);
+            box-shadow: 0 0 0 0 rgba(204, 239, 253, 0);
             transform: scale(1);
           }
         }
@@ -1071,8 +1113,8 @@ export default function LetterStatusPage() {
 
         .chip.on {
           opacity: 1;
-          border-color: rgba(217, 45, 32, 0.22);
-          background: rgba(217, 45, 32, 0.08);
+          border-color: rgba(0, 0, 0, 0.12);
+          background: var(--alp-blue-30);
         }
 
         .chipDot {
@@ -1083,7 +1125,7 @@ export default function LetterStatusPage() {
           letter-spacing: -0.01em;
         }
 
-        /* ---------- rail timeline (single vertical line + nodes) ---------- */
+        /* ---------- rail timeline ---------- */
         .rail {
           position: relative;
           margin-top: 14px;
@@ -1133,8 +1175,18 @@ export default function LetterStatusPage() {
         }
 
         .railNode.milestone .railDot {
-          background: rgba(217, 45, 32, 0.9);
-          box-shadow: 0 0 0 6px rgba(217, 45, 32, 0.10);
+          background: var(--ink);
+          box-shadow: 0 0 0 6px var(--alp-blue-30);
+        }
+
+        /* pop/stamp when item flips to past */
+        .railNode.pop .railDot {
+          animation: pop 420ms ease-out both;
+        }
+        @keyframes pop {
+          0% { transform: scale(0.75); }
+          55% { transform: scale(1.25); }
+          100% { transform: scale(1); }
         }
 
         .railCard {
@@ -1150,8 +1202,8 @@ export default function LetterStatusPage() {
         }
 
         .railCard.milestone {
-          background: rgba(217, 45, 32, 0.06);
-          border-color: rgba(217, 45, 32, 0.18);
+          background: var(--alp-blue-30);
+          border-color: rgba(0, 0, 0, 0.08);
         }
 
         .railTitleRow {
@@ -1223,6 +1275,7 @@ export default function LetterStatusPage() {
           gap: 14px;
         }
 
+        /* keeping wax seal red as a “stamp” moment (feels nice against blue) */
         .wax {
           width: 64px;
           height: 64px;
@@ -1230,7 +1283,7 @@ export default function LetterStatusPage() {
           background:
             radial-gradient(circle at 30% 30%, rgba(255,255,255,0.35), rgba(255,255,255,0) 40%),
             radial-gradient(circle at 70% 75%, rgba(0,0,0,0.20), rgba(0,0,0,0) 45%),
-            linear-gradient(145deg, var(--brand-red), #8B1A12);
+            linear-gradient(145deg, #d92d20, #8B1A12);
           box-shadow: 0 10px 24px rgba(0,0,0,0.18), inset 0 2px 10px rgba(255,255,255,0.22);
           border: 1px solid rgba(255,255,255,0.55);
           display: grid;
@@ -1346,7 +1399,8 @@ export default function LetterStatusPage() {
         }
 
         .confetti-bit:nth-child(3n) {
-          background: rgba(217, 45, 32, 0.92);
+          background: rgba(204, 239, 253, 0.95);
+          border: 1px solid rgba(0,0,0,0.08);
         }
 
         .confetti-bit:nth-child(4n) {
