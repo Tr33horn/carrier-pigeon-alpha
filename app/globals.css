@@ -164,10 +164,7 @@ body {
 }
 .metaPill.faint { opacity: 0.75; }
 
-.link {
-  text-decoration: underline;
-  font-weight: 900;
-}
+.link { text-decoration: underline; font-weight: 900; }
 
 .linkPill {
   display: inline-flex;
@@ -196,18 +193,10 @@ body {
   color: #fff;
   box-shadow: 0 10px 20px rgba(0,0,0,0.12);
 }
-.btnPrimary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
+.btnPrimary:disabled { opacity: 0.6; cursor: not-allowed; }
 
-.btnGhost {
-  background: rgba(0,0,0,0.04);
-}
-.btnGhost:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
+.btnGhost { background: rgba(0,0,0,0.04); }
+.btnGhost:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .btnSubtle {
   background: transparent;
@@ -216,7 +205,6 @@ body {
   padding: 10px 12px;
 }
 
-/* Dashboard/Status pill button */
 .pillBtn {
   display: inline-flex;
   align-items: center;
@@ -235,7 +223,6 @@ body {
   box-shadow: none;
 }
 
-/* Icon wrapper used in a few spots */
 .ico {
   display: inline-grid;
   place-items: center;
@@ -426,14 +413,11 @@ body {
 
 .arrow { opacity: 0.35; margin: 0 8px; }
 
-/* --- FIX: keep “Currently over” aligned with the LIVE pill (not the 2-line stack) --- */
 .subRow{
   margin-top: 10px;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-
-  /* was: align-items: center; */
   align-items: flex-start;
 }
 
@@ -511,9 +495,8 @@ body {
 /* -------------------------------------------------
    LIVE pill (Status)
 ------------------------------------------------- */
-/* Make sure these don’t try to center themselves within the row */
-.liveStack{ 
-  display: flex;         /* was grid — flex is simpler here */
+.liveStack{
+  display: flex;
   flex-direction: column;
   gap: 6px;
   flex: 0 0 auto;
@@ -580,7 +563,6 @@ body {
   width: 28px;
 }
 
-/* dot */
 .railDot {
   width: 16px;
   height: 16px;
@@ -601,8 +583,8 @@ body {
   box-shadow: 0 0 0 7px var(--ok-green-30);
 }
 
-/* milestone special ring (keeps your blue wash idea) */
-.railNode.milestone .railDot {
+/* milestone “special” ring ONLY while not past */
+.railNode.milestone:not(.past) .railDot {
   box-shadow: 0 0 0 7px var(--alp-blue-30);
 }
 
@@ -633,6 +615,12 @@ body {
   border-color: rgba(0, 0, 0, 0.08);
 }
 
+/* if a milestone is past, let it look “done” like the others */
+.railCard.milestone.past {
+  background: rgba(22,163,74,0.10);
+  border-color: rgba(22,163,74,0.35);
+}
+
 /* CURRENT marker highlight */
 .railCard.current {
   background: rgba(22,163,74,0.16);
@@ -660,7 +648,28 @@ body {
   white-space: nowrap;
 }
 
-/* --- Animated live pulse (map + timeline shared) --- */
+/* "Pigeon is here" tag */
+.pigeonTag {
+  position: absolute;
+  top: -10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--ok-green);
+  color: #fff;
+  font-weight: 900;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  box-shadow: 0 10px 22px rgba(22,163,74,0.18);
+  border: 1px solid rgba(255,255,255,0.30);
+}
+
+/* -------------------------------------------------
+   Shared: animated pulse dot (timeline + anywhere)
+------------------------------------------------- */
 .livePulseRow{
   display:flex;
   align-items:center;
@@ -693,29 +702,8 @@ body {
   100% { transform:scale(1.25); opacity:0; }
 }
 
-/* "Pigeon is here" tag */
-.pigeonTag {
-  position: absolute;
-  top: -10px;
-  right: 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: var(--ok-green);
-  color: #fff;
-  font-weight: 900;
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  box-shadow: 0 10px 22px rgba(22,163,74,0.18);
-  border: 1px solid rgba(255,255,255,0.30);
-}
-
-
-
 /* -------------------------------------------------
-   Status page: Letter + seal + confetti (THIS WAS MISSING)
+   Status page: Letter + seal + confetti
 ------------------------------------------------- */
 .subject {
   font-weight: 900;
@@ -793,11 +781,7 @@ body {
   text-transform: uppercase;
 }
 
-.sealTitle {
-  font-size: 14px;
-  font-weight: 900;
-  margin-bottom: 4px;
-}
+.sealTitle { font-size: 14px; font-weight: 900; margin-bottom: 4px; }
 
 .sealSub {
   font-size: 12px;
@@ -869,10 +853,7 @@ body {
   background: rgba(204, 239, 253, 0.95);
   border: 1px solid rgba(0,0,0,0.08);
 }
-
-.confetti-bit:nth-child(4n) {
-  background: rgba(0, 0, 0, 0.35);
-}
+.confetti-bit:nth-child(4n) { background: rgba(0, 0, 0, 0.35); }
 
 .confetti-bit:nth-child(1) { left: 10%; animation-delay: 0ms; }
 .confetti-bit:nth-child(2) { left: 18%; animation-delay: 40ms; }
@@ -939,7 +920,6 @@ body {
   font-weight: 900;
   letter-spacing: -0.01em;
 }
-
 .typeItem:hover { background: rgba(0, 0, 0, 0.04); }
 
 .typeItem.active {
@@ -954,7 +934,9 @@ body {
   font-weight: 850;
 }
 
-/* Map shell */
+/* -------------------------------------------------
+   Map (Leaflet)
+------------------------------------------------- */
 .mapShell{
   position: relative;
   height: 340px;
@@ -964,17 +946,29 @@ body {
   box-shadow: 0 12px 24px rgba(0,0,0,0.08);
 }
 
-.map{
-  height: 100%;
+.map{ height: 100%; width: 100%; }
+
+.mapUiOverlay{
+  position: absolute;
+  inset: 0;
   width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  z-index: 999;
+  opacity: 0.12;
+  mix-blend-mode: multiply;
+}
+
+/* Marker base classes (Leaflet divIcon className targets these) */
+.pigeonMarker,
+.routeMarker{
+  background: transparent;
+  border: none;
+  filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.18));
 }
 
 /* ---- Pigeon pulse marker ---- */
-.pigeonMarker {
-  background: transparent;
-  border: none;
-}
-
 .pigeonPulseWrap {
   position: relative;
   width: 44px;
@@ -993,7 +987,6 @@ body {
   z-index: 3;
 }
 
-/* The expanding rings */
 .pigeonPulseRing {
   position: absolute;
   inset: 0;
@@ -1004,27 +997,15 @@ body {
   animation: pigeon-pulse 1.6s ease-out infinite;
   z-index: 1;
 }
+.pigeonPulseRing.ring2 { animation-delay: 0.8s; }
 
-/* Second ring staggered for continuous pulse */
-.pigeonPulseRing.ring2 {
-  animation-delay: 0.8s;
-}
-
-/* Only pulse while in flight */
-.pigeonMarker:not(.live) .pigeonPulseRing {
-  display: none;
-}
+/* only pulse while in flight (your MapView toggles .live) */
+.pigeonMarker:not(.live) .pigeonPulseRing { display: none; }
 
 @keyframes pigeon-pulse {
   0%   { transform: scale(0.35); opacity: 0.0; }
   20%  { opacity: 0.55; }
   100% { transform: scale(1.0); opacity: 0.0; }
-}
-
-/* ---- Route markers ---- */
-.routeMarker {
-  background: transparent;
-  border: none;
 }
 
 /* Origin = solid dot */
@@ -1050,6 +1031,7 @@ body {
 
 /* Destination map pin */
 .destPin {
+  position: relative;
   color: #111;
   filter: drop-shadow(0 6px 10px rgba(0,0,0,0.25));
 }
@@ -1060,13 +1042,8 @@ body {
   height: 28px;
 }
 
-.destPin.delivered {
-  color: #2ecc71;
-}
-
-.map-dark .destPin {
-  color: #fff;
-}
+.destPin.delivered { color: #2ecc71; }
+.map-dark .destPin { color: #fff; }
 
 .destPin::after {
   content: "";
@@ -1075,19 +1052,6 @@ body {
   border-radius: 999px;
   border: 2px solid currentColor;
   opacity: 0.25;
-}
-
-/* Optional UI overlay image */
-.mapUiOverlay{
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  pointer-events: none;
-  z-index: 999; /* on top of Leaflet panes */
-  opacity: 0.12; /* adjust to taste */
-  mix-blend-mode: multiply; /* premium “printed map” vibe */
 }
 
 /* Tooltip */
@@ -1132,25 +1096,7 @@ body {
   100% { box-shadow: 0 0 0 0 rgba(204, 239, 253, 0); transform: scale(1); }
 }
 
-/* Markers */
-.pigeonMarker {
-  filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.18));
-}
-
-.pigeonMarkerFloat {
-  animation: pigeonFloat 1.6s ease-in-out infinite;
-}
-
-@keyframes pigeonFloat {
-  0% { transform: translateY(0px); }
-  50% { transform: translateY(-2px); }
-  100% { transform: translateY(0px); }
-}
-
-.routeMarker {
-  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.14));
-}
-
+/* Map style switcher */
 .mapStyleRow{
   display:inline-flex;
   gap:8px;
@@ -1176,6 +1122,5 @@ body {
   border-color: rgba(0,0,0,0.22);
 }
 
-.subRow .metaPill{
-  align-self: flex-start;
-}
+/* small alignment tweak */
+.subRow .metaPill{ align-self: flex-start; }

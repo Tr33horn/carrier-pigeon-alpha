@@ -466,12 +466,12 @@ export default function LetterStatusPage() {
       at: cp.at,
       kind: "checkpoint" as const,
     }));
-    const ms = milestones.map((m) => ({
-      key: `ms-${m.pct}`,
-      name: `🕊️ ${m.label}`,
-      at: m.atISO,
-      kind: "milestone" as const,
-    }));
+const ms = milestones.map((m) => ({
+  key: `ms-${m.pct}`,
+  name: m.label, // ✅ no pigeon
+  at: m.atISO,
+  kind: "milestone" as const,
+}));
     return [...cps, ...ms].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
   }, [checkpoints, milestones]);
 
