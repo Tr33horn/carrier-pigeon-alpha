@@ -3,6 +3,27 @@
 import { useState } from "react";
 import { CITIES } from "../lib/cities";
 
+// --- Helpers: nearest city (fast + good enough for a city list) ---
+function nearestCity(
+  lat: number,
+  lon: number,
+  cities: { name: string; lat: number; lon: number }[]
+) {
+  let best = cities[0];
+  let bestDist = Infinity;
+
+  for (const c of cities) {
+    const dLat = lat - c.lat;
+    const dLon = lon - c.lon;
+    const d = dLat * dLat + dLon * dLon; // squared distance (no sqrt needed)
+    if (d < bestDist) {
+      bestDist = d;
+      best = c;
+    }
+  }
+  return best;
+}
+
 export default function WritePage() {
   const [fromName, setFromName] = useState("You");
   const [fromEmail, setFromEmail] = useState("");
@@ -11,19 +32,48 @@ export default function WritePage() {
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [origin, setOrigin] = useState(CITIES[0]);
-  const [destination, setDestination] = useState(
-    CITIES[CITIES.length - 1]
-  );
-  const [result, setResult] = useState<{ url: string; eta_at: string } | null>(
-    null
-  );
+  const [destination, setDestination] = useState(CITIES[CITIES.length - 1]);
+
+  const [result, setResult] = useState<{ url: string; eta_at: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
+  // NEW: location UX state
+  const [locating, setLocating] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
+
   // STEP 1: email validation (optional field)
   const emailLooksValid =
-    !toEmail.trim() ||
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail.trim());
+    !toEmail.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail.trim());
+
+  function useMyLocationForOrigin() {
+    setLocError(null);
+
+    if (!navigator.geolocation) {
+      setLocError("Geolocation isn’t supported on this browser.");
+      return;
+    }
+
+    setLocating(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const city = nearestCity(latitude, longitude, CITIES);
+        setOrigin(city);
+        setLocating(false);
+      },
+      (err) => {
+        setLocError(err?.message || "Couldn’t get location.");
+        setLocating(false);
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 8000,
+        maximumAge: 5 * 60 * 1000,
+      }
+    );
+  }
 
   async function sendLetter() {
     setSending(true);
@@ -34,16 +84,16 @@ export default function WritePage() {
       const res = await fetch("/api/letters/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-body: JSON.stringify({
-  from_name: fromName,
-  from_email: fromEmail.trim() || null, // ✅ NEW
-  to_name: toName,
-  to_email: toEmail.trim() || null,
-  subject,
-  message,
-  origin,
-  destination,
-}),
+        body: JSON.stringify({
+          from_name: fromName,
+          from_email: fromEmail.trim() || null,
+          to_name: toName,
+          to_email: toEmail.trim() || null,
+          subject,
+          message,
+          origin,
+          destination,
+        }),
       });
 
       const data = await res.json();
@@ -83,26 +133,26 @@ body: JSON.stringify({
         </label>
 
         <label style={{ display: "block", marginTop: 12, fontWeight: 700 }}>
-  Sender Email (optional)
-</label>
-<input
-  type="email"
-  value={fromEmail}
-  onChange={(e) => setFromEmail(e.target.value)}
-  placeholder="you@email.com"
-  style={{
-    width: "100%",
-    marginTop: 6,
-    padding: 10,
-    borderRadius: 10,
-    border: "1px solid #333",
-    background: "transparent",
-    color: "inherit",
-  }}
-/>
-<div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
-  We’ll send you a delivery receipt when it lands.
-</div>
+          Sender Email (optional)
+        </label>
+        <input
+          type="email"
+          value={fromEmail}
+          onChange={(e) => setFromEmail(e.target.value)}
+          placeholder="you@email.com"
+          style={{
+            width: "100%",
+            marginTop: 6,
+            padding: 10,
+            borderRadius: 10,
+            border: "1px solid #333",
+            background: "transparent",
+            color: "inherit",
+          }}
+        />
+        <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
+          We’ll send you a delivery receipt when it lands.
+        </div>
 
         <label>
           To
@@ -189,9 +239,7 @@ body: JSON.stringify({
             <select
               value={origin.name}
               onChange={(e) =>
-                setOrigin(
-                  CITIES.find((c) => c.name === e.target.value)!
-                )
+                setOrigin(CITIES.find((c) => c.name === e.target.value)!)
               }
               style={{
                 display: "block",
@@ -206,6 +254,34 @@ body: JSON.stringify({
                 </option>
               ))}
             </select>
+
+            <button
+              type="button"
+              onClick={useMyLocationForOrigin}
+              disabled={locating}
+              style={{
+                marginTop: 8,
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid #333",
+                background: "transparent",
+                cursor: locating ? "not-allowed" : "pointer",
+                fontWeight: 700,
+              }}
+            >
+              {locating ? "Finding your roost…" : "Use my location"}
+            </button>
+
+            {locError && (
+              <div style={{ fontSize: 12, color: "crimson", marginTop: 6 }}>
+                {locError}
+              </div>
+            )}
+
+            <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>
+              Uses your device location to pick the nearest city from the list.
+            </div>
           </label>
 
           <label>
@@ -213,9 +289,7 @@ body: JSON.stringify({
             <select
               value={destination.name}
               onChange={(e) =>
-                setDestination(
-                  CITIES.find((c) => c.name === e.target.value)!
-                )
+                setDestination(CITIES.find((c) => c.name === e.target.value)!)
               }
               style={{
                 display: "block",
@@ -236,12 +310,7 @@ body: JSON.stringify({
         {/* STEP 2: disable send when email invalid */}
         <button
           onClick={sendLetter}
-          disabled={
-            sending ||
-            !message.trim() ||
-            !toName.trim() ||
-            !emailLooksValid
-          }
+          disabled={sending || !message.trim() || !toName.trim() || !emailLooksValid}
           style={{
             padding: "12px 14px",
             fontWeight: 700,
