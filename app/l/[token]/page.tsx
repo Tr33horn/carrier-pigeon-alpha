@@ -70,11 +70,8 @@ function Ico({
   name:
     | "live"
     | "pin"
-    | "clock"
     | "speed"
     | "distance"
-    | "arrow"
-    | "swap"
     | "check"
     | "mail"
     | "timeline";
@@ -90,24 +87,6 @@ function Ico({
   };
 
   switch (name) {
-    case "clock":
-      return (
-        <svg {...common}>
-          <path
-            d="M12 7v6l4 2"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-          />
-        </svg>
-      );
     case "pin":
       return (
         <svg {...common}>
@@ -159,36 +138,6 @@ function Ico({
           />
           <path
             d="M9 9l-2-2 2-2M15 15l2 2-2 2"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      );
-    case "arrow":
-      return (
-        <svg {...common}>
-          <path
-            d="M5 12h14"
-            stroke="currentColor"
-            strokeWidth="2.6"
-            strokeLinecap="round"
-          />
-          <path
-            d="M13 6l6 6-6 6"
-            stroke="currentColor"
-            strokeWidth="2.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      );
-    case "swap":
-      return (
-        <svg {...common}>
-          <path
-            d="M7 7h11l-2-2M17 17H6l2 2"
             stroke="currentColor"
             strokeWidth="2.4"
             strokeLinecap="round"
@@ -269,7 +218,7 @@ function Ico({
   }
 }
 
-/* ---------- wax seal + delivery moment ---------- */
+/* ---------- wax seal overlay ---------- */
 function WaxSealOverlay({ etaText, cracking }: { etaText: string; cracking?: boolean }) {
   return (
     <div className={cracking ? "seal crack" : "seal"} style={{ position: "relative" }}>
@@ -302,34 +251,17 @@ function ConfettiBurst({ show }: { show: boolean }) {
   );
 }
 
-/* ---------- timeline rail component ---------- */
+/* ---------- timeline rail ---------- */
 function RailTimeline({
   items,
   now,
+  currentKey,
 }: {
-  items: {
-    key: string;
-    name: string;
-    at: string;
-    kind: "checkpoint" | "milestone";
-    badge?: string;
-  }[];
+  items: { key: string; name: string; at: string; kind: "checkpoint" | "milestone" }[];
   now: Date;
+  currentKey: string | null;
 }) {
   const [popped, setPopped] = useState<Record<string, boolean>>({});
-
-  const currentKey = useMemo(() => {
-    if (!items.length) return null;
-    const t = now.getTime();
-
-    let lastPastIdx = -1;
-    for (let i = 0; i < items.length; i++) {
-      if (new Date(items[i].at).getTime() <= t) lastPastIdx = i;
-    }
-
-    const idx = lastPastIdx >= 0 ? lastPastIdx : 0;
-    return items[idx]?.key ?? null;
-  }, [items, now]);
 
   useEffect(() => {
     const updates: Record<string, boolean> = {};
@@ -354,32 +286,26 @@ function RailTimeline({
         {items.map((it) => {
           const isPast = new Date(it.at).getTime() <= now.getTime();
           const isMilestone = it.kind === "milestone";
-          const isCurrent = currentKey === it.key;
           const shouldPop = popped[it.key] && isPast;
+          const isCurrent = currentKey === it.key;
 
           return (
             <div key={it.key} className="railItem">
               <div
-                className={[
-                  "railNode",
-                  isPast ? "done" : "future",
-                  isMilestone ? "milestone" : "checkpoint",
-                  isCurrent ? "current" : "",
-                  shouldPop ? "pop" : "",
-                ].join(" ")}
+                className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${
+                  shouldPop ? "pop" : ""
+                }`}
               >
-                <div className="railBadge">{isPast ? "✓" : it.badge ?? "•"}</div>
-                {isCurrent && <div className="railPigeonTag">🕊️ Pigeon is here</div>}
+                <span className="railDot">{isPast ? "✓" : ""}</span>
               </div>
 
               <div
-                className={[
-                  "railCard",
-                  isPast ? "done" : "future",
-                  isMilestone ? "milestone" : "",
-                  isCurrent ? "current" : "",
-                ].join(" ")}
+                className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${
+                  isCurrent ? "current" : ""
+                }`}
               >
+                {isCurrent && <div className="pigeonTag">🕊️ Pigeon is here</div>}
+
                 <div className="railTitleRow">
                   <div className="railTitle">{it.name}</div>
                   <div className="railTime">{new Date(it.at).toLocaleString()}</div>
@@ -404,7 +330,6 @@ export default function LetterStatusPage() {
 
   const [now, setNow] = useState(new Date());
   const [delivered, setDelivered] = useState(false);
-
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
   const prevDelivered = useRef(false);
@@ -527,19 +452,31 @@ export default function LetterStatusPage() {
       name: cp.name,
       at: cp.at,
       kind: "checkpoint" as const,
-      badge: String(cp.idx + 1),
     }));
-
     const ms = milestones.map((m) => ({
       key: `ms-${m.pct}`,
       name: `🕊️ ${m.label}`,
       at: m.atISO,
       kind: "milestone" as const,
-      badge: `${m.pct}%`,
     }));
-
     return [...cps, ...ms].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
   }, [checkpoints, milestones]);
+
+  const currentTimelineKey = useMemo(() => {
+    if (delivered) return null;
+    if (!timelineItems.length) return null;
+
+    const nowT = now.getTime();
+    let idx = 0;
+
+    for (let i = 0; i < timelineItems.length; i++) {
+      const t = new Date(timelineItems[i].at).getTime();
+      if (t <= nowT) idx = i;
+      else break;
+    }
+
+    return timelineItems[idx]?.key ?? null;
+  }, [timelineItems, now, delivered]);
 
   if (error) {
     return (
@@ -650,7 +587,7 @@ export default function LetterStatusPage() {
           </div>
         </section>
 
-        {/* LETTER directly under Flight Status */}
+        {/* LETTER */}
         <div className="card" style={{ marginTop: 14, position: "relative" }}>
           <ConfettiBurst show={confetti} />
 
@@ -674,7 +611,10 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div className={delivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: delivered ? 1 : 0 }}>
+              <div
+                className={delivered && revealStage === "open" ? "bodyReveal" : ""}
+                style={{ opacity: delivered ? 1 : 0 }}
+              >
                 <div className="body">{delivered ? (letter.body ?? "") : ""}</div>
               </div>
 
@@ -713,7 +653,6 @@ export default function LetterStatusPage() {
                   <span key={p} className="barTick" style={{ left: `${p}%` }} />
                 ))}
               </div>
-
               <div className="barMeta">
                 <div className="mutedStrong">{Math.round(progress * 100)}%</div>
                 <div className="muted">{currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}</div>
@@ -737,7 +676,6 @@ export default function LetterStatusPage() {
                 <div className="kicker">Timeline</div>
                 <div className="h2">Flight log</div>
               </div>
-
               <div className="pillBtn subtle" title="Auto refresh">
                 <span className="ico">
                   <Ico name="live" />
@@ -746,7 +684,7 @@ export default function LetterStatusPage() {
               </div>
             </div>
 
-            <RailTimeline items={timelineItems} now={now} />
+            <RailTimeline items={timelineItems} now={now} currentKey={currentTimelineKey} />
           </div>
         </div>
       </main>
