@@ -20,8 +20,15 @@ export function CityTypeahead({
   const [query, setQuery] = useState(value?.name ?? "");
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const listboxId = useMemo(
+    () => `city-listbox-${Math.random().toString(36).slice(2)}`,
+    []
+  );
 
   // Keep input text in sync if parent changes value
   useEffect(() => {
@@ -31,10 +38,15 @@ export function CityTypeahead({
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return cities.slice(0, 10);
-    return cities
-      .filter((c) => c.name.toLowerCase().includes(q))
-      .slice(0, 10);
+    return cities.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 10);
   }, [query, cities]);
+
+  // Keep active item visible when navigating with keyboard
+  useEffect(() => {
+    if (!open) return;
+    const el = document.getElementById(`${listboxId}-opt-${activeIndex}`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [open, activeIndex, listboxId]);
 
   // Close on click outside
   useEffect(() => {
@@ -77,8 +89,8 @@ export function CityTypeahead({
   }
 
   return (
-    <div ref={wrapRef} style={{ position: "relative" }}>
-      <label style={{ fontWeight: 700, display: "block" }}>
+    <div ref={wrapRef} className="typeahead">
+      <label className="typeLabel">
         {label}
         <input
           ref={inputRef}
@@ -91,55 +103,41 @@ export function CityTypeahead({
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          style={{
-            display: "block",
-            width: "100%",
-            padding: 10,
-            marginTop: 6,
-            borderRadius: 10,
-            border: "1px solid #333",
-            background: "transparent",
-            color: "inherit",
-          }}
+          className="input"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls={listboxId}
+          aria-activedescendant={
+            open && results[activeIndex]
+              ? `${listboxId}-opt-${activeIndex}`
+              : undefined
+          }
         />
       </label>
 
       {open && (
         <div
-          style={{
-            position: "absolute",
-            zIndex: 20,
-            left: 0,
-            right: 0,
-            marginTop: 6,
-            border: "1px solid #333",
-            borderRadius: 12,
-            background: "#111",
-            overflow: "hidden",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-          }}
+          ref={menuRef}
+          className="typeMenu"
+          role="listbox"
+          id={listboxId}
         >
           {results.length === 0 ? (
-            <div style={{ padding: 10, opacity: 0.75 }}>No matches</div>
+            <div className="typeEmpty">No matches</div>
           ) : (
             results.map((c, idx) => {
               const active = idx === activeIndex;
               return (
                 <button
                   key={c.name}
+                  id={`${listboxId}-opt-${idx}`}
                   type="button"
+                  role="option"
+                  aria-selected={active}
                   onMouseEnter={() => setActiveIndex(idx)}
                   onClick={() => pick(c)}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "10px 12px",
-                    border: "none",
-                    background: active ? "rgba(255,255,255,0.10)" : "transparent",
-                    color: "inherit",
-                    cursor: "pointer",
-                  }}
+                  className={`typeItem ${active ? "active" : ""}`}
                 >
                   {c.name}
                 </button>
@@ -149,9 +147,73 @@ export function CityTypeahead({
         </div>
       )}
 
-      <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
+      <div className="typeSelected">
         Selected: <strong>{value?.name}</strong>
       </div>
+
+      <style jsx>{`
+        .typeahead {
+          position: relative;
+        }
+
+        .typeLabel {
+          font-weight: 900;
+          display: block;
+        }
+
+        .typeMenu {
+          position: absolute;
+          z-index: 30;
+          left: 0;
+          right: 0;
+          margin-top: 8px;
+          border-radius: 16px;
+          background: var(--card);
+          border: 1px solid var(--border);
+          box-shadow: var(--shadow-lg);
+          overflow: hidden;
+          padding: 6px;
+          max-height: 320px;
+          overflow-y: auto;
+        }
+
+        .typeEmpty {
+          padding: 10px 12px;
+          opacity: 0.7;
+          font-weight: 850;
+          font-size: 12px;
+        }
+
+        .typeItem {
+          display: block;
+          width: 100%;
+          text-align: left;
+          padding: 10px 12px;
+          border: 1px solid transparent;
+          border-radius: 12px;
+          background: transparent;
+          color: var(--ink);
+          cursor: pointer;
+          font-weight: 900;
+          letter-spacing: -0.01em;
+        }
+
+        .typeItem:hover {
+          background: rgba(0, 0, 0, 0.04);
+        }
+
+        .typeItem.active {
+          background: var(--alp-blue-30);
+          border-color: rgba(0, 0, 0, 0.10);
+        }
+
+        .typeSelected {
+          font-size: 12px;
+          opacity: 0.7;
+          margin-top: 8px;
+          font-weight: 850;
+        }
+      `}</style>
     </div>
   );
 }

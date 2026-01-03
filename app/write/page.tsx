@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CITIES } from "../lib/cities";
 import { CityTypeahead } from "../components/CityTypeahead";
 
@@ -29,13 +29,12 @@ function isEmailValid(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
-/* ---------- page ---------- */
 export default function WritePage() {
   // Step 1: who
   const [fromName, setFromName] = useState("You");
   const [toName, setToName] = useState("");
 
-  // Step 4 (collapsed by default): email options (BUT required for now)
+  // Step 4: email options (collapsed by default): required for now
   const [fromEmail, setFromEmail] = useState("");
   const [toEmail, setToEmail] = useState("");
   const [showEmailOptions, setShowEmailOptions] = useState(false);
@@ -52,9 +51,7 @@ export default function WritePage() {
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
 
-  const [result, setResult] = useState<{ url: string; eta_at: string } | null>(
-    null
-  );
+  const [result, setResult] = useState<{ url: string; eta_at: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
@@ -65,6 +62,8 @@ export default function WritePage() {
   const fromNameOk = fromName.trim().length > 0;
   const toNameOk = toName.trim().length > 0;
   const messageOk = message.trim().length > 0;
+
+  const routeOk = origin.name !== destination.name;
 
   /* ---------- geolocation ---------- */
   function useMyLocationForOrigin() {
@@ -92,13 +91,10 @@ export default function WritePage() {
     );
   }
 
-  /* ---------- swap ---------- */
   function swapRoute() {
     setShowOriginPicker(false);
-    const o = origin;
-    const d = destination;
-    setOrigin(d);
-    setDestination(o);
+    setOrigin(destination);
+    setDestination(origin);
   }
 
   /* ---------- submit ---------- */
@@ -107,16 +103,11 @@ export default function WritePage() {
     setError(null);
     setResult(null);
 
-    // prevent same origin/destination
-    if (origin.name === destination.name) {
-      setError(
-        "Origin and destination must be different (even pigeons get bored)."
-      );
+    if (!routeOk) {
+      setError("Origin and destination must be different (even pigeons get bored).");
       setSending(false);
       return;
     }
-
-    // required fields
     if (!fromNameOk) {
       setError("Please enter a sender name.");
       setSending(false);
@@ -128,12 +119,10 @@ export default function WritePage() {
       return;
     }
     if (!messageOk) {
-      setError("Please write a message (it can be short, pigeons can’t carry novels).");
+      setError("Please write a message (pigeons can’t carry novels).");
       setSending(false);
       return;
     }
-
-    // required emails
     if (!senderEmailOk) {
       setError("Please enter a valid sender email address.");
       setSending(false);
@@ -151,9 +140,9 @@ export default function WritePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           from_name: fromName.trim(),
-          from_email: fromEmail.trim(), // required
+          from_email: fromEmail.trim(),
           to_name: toName.trim(),
-          to_email: toEmail.trim(), // required
+          to_email: toEmail.trim(),
           subject: subject.trim(),
           message,
           origin,
@@ -169,398 +158,294 @@ export default function WritePage() {
         eta_at: data.eta_at,
       });
     } catch (e: any) {
-      setError(e.message ?? "Unknown error");
+      setError(e?.message ?? "Unknown error");
     } finally {
       setSending(false);
     }
   }
 
-  /* ---------- UI ---------- */
   const disableSend =
     sending ||
+    !routeOk ||
     !fromNameOk ||
     !toNameOk ||
     !messageOk ||
     !senderEmailOk ||
-    !recipientEmailOk ||
-    origin.name === destination.name;
+    !recipientEmailOk;
+
+  const routeLabel = useMemo(
+    () => `${origin.name} → ${destination.name}`,
+    [origin.name, destination.name]
+  );
 
   return (
-    <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 720 }}>
-      <a href="/dashboard" style={{ textDecoration: "underline" }}>
-        Dashboard
-      </a>
+    <main className="pageBg">
+      <div className="wrap">
+        <a href="/dashboard" className="linkPill">
+          ← Dashboard
+        </a>
 
-      <h1 style={{ fontSize: 26, fontWeight: 800 }}>Write a Letter</h1>
-      <p style={{ opacity: 0.7, marginTop: 6 }}>
-        It’ll unlock for the recipient when the pigeon lands.
-      </p>
+        <div style={{ marginTop: 12 }}>
+          <div className="kicker">Compose</div>
+          <h1 className="h1">Write a Letter</h1>
+          <p className="muted" style={{ marginTop: 6 }}>
+            It’ll unlock for the recipient when the pigeon lands.
+          </p>
+        </div>
 
-      <div style={{ display: "grid", gap: 18, marginTop: 18 }}>
-        {/* ---------------- Step 1: WHO ---------------- */}
-        <section
-          style={{
-            border: "1px solid #333",
-            borderRadius: 12,
-            padding: 14,
-          }}
-        >
-          <div style={{ fontWeight: 900, marginBottom: 10 }}>1) Who</div>
+        <div className="stack" style={{ marginTop: 14 }}>
+          {/* Step 1 */}
+          <section className="card">
+            <div className="cardHead" style={{ marginBottom: 10 }}>
+              <div>
+                <div className="kicker">Step 1</div>
+                <div className="h2">Who</div>
+              </div>
 
-          <div style={{ display: "grid", gap: 12 }}>
-            <label>
-              From
-              <input
-                value={fromName}
-                onChange={(e) => setFromName(e.target.value)}
-                placeholder="Your name"
-                style={{
-                  display: "block",
-                  width: "100%",
-                  padding: 10,
-                  marginTop: 6,
-                  borderColor: !fromNameOk ? "crimson" : undefined,
-                }}
-              />
-            </label>
+              <div className="metaPill faint">
+                <span>Required</span>
+              </div>
+            </div>
 
-            <label>
-              To
-              <input
-                value={toName}
-                onChange={(e) => setToName(e.target.value)}
-                placeholder="Recipient name"
-                style={{
-                  display: "block",
-                  width: "100%",
-                  padding: 10,
-                  marginTop: 6,
-                  borderColor: !toNameOk ? "crimson" : undefined,
-                }}
-              />
-            </label>
-          </div>
-        </section>
+            <div className="twoCol">
+              <label className="field">
+                <span className="fieldLabel">From</span>
+                <input
+                  className={`input ${!fromNameOk ? "invalid" : ""}`}
+                  value={fromName}
+                  onChange={(e) => setFromName(e.target.value)}
+                  placeholder="Your name"
+                />
+              </label>
 
-        {/* ---------------- Step 2: MESSAGE ---------------- */}
-        <section
-          style={{
-            border: "1px solid #333",
-            borderRadius: 12,
-            padding: 14,
-          }}
-        >
-          <div style={{ fontWeight: 900, marginBottom: 10 }}>2) Message</div>
+              <label className="field">
+                <span className="fieldLabel">To</span>
+                <input
+                  className={`input ${!toNameOk ? "invalid" : ""}`}
+                  value={toName}
+                  onChange={(e) => setToName(e.target.value)}
+                  placeholder="Recipient name"
+                />
+              </label>
+            </div>
+          </section>
 
-          <div style={{ display: "grid", gap: 12 }}>
-            <label>
-              Subject (optional)
-              <input
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  padding: 10,
-                  marginTop: 6,
-                }}
-              />
-            </label>
+          {/* Step 2 */}
+          <section className="card">
+            <div className="cardHead" style={{ marginBottom: 10 }}>
+              <div>
+                <div className="kicker">Step 2</div>
+                <div className="h2">Message</div>
+              </div>
+              <div className="metaPill faint">Sealed until delivery</div>
+            </div>
 
-            <label>
-              Message (sealed until delivery)
-              <textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                rows={6}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  padding: 10,
-                  marginTop: 6,
-                  borderColor: !messageOk ? "crimson" : undefined,
-                }}
-              />
-            </label>
-            {!messageOk && (
-              <div style={{ fontSize: 12, color: "crimson" }}>
-                Message is required.
+            <div className="stack">
+              <label className="field">
+                <span className="fieldLabel">Subject (optional)</span>
+                <input
+                  className="input"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="Optional subject…"
+                />
+              </label>
+
+              <label className="field">
+                <span className="fieldLabel">Message</span>
+                <textarea
+                  className={`textarea ${!messageOk ? "invalid" : ""}`}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  rows={7}
+                  placeholder="Write something worth the flight…"
+                />
+                {!messageOk && <div className="errorText">Message is required.</div>}
+              </label>
+            </div>
+          </section>
+
+          {/* Step 3 */}
+          <section className="card">
+            <div className="cardHead" style={{ marginBottom: 10 }}>
+              <div>
+                <div className="kicker">Step 3</div>
+                <div className="h2">Route</div>
+                <div className="muted" style={{ marginTop: 4 }}>
+                  Route: <strong>{routeLabel}</strong>
+                </div>
+              </div>
+
+              <button type="button" onClick={swapRoute} className="btnGhost" title="Swap route">
+                ⇄ Swap
+              </button>
+            </div>
+
+            {!routeOk && (
+              <div className="errorText" style={{ marginBottom: 10 }}>
+                Origin and destination must be different.
+              </div>
+            )}
+
+            <div className="twoCol">
+              {/* Origin */}
+              <div className="stack">
+                <div className="fieldLabel">Origin</div>
+
+                <div className="softRow">
+                  <div className="softValue">{origin.name}</div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={useMyLocationForOrigin}
+                  disabled={locating}
+                  className="btnGhost"
+                >
+                  {locating ? "Finding your roost…" : "Use my location"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowOriginPicker((v) => !v)}
+                  className="btnSubtle"
+                >
+                  {showOriginPicker ? "Hide origin picker" : "Change origin"}
+                </button>
+
+                {showOriginPicker && (
+                  <div style={{ marginTop: 4 }}>
+                    <CityTypeahead
+                      label=""
+                      cities={CITIES}
+                      value={origin}
+                      onChange={(c) => {
+                        setOrigin(c);
+                        setShowOriginPicker(false);
+                      }}
+                      placeholder="Type a US city…"
+                    />
+                  </div>
+                )}
+
+                {locError && <div className="errorText">{locError}</div>}
+              </div>
+
+              {/* Destination */}
+              <div>
+                <CityTypeahead
+                  label="Destination"
+                  cities={CITIES}
+                  value={destination}
+                  onChange={setDestination}
+                  placeholder="Type a US city…"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Step 4 */}
+          <section className="card">
+            <button
+              type="button"
+              onClick={() => setShowEmailOptions((v) => !v)}
+              className="collapseHead"
+            >
+              <div>
+                <div className="kicker">Step 4</div>
+                <div className="h2">Email options</div>
+                <div className="muted" style={{ marginTop: 4 }}>
+                  Required for now (until we add accounts).
+                </div>
+              </div>
+              <div className="collapseRight">
+                {showEmailOptions ? "Hide" : "Show"} ▾
+              </div>
+            </button>
+
+            {showEmailOptions ? (
+              <div className="twoCol" style={{ marginTop: 12 }}>
+                <label className="field">
+                  <span className="fieldLabel">
+                    Sender Email <span className="muted">(required)</span>
+                  </span>
+                  <input
+                    className={`input ${fromEmail.trim() && !senderEmailOk ? "invalid" : ""}`}
+                    type="email"
+                    value={fromEmail}
+                    onChange={(e) => setFromEmail(e.target.value)}
+                    placeholder="you@email.com"
+                  />
+                  {fromEmail.trim() && !senderEmailOk && (
+                    <div className="errorText">Please enter a valid sender email address.</div>
+                  )}
+                </label>
+
+                <label className="field">
+                  <span className="fieldLabel">
+                    Recipient Email <span className="muted">(required)</span>
+                  </span>
+                  <input
+                    className={`input ${toEmail.trim() && !recipientEmailOk ? "invalid" : ""}`}
+                    type="email"
+                    value={toEmail}
+                    onChange={(e) => setToEmail(e.target.value)}
+                    placeholder="name@email.com"
+                  />
+                  {toEmail.trim() && !recipientEmailOk && (
+                    <div className="errorText">Please enter a valid recipient email address.</div>
+                  )}
+                </label>
+              </div>
+            ) : (
+              <div className="soft" style={{ marginTop: 12 }}>
+                <div className="mutedStrong">
+                  Sender email: <strong>{fromEmail.trim() ? "✓" : "Missing"}</strong>
+                </div>
+                <div className="mutedStrong" style={{ marginTop: 6 }}>
+                  Recipient email: <strong>{toEmail.trim() ? "✓" : "Missing"}</strong>
+                </div>
+                {(!fromEmail.trim() || !toEmail.trim()) && (
+                  <div className="errorText" style={{ marginTop: 10 }}>
+                    Open “Email options” to add the required email addresses.
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* Send */}
+          <div className="card">
+            <div className="sendRow">
+              <button onClick={sendLetter} disabled={disableSend} className="btnPrimary">
+                {sending ? "Sending…" : "Send Letter"}
+              </button>
+
+              <div className="muted" style={{ alignSelf: "center" }}>
+                {disableSend
+                  ? "Fill everything in and the pigeon will clock in."
+                  : "Ready for liftoff."}
+              </div>
+            </div>
+
+            {error && <p className="errorText" style={{ marginTop: 12 }}>❌ {error}</p>}
+
+            {result && (
+              <div className="successBox" style={{ marginTop: 12 }}>
+                <div className="successTitle">✅ Sent!</div>
+                <div style={{ marginTop: 8 }}>
+                  Share link:{" "}
+                  <a href={result.url} className="link">
+                    {result.url}
+                  </a>
+                </div>
+                <div className="muted" style={{ marginTop: 6 }}>
+                  ETA: {new Date(result.eta_at).toLocaleString()}
+                </div>
               </div>
             )}
           </div>
-        </section>
-
-        {/* ---------------- Step 3: ROUTE ---------------- */}
-        <section
-          style={{
-            border: "1px solid #333",
-            borderRadius: 12,
-            padding: 14,
-          }}
-        >
-          <div style={{ fontWeight: 900, marginBottom: 10 }}>3) Route</div>
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 12,
-              marginBottom: 10,
-            }}
-          >
-            <div style={{ fontSize: 12, opacity: 0.75 }}>
-              Route: <strong>{origin.name}</strong> →{" "}
-              <strong>{destination.name}</strong>
-            </div>
-
-            <button
-              type="button"
-              onClick={swapRoute}
-              title="Swap origin and destination"
-              style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                border: "1px solid #333",
-                background: "transparent",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              ⇄ Swap
-            </button>
-          </div>
-
-          {origin.name === destination.name && (
-            <div style={{ fontSize: 12, color: "crimson", marginBottom: 10 }}>
-              Origin and destination must be different.
-            </div>
-          )}
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {/* ORIGIN */}
-            <div>
-              <div style={{ fontWeight: 700 }}>Origin</div>
-
-              <div
-                style={{
-                  marginTop: 6,
-                  padding: 10,
-                  borderRadius: 10,
-                  border: "1px solid #333",
-                }}
-              >
-                {origin.name}
-              </div>
-
-              <button
-                type="button"
-                onClick={useMyLocationForOrigin}
-                disabled={locating}
-                style={{
-                  marginTop: 8,
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid #333",
-                  background: "transparent",
-                  fontWeight: 700,
-                  cursor: locating ? "not-allowed" : "pointer",
-                }}
-              >
-                {locating ? "Finding your roost…" : "Use my location"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowOriginPicker((v) => !v)}
-                style={{
-                  marginTop: 8,
-                  width: "100%",
-                  padding: "8px 10px",
-                  borderRadius: 10,
-                  border: "1px dashed #444",
-                  background: "transparent",
-                  fontSize: 12,
-                  opacity: 0.7,
-                  cursor: "pointer",
-                }}
-              >
-                {showOriginPicker ? "Hide origin picker" : "Change origin"}
-              </button>
-
-              {showOriginPicker && (
-                <div style={{ marginTop: 8 }}>
-                  <CityTypeahead
-                    label=""
-                    cities={CITIES}
-                    value={origin}
-                    onChange={(c) => {
-                      setOrigin(c);
-                      setShowOriginPicker(false);
-                    }}
-                    placeholder="Type a US city…"
-                  />
-                </div>
-              )}
-
-              {locError && (
-                <div style={{ fontSize: 12, color: "crimson", marginTop: 6 }}>
-                  {locError}
-                </div>
-              )}
-            </div>
-
-            {/* DESTINATION */}
-            <div>
-              <CityTypeahead
-                label="Destination"
-                cities={CITIES}
-                value={destination}
-                onChange={setDestination}
-                placeholder="Type a US city…"
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* ---------------- Step 4: EMAIL OPTIONS (collapsed) ---------------- */}
-        <section
-          style={{
-            border: "1px solid #333",
-            borderRadius: 12,
-            padding: 14,
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setShowEmailOptions((v) => !v)}
-            style={{
-              width: "100%",
-              textAlign: "left",
-              background: "transparent",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "baseline",
-                gap: 12,
-              }}
-            >
-              <div style={{ fontWeight: 900 }}>4) Email options</div>
-              <div style={{ fontSize: 12, opacity: 0.7 }}>
-                {showEmailOptions ? "Hide" : "Show"} ▾
-              </div>
-            </div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
-              Required for now (until we add accounts).
-            </div>
-          </button>
-
-          {showEmailOptions && (
-            <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
-              <label>
-                Sender Email <span style={{ opacity: 0.7 }}>(required)</span>
-                <input
-                  type="email"
-                  value={fromEmail}
-                  onChange={(e) => setFromEmail(e.target.value)}
-                  placeholder="you@email.com"
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    padding: 10,
-                    marginTop: 6,
-                    borderColor: fromEmail.trim() && !senderEmailOk ? "crimson" : undefined,
-                  }}
-                />
-              </label>
-              {fromEmail.trim() && !senderEmailOk && (
-                <div style={{ fontSize: 12, color: "crimson" }}>
-                  Please enter a valid sender email address.
-                </div>
-              )}
-
-              <label>
-                Recipient Email <span style={{ opacity: 0.7 }}>(required)</span>
-                <input
-                  type="email"
-                  value={toEmail}
-                  onChange={(e) => setToEmail(e.target.value)}
-                  placeholder="name@email.com"
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    padding: 10,
-                    marginTop: 6,
-                    borderColor: toEmail.trim() && !recipientEmailOk ? "crimson" : undefined,
-                  }}
-                />
-              </label>
-              {toEmail.trim() && !recipientEmailOk && (
-                <div style={{ fontSize: 12, color: "crimson" }}>
-                  Please enter a valid recipient email address.
-                </div>
-              )}
-            </div>
-          )}
-
-          {!showEmailOptions && (
-            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-              {/* Tiny hint so users don’t forget */}
-              <div>
-                Sender email:{" "}
-                <strong>{fromEmail.trim() ? "✓" : "Missing"}</strong>
-              </div>
-              <div style={{ marginTop: 4 }}>
-                Recipient email:{" "}
-                <strong>{toEmail.trim() ? "✓" : "Missing"}</strong>
-              </div>
-              {(!fromEmail.trim() || !toEmail.trim()) && (
-                <div style={{ marginTop: 8, color: "crimson" }}>
-                  Open “Email options” to add the required email addresses.
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* ---------------- SEND ---------------- */}
-        <button
-          onClick={sendLetter}
-          disabled={disableSend}
-          style={{
-            padding: "12px 14px",
-            fontWeight: 800,
-            borderRadius: 12,
-            cursor: disableSend ? "not-allowed" : "pointer",
-            opacity: disableSend ? 0.7 : 1,
-          }}
-        >
-          {sending ? "Sending…" : "Send Letter"}
-        </button>
-
-        {error && <p style={{ color: "crimson" }}>❌ {error}</p>}
-
-        {result && (
-          <div style={{ padding: 12, border: "1px solid #333", borderRadius: 8 }}>
-            <div style={{ fontWeight: 800 }}>✅ Sent!</div>
-            <div style={{ marginTop: 8 }}>
-              Share link:{" "}
-              <a href={result.url} style={{ textDecoration: "underline" }}>
-                {result.url}
-              </a>
-            </div>
-            <div style={{ marginTop: 6, opacity: 0.8 }}>
-              ETA: {new Date(result.eta_at).toLocaleString()}
-            </div>
-          </div>
-        )}
+        </div>
       </div>
     </main>
   );

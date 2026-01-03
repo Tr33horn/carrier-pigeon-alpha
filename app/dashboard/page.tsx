@@ -68,7 +68,6 @@ export default function DashboardPage() {
         cache: "no-store",
       });
       const data = await res.json();
-
       if (!res.ok) throw new Error(data?.error ?? "Failed to load");
 
       setLetters((data.letters ?? []) as DashboardLetter[]);
@@ -87,170 +86,149 @@ export default function DashboardPage() {
   }, [letters]);
 
   return (
-    <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 900 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-        <h1 style={{ fontSize: 26, fontWeight: 900 }}>Dashboard</h1>
-        <a href="/write" style={{ textDecoration: "underline", opacity: 0.85 }}>
-          + Write a letter
-        </a>
-      </div>
+    <main className="pageBg">
+      <div className="wrap">
+        {/* header */}
+        <div className="card">
+          <div className="cardHead">
+            <div>
+              <div className="kicker">Mailbox</div>
+              <h1 className="h1">Dashboard</h1>
+              <p className="muted" style={{ marginTop: 6 }}>
+                View letters you’ve sent by entering the sender email you used on the write form.
+              </p>
+            </div>
 
-      <p style={{ opacity: 0.7, marginTop: 6 }}>
-        View letters you’ve sent by entering the sender email you used on the write form.
-      </p>
+            <a href="/write" className="linkPill">
+              + Write a letter
+            </a>
+          </div>
 
-      <div
-        style={{
-          marginTop: 16,
-          padding: 14,
-          borderRadius: 12,
-          border: "1px solid #333",
-          display: "grid",
-          gap: 10,
-        }}
-      >
-        <label style={{ fontWeight: 800 }}>
-          Sender email
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@email.com"
-            style={{
-              display: "block",
-              width: "100%",
-              marginTop: 6,
-              padding: 10,
-              borderRadius: 10,
-              border: "1px solid #333",
-              background: "transparent",
-              color: "inherit",
-            }}
-          />
-        </label>
-
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <button
-            onClick={load}
-            disabled={loading}
-            style={{
-              padding: "10px 14px",
-              fontWeight: 800,
-              cursor: loading ? "not-allowed" : "pointer",
-            }}
-          >
-            {loading ? "Loading…" : "Load letters"}
-          </button>
-
+          {/* stats row */}
           {letters.length > 0 && (
-            <div style={{ opacity: 0.8 }}>
-              Total: <strong>{stats.total}</strong> • In flight:{" "}
-              <strong>{stats.inflight}</strong> • Delivered:{" "}
-              <strong>{stats.delivered}</strong>
+            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div className="metaPill">
+                Total: <strong>{stats.total}</strong>
+              </div>
+              <div className="metaPill">
+                In flight: <strong>{stats.inflight}</strong>
+              </div>
+              <div className="metaPill">
+                Delivered: <strong>{stats.delivered}</strong>
+              </div>
             </div>
           )}
         </div>
 
-        {error && <div style={{ color: "crimson" }}>❌ {error}</div>}
-      </div>
-
-      {/* Letter list */}
-      <div style={{ marginTop: 18, display: "grid", gap: 10 }}>
-        {letters.length === 0 && !loading ? (
-          <div style={{ opacity: 0.65, padding: 14 }}>
-            No letters loaded yet. Enter your sender email and hit “Load letters”.
+        {/* lookup */}
+        <div className="card" style={{ marginTop: 14 }}>
+          <div className="cardHead" style={{ marginBottom: 10 }}>
+            <div>
+              <div className="kicker">Lookup</div>
+              <div className="h2">Load your sent letters</div>
+            </div>
+            <div className="metaPill faint">Uses local storage</div>
           </div>
-        ) : (
-          letters.map((l) => {
-            const pct = Math.round((l.progress ?? 0) * 100);
-            const etaMs = new Date(l.eta_at).getTime() - now.getTime();
-            const countdown = formatCountdown(etaMs);
-            const status = l.delivered ? "✅ Delivered" : "🕊️ In Flight";
 
-            return (
-              <div
-                key={l.id}
-                style={{
-                  padding: 14,
-                  borderRadius: 12,
-                  border: "1px solid #333",
-                  display: "grid",
-                  gap: 8,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-                  <div style={{ fontWeight: 900 }}>
-                    {l.subject?.trim() ? l.subject : "(No subject)"}
-                  </div>
-                  <div style={{ fontWeight: 800, opacity: 0.85 }}>{status}</div>
-                </div>
+          <div className="stack">
+            <label className="field">
+              <span className="fieldLabel">Sender email</span>
+              <input
+                className={`input ${email.trim() && !emailLooksValid(email) ? "invalid" : ""}`}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@email.com"
+              />
+            </label>
 
-                <div style={{ opacity: 0.85 }}>
-                  <strong>To:</strong> {l.to_name || "Recipient"}{" "}
-                  <span style={{ opacity: 0.65 }}>
-                    • {l.origin_name} → {l.dest_name}
-                  </span>
-                </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+              <button onClick={load} disabled={loading} className="btnPrimary">
+                {loading ? "Loading…" : "Load letters"}
+              </button>
 
-                <div style={{ opacity: 0.75, fontSize: 13 }}>
-                  Sent: {new Date(l.sent_at).toLocaleString()} • ETA:{" "}
-                  {new Date(l.eta_at).toLocaleString()}{" "}
-                  {!l.delivered && <span> • (T-minus {countdown})</span>}
-                </div>
-
-                {/* progress bar */}
-                <div style={{ marginTop: 2 }}>
-                  <div
-                    style={{
-                      position: "relative",
-                      height: 10,
-                      borderRadius: 999,
-                      background: "#222",
-                      overflow: "hidden",
-                      border: "1px solid #333",
-                    }}
-                  >
-                    <div
-                      style={{
-                        height: "100%",
-                        width: `${pct}%`,
-                        background: "white",
-                      }}
-                    />
-                    {[25, 50, 75].map((p) => (
-                      <div
-                        key={p}
-                        style={{
-                          position: "absolute",
-                          left: `${p}%`,
-                          top: 0,
-                          bottom: 0,
-                          width: 2,
-                          background: "rgba(255,255,255,0.25)",
-                          transform: "translateX(-1px)",
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
-                    Progress: <strong>{pct}%</strong>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-                  <a
-                    href={`/l/${l.public_token}`}
-                    style={{ textDecoration: "underline", fontWeight: 800 }}
-                  >
-                    View status
-                  </a>
-                  <span style={{ fontSize: 12, opacity: 0.6 }}>
-                    Token: {l.public_token.slice(0, 8)}…
-                  </span>
-                </div>
+              <div className="muted">
+                Tip: use the same sender email you entered on the Write page.
               </div>
-            );
-          })
-        )}
+            </div>
+
+            {error && <div className="errorText">❌ {error}</div>}
+          </div>
+        </div>
+
+        {/* list */}
+        <div style={{ marginTop: 14 }} className="stack">
+          {letters.length === 0 && !loading ? (
+            <div className="card">
+              <div className="muted">
+                No letters loaded yet. Enter your sender email and hit “Load letters”.
+              </div>
+            </div>
+          ) : (
+            letters.map((l) => {
+              const pct = Math.round((l.progress ?? 0) * 100);
+              const etaMs = new Date(l.eta_at).getTime() - now.getTime();
+              const countdown = formatCountdown(etaMs);
+
+              const statusLabel = l.delivered ? "Delivered" : "In Flight";
+              const statusEmoji = l.delivered ? "✅" : "🕊️";
+
+              return (
+                <div key={l.id} className="card">
+                  <div className="cardHead" style={{ marginBottom: 10 }}>
+                    <div>
+                      <div className="kicker">Letter</div>
+                      <div className="h2">{l.subject?.trim() ? l.subject : "(No subject)"}</div>
+                      <div className="muted" style={{ marginTop: 6 }}>
+                        To: <strong>{l.to_name || "Recipient"}</strong>{" "}
+                        <span style={{ opacity: 0.65 }}>
+                          • {l.origin_name} → {l.dest_name}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="metaPill">
+                      {statusEmoji} <strong>{statusLabel}</strong>
+                    </div>
+                  </div>
+
+                  <div className="muted" style={{ marginTop: 2 }}>
+                    Sent: {new Date(l.sent_at).toLocaleString()} • ETA:{" "}
+                    {new Date(l.eta_at).toLocaleString()}
+                    {!l.delivered && <> • (T-minus {countdown})</>}
+                  </div>
+
+                  {/* progress */}
+                  <div style={{ marginTop: 12 }}>
+                    <div className="bar">
+                      <div className="barFill" style={{ width: `${pct}%` }} />
+                      {[25, 50, 75].map((p) => (
+                        <span key={p} className="barTick" style={{ left: `${p}%` }} />
+                      ))}
+                    </div>
+
+                    <div className="barMeta">
+                      <div className="mutedStrong">
+                        Progress: <strong>{pct}%</strong>
+                      </div>
+                      <div className="muted">
+                        Token: {l.public_token.slice(0, 8)}…
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    <a href={`/l/${l.public_token}`} className="link">
+                      View status
+                    </a>
+                    <a href="/write" className="link">
+                      Write another
+                    </a>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
     </main>
   );
