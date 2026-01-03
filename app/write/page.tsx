@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CITIES } from "../lib/cities";
+import { CityTypeahead } from "../components/CityTypeahead";
 
 /* ---------- helpers ---------- */
 function nearestCity(
@@ -24,6 +25,10 @@ function nearestCity(
   return best;
 }
 
+function isEmailValid(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
 /* ---------- page ---------- */
 export default function WritePage() {
   const [fromName, setFromName] = useState("You");
@@ -34,9 +39,7 @@ export default function WritePage() {
   const [message, setMessage] = useState("");
 
   const [origin, setOrigin] = useState(CITIES[0]);
-  const [destination, setDestination] = useState(
-    CITIES[CITIES.length - 1]
-  );
+  const [destination, setDestination] = useState(CITIES[CITIES.length - 1]);
 
   const [showOriginPicker, setShowOriginPicker] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -49,8 +52,8 @@ export default function WritePage() {
   const [sending, setSending] = useState(false);
 
   /* ---------- validation ---------- */
-  const emailLooksValid =
-    !toEmail.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail.trim());
+  const recipientEmailOk = !toEmail.trim() || isEmailValid(toEmail);
+  const senderEmailOk = !fromEmail.trim() || isEmailValid(fromEmail);
 
   /* ---------- geolocation ---------- */
   function useMyLocationForOrigin() {
@@ -78,11 +81,39 @@ export default function WritePage() {
     );
   }
 
+  /* ---------- swap ---------- */
+  function swapRoute() {
+    setShowOriginPicker(false);
+    const o = origin;
+    const d = destination;
+    setOrigin(d);
+    setDestination(o);
+  }
+
   /* ---------- submit ---------- */
   async function sendLetter() {
     setSending(true);
     setError(null);
     setResult(null);
+
+    // prevent same origin/destination
+    if (origin.name === destination.name) {
+      setError("Origin and destination must be different (even pigeons get bored).");
+      setSending(false);
+      return;
+    }
+
+    // validate optional emails if present
+    if (!recipientEmailOk) {
+      setError("Recipient email looks invalid.");
+      setSending(false);
+      return;
+    }
+    if (!senderEmailOk) {
+      setError("Sender email looks invalid.");
+      setSending(false);
+      return;
+    }
 
     try {
       const res = await fetch("/api/letters/send", {
@@ -115,9 +146,19 @@ export default function WritePage() {
   }
 
   /* ---------- UI ---------- */
+  const disableSend =
+    sending ||
+    !message.trim() ||
+    !toName.trim() ||
+    !recipientEmailOk ||
+    !senderEmailOk;
+
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 720 }}>
-      <a href="/dashboard" style={{ textDecoration: "underline" }}>Dashboard</a>
+      <a href="/dashboard" style={{ textDecoration: "underline" }}>
+        Dashboard
+      </a>
+
       <h1 style={{ fontSize: 26, fontWeight: 800 }}>Write a Letter</h1>
       <p style={{ opacity: 0.7, marginTop: 6 }}>
         It’ll unlock for the recipient when the pigeon lands.
@@ -129,7 +170,12 @@ export default function WritePage() {
           <input
             value={fromName}
             onChange={(e) => setFromName(e.target.value)}
-            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
+            style={{
+              display: "block",
+              width: "100%",
+              padding: 10,
+              marginTop: 6,
+            }}
           />
         </label>
 
@@ -140,9 +186,20 @@ export default function WritePage() {
             value={fromEmail}
             onChange={(e) => setFromEmail(e.target.value)}
             placeholder="you@email.com"
-            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
+            style={{
+              display: "block",
+              width: "100%",
+              padding: 10,
+              marginTop: 6,
+              borderColor: fromEmail.trim() && !senderEmailOk ? "crimson" : undefined,
+            }}
           />
         </label>
+        {fromEmail.trim() && !senderEmailOk && (
+          <div style={{ fontSize: 12, color: "crimson" }}>
+            Please enter a valid sender email address.
+          </div>
+        )}
 
         <label>
           To
@@ -150,7 +207,12 @@ export default function WritePage() {
             value={toName}
             onChange={(e) => setToName(e.target.value)}
             placeholder="Recipient name"
-            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
+            style={{
+              display: "block",
+              width: "100%",
+              padding: 10,
+              marginTop: 6,
+            }}
           />
         </label>
 
@@ -161,13 +223,18 @@ export default function WritePage() {
             value={toEmail}
             onChange={(e) => setToEmail(e.target.value)}
             placeholder="name@email.com"
-            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
+            style={{
+              display: "block",
+              width: "100%",
+              padding: 10,
+              marginTop: 6,
+              borderColor: toEmail.trim() && !recipientEmailOk ? "crimson" : undefined,
+            }}
           />
         </label>
-
-        {toEmail.trim() && !emailLooksValid && (
+        {toEmail.trim() && !recipientEmailOk && (
           <div style={{ fontSize: 12, color: "crimson" }}>
-            Please enter a valid email address.
+            Please enter a valid recipient email address.
           </div>
         )}
 
@@ -176,7 +243,12 @@ export default function WritePage() {
           <input
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
+            style={{
+              display: "block",
+              width: "100%",
+              padding: 10,
+              marginTop: 6,
+            }}
           />
         </label>
 
@@ -186,122 +258,144 @@ export default function WritePage() {
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             rows={6}
-            style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
+            style={{
+              display: "block",
+              width: "100%",
+              padding: 10,
+              marginTop: 6,
+            }}
           />
         </label>
 
         {/* ---------- ORIGIN + DEST ---------- */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          {/* ORIGIN */}
-          <div>
-            <div style={{ fontWeight: 700 }}>Origin</div>
-
-            <div
-              style={{
-                marginTop: 6,
-                padding: 10,
-                borderRadius: 10,
-                border: "1px solid #333",
-              }}
-            >
-              {origin.name}
+        <div style={{ marginTop: 6 }}>
+          {/* Swap + route preview */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              marginBottom: 8,
+            }}
+          >
+            <div style={{ fontSize: 12, opacity: 0.75 }}>
+              Route: <strong>{origin.name}</strong> → <strong>{destination.name}</strong>
             </div>
 
             <button
               type="button"
-              onClick={useMyLocationForOrigin}
-              disabled={locating}
+              onClick={swapRoute}
+              title="Swap origin and destination"
               style={{
-                marginTop: 8,
-                width: "100%",
-                padding: "10px 12px",
+                padding: "8px 10px",
                 borderRadius: 10,
                 border: "1px solid #333",
                 background: "transparent",
                 fontWeight: 700,
-                cursor: locating ? "not-allowed" : "pointer",
+                cursor: "pointer",
               }}
             >
-              {locating ? "Finding your roost…" : "Use my location"}
+              ⇄ Swap
             </button>
-
-            <button
-              type="button"
-              onClick={() => setShowOriginPicker((v) => !v)}
-              style={{
-                marginTop: 8,
-                width: "100%",
-                padding: "8px 10px",
-                borderRadius: 10,
-                border: "1px dashed #444",
-                background: "transparent",
-                fontSize: 12,
-                opacity: 0.7,
-              }}
-            >
-              {showOriginPicker ? "Hide origin picker" : "Change origin"}
-            </button>
-
-            {showOriginPicker && (
-              <select
-                value={origin.name}
-                onChange={(e) =>
-                  setOrigin(CITIES.find((c) => c.name === e.target.value)!)
-                }
-                style={{
-                  display: "block",
-                  width: "100%",
-                  padding: 10,
-                  marginTop: 8,
-                }}
-              >
-                {CITIES.map((c) => (
-                  <option key={c.name} value={c.name}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {locError && (
-              <div style={{ fontSize: 12, color: "crimson", marginTop: 6 }}>
-                {locError}
-              </div>
-            )}
           </div>
 
-          {/* DESTINATION */}
-          <label>
-            Destination
-            <select
-              value={destination.name}
-              onChange={(e) =>
-                setDestination(CITIES.find((c) => c.name === e.target.value)!)
-              }
-              style={{ display: "block", width: "100%", padding: 10, marginTop: 6 }}
-            >
-              {CITIES.map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {/* ORIGIN */}
+            <div>
+              <div style={{ fontWeight: 700 }}>Origin</div>
+
+              <div
+                style={{
+                  marginTop: 6,
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #333",
+                }}
+              >
+                {origin.name}
+              </div>
+
+              <button
+                type="button"
+                onClick={useMyLocationForOrigin}
+                disabled={locating}
+                style={{
+                  marginTop: 8,
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid #333",
+                  background: "transparent",
+                  fontWeight: 700,
+                  cursor: locating ? "not-allowed" : "pointer",
+                }}
+              >
+                {locating ? "Finding your roost…" : "Use my location"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowOriginPicker((v) => !v)}
+                style={{
+                  marginTop: 8,
+                  width: "100%",
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  border: "1px dashed #444",
+                  background: "transparent",
+                  fontSize: 12,
+                  opacity: 0.7,
+                  cursor: "pointer",
+                }}
+              >
+                {showOriginPicker ? "Hide origin picker" : "Change origin"}
+              </button>
+
+              {showOriginPicker && (
+                <div style={{ marginTop: 8 }}>
+                  <CityTypeahead
+                    label=""
+                    cities={CITIES}
+                    value={origin}
+                    onChange={(c) => {
+                      setOrigin(c);
+                      setShowOriginPicker(false);
+                    }}
+                    placeholder="Type a US city…"
+                  />
+                </div>
+              )}
+
+              {locError && (
+                <div style={{ fontSize: 12, color: "crimson", marginTop: 6 }}>
+                  {locError}
+                </div>
+              )}
+            </div>
+
+            {/* DESTINATION */}
+            <div>
+              <CityTypeahead
+                label="Destination"
+                cities={CITIES}
+                value={destination}
+                onChange={setDestination}
+                placeholder="Type a US city…"
+              />
+            </div>
+          </div>
         </div>
 
         {/* ---------- SEND ---------- */}
         <button
           onClick={sendLetter}
-          disabled={
-            sending ||
-            !message.trim() ||
-            !toName.trim() ||
-            !emailLooksValid
-          }
+          disabled={disableSend}
           style={{
             padding: "12px 14px",
             fontWeight: 700,
-            cursor: sending ? "not-allowed" : "pointer",
+            cursor: disableSend ? "not-allowed" : "pointer",
+            opacity: disableSend ? 0.7 : 1,
           }}
         >
           {sending ? "Sending…" : "Send Letter"}
