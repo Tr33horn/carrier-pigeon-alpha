@@ -155,7 +155,7 @@ function formatCountdown(ms: number) {
   return `${h}:${pad(m)}:${pad(s)}`;
 }
 
-// ✅ NEW: compute milestone timestamp between sent_at and eta_at
+// compute milestone timestamp between sent_at and eta_at
 function milestoneTimeISO(sentISO: string, etaISO: string, fraction: number) {
   const sent = new Date(sentISO).getTime();
   const eta = new Date(etaISO).getTime();
@@ -174,6 +174,9 @@ export default function LetterStatusPage() {
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
   const [delivered, setDelivered] = useState(false);
+
+  // tiny UX: show “copied”
+  const [copied, setCopied] = useState(false);
 
   // clock tick (for ETA countdown)
   useEffect(() => {
@@ -233,7 +236,7 @@ export default function LetterStatusPage() {
     return current ?? checkpoints[0];
   }, [checkpoints, letter, now]);
 
-  // ✅ NEW: milestone model (computed client-side)
+  // milestone model (computed client-side)
   const milestones = useMemo(() => {
     if (!letter) return [];
     const defs = [
@@ -249,9 +252,36 @@ export default function LetterStatusPage() {
     });
   }, [letter, now]);
 
+  const statusUrl = useMemo(() => {
+    if (!letter) return "";
+    return `${window.location.origin}/l/${letter.public_token}`;
+  }, [letter]);
+
+  const timelineItems = useMemo(() => {
+    const cps = checkpoints.map((cp) => ({
+      key: `cp-${cp.id}`,
+      name: cp.name,
+      at: cp.at,
+      kind: "checkpoint" as const,
+      id: cp.id,
+    }));
+
+    const ms = milestones.map((m) => ({
+      key: `ms-${m.pct}`,
+      name: `🕊️ ${m.label}`,
+      at: m.atISO,
+      kind: "milestone" as const,
+      id: `m-${m.pct}`,
+    }));
+
+    return [...cps, ...ms].sort(
+      (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()
+    );
+  }, [checkpoints, milestones]);
+
   if (error) {
     return (
-      <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 760 }}>
+      <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860, margin: "0 auto" }}>
         <h1 style={{ fontSize: 22, fontWeight: 800 }}>Flight Status</h1>
         <p style={{ color: "crimson", marginTop: 12 }}>❌ {error}</p>
       </main>
@@ -260,7 +290,7 @@ export default function LetterStatusPage() {
 
   if (!letter) {
     return (
-      <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 760 }}>
+      <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860, margin: "0 auto" }}>
         <h1 style={{ fontSize: 22, fontWeight: 800 }}>Flight Status</h1>
         <p style={{ marginTop: 12, opacity: 0.7 }}>Loading…</p>
       </main>
@@ -268,33 +298,185 @@ export default function LetterStatusPage() {
   }
 
   return (
-    <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 760 }}>
+    <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860, margin: "0 auto" }}>
+      {/* ---------- Top header card ---------- */}
       <div
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          alignItems: "baseline",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 16,
+          padding: 18,
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
         }}
       >
-        <h1 style={{ fontSize: 26, fontWeight: 900 }}>Flight Status</h1>
-        <div style={{ fontWeight: 800, opacity: 0.8 }}>
-          {delivered ? "✅ Delivered" : "🕊️ In Flight"}
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
+              Flight Status
+            </div>
+
+            <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0, lineHeight: 1.15 }}>
+              {letter.origin_name} → {letter.dest_name}
+            </h1>
+
+            <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 13, opacity: 0.85 }}>
+                <strong>ETA:</strong> {new Date(letter.eta_at).toLocaleString()}
+                {!delivered && (
+                  <span style={{ marginLeft: 8, opacity: 0.75 }}>
+                    (T-minus {countdown})
+                  </span>
+                )}
+              </div>
+
+              <div style={{ fontSize: 13, opacity: 0.85 }}>
+                <strong>Distance:</strong> {letter.distance_km.toFixed(0)} km
+              </div>
+
+              <div style={{ fontSize: 13, opacity: 0.85 }}>
+                <strong>Speed:</strong> {letter.speed_kmh.toFixed(0)} km/h
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: 10, justifyItems: "end" }}>
+            {/* status pill */}
+            <div
+              style={{
+                padding: "8px 12px",
+                borderRadius: 999,
+                border: "1px solid rgba(255,255,255,0.18)",
+                fontWeight: 800,
+                fontSize: 12,
+                letterSpacing: 0.3,
+                opacity: 0.95,
+                background: delivered
+                  ? "rgba(80, 220, 140, 0.12)"
+                  : "rgba(255, 255, 255, 0.06)",
+              }}
+            >
+              {delivered ? "✅ Delivered" : "🕊️ In Flight"}
+            </div>
+
+            {/* copy link */}
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard?.writeText(statusUrl);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1200);
+                } catch {
+                  // fallback: do nothing
+                }
+              }}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: "1px solid rgba(255,255,255,0.18)",
+                background: "transparent",
+                fontWeight: 800,
+                cursor: "pointer",
+                fontSize: 12,
+                opacity: 0.9,
+                minWidth: 120,
+              }}
+              title="Copy share link"
+            >
+              {copied ? "✅ Copied" : "🔗 Copy link"}
+            </button>
+          </div>
+        </div>
+
+        {/* progress bar + ticks */}
+        <div style={{ marginTop: 16 }}>
+          <div
+            style={{
+              position: "relative",
+              height: 12,
+              borderRadius: 999,
+              background: "rgba(255,255,255,0.08)",
+              overflow: "hidden",
+              border: "1px solid rgba(255,255,255,0.12)",
+            }}
+          >
+            <div
+              style={{
+                height: "100%",
+                width: `${Math.round(progress * 100)}%`,
+                background: "white",
+                opacity: 0.95,
+              }}
+            />
+
+            {[25, 50, 75].map((p) => (
+              <div
+                key={p}
+                style={{
+                  position: "absolute",
+                  left: `${p}%`,
+                  top: 0,
+                  bottom: 0,
+                  width: 2,
+                  background: "rgba(255,255,255,0.25)",
+                  transform: "translateX(-1px)",
+                }}
+              />
+            ))}
+          </div>
+
+          <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
+            {Math.round(progress * 100)}%{" "}
+            {currentCheckpoint ? `• Current: ${currentCheckpoint.name}` : ""}
+          </div>
+
+          {/* milestone chips */}
+          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {milestones.map((m) => (
+              <div
+                key={m.pct}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  background: "rgba(255,255,255,0.03)",
+                  opacity: m.isPast ? 1 : 0.55,
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
+                  fontSize: 12,
+                }}
+              >
+                <span style={{ fontWeight: 900 }}>{m.isPast ? "●" : "○"}</span>
+                <span style={{ fontWeight: 800 }}>{m.label}</span>
+                <span style={{ opacity: 0.75 }}>
+                  {new Date(m.atISO).toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div style={{ marginTop: 10, opacity: 0.8 }}>
-        <div>
-          <strong>Route:</strong> {letter.origin_name} → {letter.dest_name}
-        </div>
-        <div style={{ marginTop: 4 }}>
-          <strong>ETA:</strong> {new Date(letter.eta_at).toLocaleString()}{" "}
-          {!delivered && (
-            <span style={{ marginLeft: 8 }}>(T-minus {countdown})</span>
-          )}
+      {/* ---------- Map card ---------- */}
+      <div
+        style={{
+          marginTop: 16,
+          borderRadius: 16,
+          overflow: "hidden",
+          border: "1px solid rgba(255,255,255,0.12)",
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
+        }}
+      >
+        <div style={{ padding: 12, borderBottom: "1px solid rgba(255,255,255,0.10)" }}>
+          <div style={{ fontWeight: 900 }}>Route Map</div>
+          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
+            Pigeon position updates are ETA-based. The bird refuses GPS collars.
+          </div>
         </div>
 
-        <div style={{ marginTop: 16 }}>
+        <div style={{ padding: 12 }}>
           <MapView
             origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
             dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
@@ -302,163 +484,153 @@ export default function LetterStatusPage() {
           />
         </div>
 
-        <div style={{ marginTop: 4 }}>
-          <strong>Distance:</strong> {letter.distance_km.toFixed(0)} km •{" "}
-          <strong>Speed:</strong> {letter.speed_kmh.toFixed(0)} km/h
-        </div>
-      </div>
-
-      {/* ✅ Progress bar + milestone ticks + chips */}
-      <div style={{ marginTop: 16 }}>
         <div
           style={{
-            position: "relative",
-            height: 12,
-            borderRadius: 999,
-            background: "#222",
-            overflow: "hidden",
-            border: "1px solid #333",
+            padding: 12,
+            borderTop: "1px solid rgba(255,255,255,0.10)",
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            fontSize: 12,
+            opacity: 0.85,
           }}
         >
-          <div
-            style={{
-              height: "100%",
-              width: `${Math.round(progress * 100)}%`,
-              background: "white",
-            }}
-          />
-
-          {[25, 50, 75].map((p) => (
-            <div
-              key={p}
-              style={{
-                position: "absolute",
-                left: `${p}%`,
-                top: 0,
-                bottom: 0,
-                width: 2,
-                background: "rgba(255,255,255,0.25)",
-                transform: "translateX(-1px)",
-              }}
-            />
-          ))}
-        </div>
-
-        <div style={{ marginTop: 6, opacity: 0.8 }}>
-          {Math.round(progress * 100)}% •{" "}
-          {currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}
-        </div>
-
-        <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {milestones.map((m) => (
-            <div
-              key={m.pct}
-              style={{
-                padding: "6px 10px",
-                borderRadius: 999,
-                border: "1px solid #333",
-                opacity: m.isPast ? 1 : 0.55,
-                display: "flex",
-                gap: 8,
-                alignItems: "center",
-                fontSize: 12,
-              }}
-            >
-              <span style={{ fontWeight: 900 }}>{m.isPast ? "●" : "○"}</span>
-              <span style={{ fontWeight: 800 }}>{m.label}</span>
-              <span style={{ opacity: 0.75 }}>
-                {new Date(m.atISO).toLocaleString()}
-              </span>
-            </div>
-          ))}
+          <div>
+            <strong>Route:</strong> {letter.origin_name} → {letter.dest_name}
+          </div>
+          <div>
+            <strong>Distance:</strong> {letter.distance_km.toFixed(0)} km
+          </div>
+          <div>
+            <strong>Speed:</strong> {letter.speed_kmh.toFixed(0)} km/h
+          </div>
         </div>
       </div>
 
-      {/* ✅ Timeline (checkpoints + milestones) */}
-      <div style={{ marginTop: 18 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 900 }}>Checkpoint Timeline</h2>
-        <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-          {[
-            ...checkpoints.map((cp) => ({
-              key: `cp-${cp.id}`,
-              name: cp.name,
-              at: cp.at,
-              kind: "checkpoint" as const,
-            })),
-            ...milestones.map((m) => ({
-              key: `ms-${m.pct}`,
-              name: `🕊️ ${m.label}`,
-              at: m.atISO,
-              kind: "milestone" as const,
-            })),
-          ]
-            .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
-            .map((item) => {
+      {/* ---------- Two-column area (timeline + letter) ---------- */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr",
+          gap: 16,
+          marginTop: 16,
+        }}
+      >
+        {/* Timeline */}
+        <div
+          style={{
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 16,
+            padding: 14,
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
+          }}
+        >
+          <div style={{ fontWeight: 900, fontSize: 16 }}>Flight Log</div>
+          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
+            A tasteful illusion of logistics.
+          </div>
+
+          <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+            {timelineItems.map((item) => {
               const isPast = new Date(item.at).getTime() <= now.getTime();
               const isMilestone = item.kind === "milestone";
+              const isCurrentCheckpoint =
+                item.kind === "checkpoint" && currentCheckpoint?.id === item.id;
 
               return (
                 <div
                   key={item.key}
                   style={{
                     padding: 10,
-                    borderRadius: 8,
-                    border: "1px solid #333",
-                    opacity: isPast ? 1 : 0.5,
-                    background: isMilestone ? "rgba(255,255,255,0.04)" : "transparent",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: isCurrentCheckpoint
+                      ? "rgba(255,255,255,0.10)"
+                      : isMilestone
+                      ? "rgba(255,255,255,0.04)"
+                      : "rgba(255,255,255,0.02)",
+                    opacity: isPast ? 1 : 0.55,
+                    transform: isCurrentCheckpoint ? "translateY(-1px)" : undefined,
                   }}
                 >
-                  <div style={{ fontWeight: 800 }}>
-                    {isPast ? "●" : "○"} {item.name}
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                    <div style={{ fontWeight: 900 }}>
+                      {isCurrentCheckpoint ? "🟡" : isPast ? "●" : "○"} {item.name}
+                    </div>
+
+                    {isCurrentCheckpoint && (
+                      <div style={{ fontSize: 12, opacity: 0.8, fontWeight: 800 }}>
+                        current
+                      </div>
+                    )}
                   </div>
-                  <div style={{ opacity: 0.8, marginTop: 4 }}>
+
+                  <div style={{ opacity: 0.75, marginTop: 6, fontSize: 12 }}>
                     {new Date(item.at).toLocaleString()}
                   </div>
                 </div>
               );
             })}
+          </div>
         </div>
-      </div>
 
-      {/* Message */}
-      <div style={{ marginTop: 18 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 900 }}>
-          Letter from {letter.from_name || "Sender"} to{" "}
-          {letter.to_name || "Recipient"}
-        </h2>
-
+        {/* Letter */}
         <div
           style={{
-            marginTop: 10,
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 16,
             padding: 14,
-            borderRadius: 10,
-            border: "1px solid #333",
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
           }}
         >
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>
-            {letter.subject || "(No subject)"}
+          <div style={{ fontWeight: 900, fontSize: 16 }}>
+            Letter from {letter.from_name || "Sender"} to {letter.to_name || "Recipient"}
           </div>
 
-          {delivered ? (
+          <div
+            style={{
+              marginTop: 12,
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.12)",
+              overflow: "hidden",
+              background: "rgba(0,0,0,0.15)",
+            }}
+          >
             <div
               style={{
-                whiteSpace: "pre-wrap",
-                lineHeight: 1.5,
-                animation: "reveal 420ms ease-out",
+                padding: 14,
+                borderBottom: "1px solid rgba(255,255,255,0.10)",
               }}
             >
-              {letter.body ?? ""}
+              <div style={{ fontWeight: 900 }}>{letter.subject || "(No subject)"}</div>
             </div>
-          ) : (
-            <WaxSealOverlay etaText={new Date(letter.eta_at).toLocaleString()} />
-          )}
+
+            <div style={{ padding: 14 }}>
+              {delivered ? (
+                <div
+                  style={{
+                    whiteSpace: "pre-wrap",
+                    lineHeight: 1.55,
+                    animation: "reveal 420ms ease-out",
+                  }}
+                >
+                  {letter.body ?? ""}
+                </div>
+              ) : (
+                <WaxSealOverlay etaText={new Date(letter.eta_at).toLocaleString()} />
+              )}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6 }}>
+            Token: {letter.public_token}
+          </div>
         </div>
       </div>
 
-      <div style={{ marginTop: 18, opacity: 0.6, fontSize: 12 }}>
-        Token: {letter.public_token}
-      </div>
-
+      {/* Desktop layout: timeline + letter side-by-side */}
       <style jsx global>{`
         @keyframes reveal {
           from {
@@ -468,6 +640,13 @@ export default function LetterStatusPage() {
           to {
             opacity: 1;
             transform: translateY(0);
+          }
+        }
+
+        @media (min-width: 980px) {
+          main > div:nth-of-type(3) {
+            grid-template-columns: 1fr 1fr;
+            align-items: start;
           }
         }
       `}</style>
