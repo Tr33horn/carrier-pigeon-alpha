@@ -426,12 +426,15 @@ body {
 
 .arrow { opacity: 0.35; margin: 0 8px; }
 
-.subRow {
+/* --- FIX: keep “Currently over” aligned with the LIVE pill (not the 2-line stack) --- */
+.subRow{
   margin-top: 10px;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  align-items: center;
+
+  /* was: align-items: center; */
+  align-items: flex-start;
 }
 
 .etaBox {
@@ -508,10 +511,14 @@ body {
 /* -------------------------------------------------
    LIVE pill (Status)
 ------------------------------------------------- */
-.liveStack { display: grid; gap: 6px; flex: 0 0 auto; }
-.liveSub { font-size: 12px; font-weight: 850; opacity: 0.65; padding-left: 10px;   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-  min-width: 18ch; /* enough for "Last updated: 120s ago" */}
+/* Make sure these don’t try to center themselves within the row */
+.liveStack{ 
+  display: flex;         /* was grid — flex is simpler here */
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
 
 .liveWrap {
   display: inline-flex;
@@ -1024,4 +1031,8 @@ body {
   background: var(--ink);
   color:#fff;
   border-color: rgba(0,0,0,0.22);
+}
+
+.subRow .metaPill{
+  align-self: flex-start;
 }
