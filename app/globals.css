@@ -195,7 +195,10 @@ body {
 }
 .btnPrimary:disabled { opacity: 0.6; cursor: not-allowed; }
 
-.btnGhost { background: rgba(0,0,0,0.04); }
+.btnGhost {
+  background: rgba(0,0,0,0.04);
+  white-space: nowrap; /* ✅ keeps “Copy link” from wrapping */
+}
 .btnGhost:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .btnSubtle {
@@ -339,10 +342,11 @@ body {
   gap: 12px;
 }
 
-/* Dashboard: selects + toast + row layout + route thumb */
-
+/* -------------------------------------------------
+   Dashboard: selects + toast + row layout + route thumb (DE-DUPED)
+------------------------------------------------- */
 .dashSelect{
-  border: 1px solid rgba(0,0,0,0.14);
+  border: 1px solid rgba(0,0,0,0.12);
   background: rgba(255,255,255,0.75);
   border-radius: 999px;
   padding: 8px 10px;
@@ -353,97 +357,18 @@ body {
 
 .dashToast{
   position: fixed;
-  right: 18px;
+  left: 50%;
   bottom: 18px;
-  z-index: 50;
-  padding: 10px 12px;
-  border-radius: 14px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 10px 14px;
+  border-radius: 999px;
   background: var(--ink);
   color: #fff;
   font-weight: 900;
   font-size: 12px;
-  box-shadow: 0 14px 30px rgba(0,0,0,0.18);
-  border: 1px solid rgba(255,255,255,0.18);
-}
-
-.dashRowTop{
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.dashRowMain{
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.routeThumb{
-  width: 160px;
-  height: 74px;
-  border-radius: 14px;
-  border: 1px solid rgba(0,0,0,0.10);
-  background: rgba(255,255,255,0.65);
-  display: grid;
-  place-items: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.routeThumbPct{
-  position: absolute;
-  bottom: 6px;
-  right: 8px;
-  font-size: 11px;
-  font-weight: 900;
-  opacity: 0.75;
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(0,0,0,0.10);
-  background: rgba(255,255,255,0.75);
-}
-
-.thumbPulse{
-  transform-origin: center;
-  animation: thumbPulse 1.4s ease-out infinite;
-}
-
-@keyframes thumbPulse{
-  0%   { transform: scale(0.65); opacity: .45; }
-  70%  { transform: scale(1.25); opacity: 0; }
-  100% { transform: scale(1.25); opacity: 0; }
-}
-
-@media (max-width: 680px){
-  .dashRowTop{ flex-direction: column; }
-  .routeThumb{ width: 100%; height: 86px; }
-}
-
-/* Dashboard: selects + toast + row layout + route thumb */
-
-.dashSelect{
-  border: 1px solid rgba(0,0,0,0.14);
-  background: rgba(255,255,255,0.75);
-  border-radius: 999px;
-  padding: 8px 10px;
-  font-weight: 900;
-  font-size: 12px;
-  outline: none;
-}
-
-.dashToast{
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 50;
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: var(--ink);
-  color: #fff;
-  font-weight: 900;
-  font-size: 12px;
-  box-shadow: 0 14px 30px rgba(0,0,0,0.18);
-  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.18);
+  border: 1px solid rgba(255,255,255,0.22);
 }
 
 .dashRowTop{
@@ -1181,17 +1106,6 @@ body {
   box-shadow: 0 4px 10px rgba(0,0,0,0.25);
 }
 
-/* Destination = hollow ring */
-.destRing span {
-  display: block;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  border: 2px solid #111;
-  background: transparent;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.25);
-}
-
 /* Destination map pin */
 .destPin {
   position: relative;
@@ -1205,7 +1119,7 @@ body {
   height: 28px;
 }
 
-.destPin.delivered { color: #2ecc71; }
+/* if you ever add .map-dark to the wrapper */
 .map-dark .destPin { color: #fff; }
 
 .destPin::after {
@@ -1287,30 +1201,3 @@ body {
 
 /* small alignment tweak */
 .subRow .metaPill{ align-self: flex-start; }
-
-/* Dashboard: select + toast */
-.dashSelect{
-  border: 1px solid rgba(0,0,0,0.12);
-  background: rgba(255,255,255,0.75);
-  border-radius: 999px;
-  padding: 8px 10px;
-  font-weight: 900;
-  font-size: 12px;
-  outline: none;
-}
-
-.dashToast{
-  position: fixed;
-  left: 50%;
-  bottom: 18px;
-  transform: translateX(-50%);
-  z-index: 9999;
-  padding: 10px 14px;
-  border-radius: 999px;
-  background: var(--ink);
-  color: #fff;
-  font-weight: 900;
-  font-size: 12px;
-  box-shadow: 0 12px 24px rgba(0,0,0,0.18);
-  border: 1px solid rgba(255,255,255,0.22);
-}

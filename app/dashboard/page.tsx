@@ -213,7 +213,6 @@ export default function DashboardPage() {
   useEffect(() => {
     const saved = localStorage.getItem("cp_sender_email");
     if (saved && emailLooksValid(saved)) {
-      // load with empty q by default
       void load(saved, "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -286,6 +285,13 @@ export default function DashboardPage() {
     return list;
   }, [letters, filter, sort]);
 
+  function onLookupKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void load();
+    }
+  }
+
   return (
     <main className="pageBg">
       <div className="wrap">
@@ -296,8 +302,7 @@ export default function DashboardPage() {
               <div className="kicker">Mailbox</div>
               <h1 className="h1">Dashboard</h1>
               <p className="muted" style={{ marginTop: 6 }}>
-                View letters you’ve sent by entering the sender email you used on
-                the write form.
+                View letters you’ve sent by entering the sender email you used on the write form.
               </p>
             </div>
 
@@ -371,12 +376,14 @@ export default function DashboardPage() {
             <label className="field">
               <span className="fieldLabel">Sender email</span>
               <input
-                className={`input ${
-                  email.trim() && !emailLooksValid(email) ? "invalid" : ""
-                }`}
+                className={`input ${email.trim() && !emailLooksValid(email) ? "invalid" : ""}`}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={onLookupKeyDown}
                 placeholder="you@email.com"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
               />
             </label>
 
@@ -386,6 +393,7 @@ export default function DashboardPage() {
                 className="input"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
+                onKeyDown={onLookupKeyDown}
                 placeholder="subject, recipient, city, token…"
               />
             </label>
@@ -398,17 +406,24 @@ export default function DashboardPage() {
                 alignItems: "center",
               }}
             >
-              <button
-                onClick={() => load()}
-                disabled={loading}
-                className="btnPrimary"
-              >
+              <button onClick={() => load()} disabled={loading} className="btnPrimary">
                 {loading ? "Loading…" : "Load letters"}
               </button>
 
-              <div className="muted">
-                Tip: search is server-side (fast + consistent).
-              </div>
+              <button
+                type="button"
+                className="btnSubtle"
+                onClick={() => {
+                  setQ("");
+                  void load(undefined, "");
+                }}
+                disabled={loading || !q.trim()}
+                title="Clear search"
+              >
+                Clear
+              </button>
+
+              <div className="muted">Tip: search is server-side (fast + consistent).</div>
             </div>
 
             {error && <div className="errorText">❌ {error}</div>}
@@ -459,59 +474,65 @@ export default function DashboardPage() {
                   ? { lat: l.current_lat, lon: l.current_lon }
                   : null;
 
-              const sentUtc = (l.sent_utc_text && l.sent_utc_text.trim()) || formatUtcFallback(l.sent_at);
-              const etaUtc = (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(l.eta_at);
+              const sentUtc =
+                (l.sent_utc_text && l.sent_utc_text.trim()) || formatUtcFallback(l.sent_at);
+              const etaUtc =
+                (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(l.eta_at);
 
               return (
                 <div key={l.id} className="card">
-                  {/* TOP ROW: title + thumb + actions */}
-                  <div className="cardHead" style={{ alignItems: "flex-start", marginBottom: 10 }}>
-                    <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                      <div>
-                        <div className="kicker">Letter</div>
-                        <div className="h2">
-                          {l.subject?.trim() ? l.subject : "(No subject)"}
-                        </div>
-                        <div className="muted" style={{ marginTop: 6 }}>
-                          To: <strong>{l.to_name || "Recipient"}</strong>{" "}
-                          <span style={{ opacity: 0.65 }}>
-                            • {l.origin_name} → {l.dest_name}
-                          </span>
-                        </div>
+                  {/* Top row: title + route thumb */}
+                  <div className="dashRowTop" style={{ marginBottom: 10 }}>
+                    <div className="dashRowMain">
+                      <div className="kicker">Letter</div>
+                      <div className="h2">{l.subject?.trim() ? l.subject : "(No subject)"}</div>
+                      <div className="muted" style={{ marginTop: 6 }}>
+                        To: <strong>{l.to_name || "Recipient"}</strong>{" "}
+                        <span style={{ opacity: 0.65 }}>
+                          • {l.origin_name} → {l.dest_name}
+                        </span>
                       </div>
-
-                      {canThumb ? (
-                        <RouteThumb
-                          origin={{ lat: l.origin_lat, lon: l.origin_lon }}
-                          dest={{ lat: l.dest_lat, lon: l.dest_lon }}
-                          current={current}
-                          progress={l.progress ?? 0}
-                        />
-                      ) : null}
                     </div>
 
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                      <div className="metaPill">
-                        {statusEmoji} <strong>{statusLabel}</strong>
-                      </div>
+                    {canThumb ? (
+                      <RouteThumb
+                        origin={{ lat: l.origin_lat, lon: l.origin_lon }}
+                        dest={{ lat: l.dest_lat, lon: l.dest_lon }}
+                        current={current}
+                        progress={l.progress ?? 0}
+                      />
+                    ) : null}
+                  </div>
 
-                      <button
-                        type="button"
-                        className="btnGhost"
-                        onClick={async () => {
-                          await copyToClipboard(statusUrl);
-                          setToast("Link copied 🕊️");
-                        }}
-                        style={{ padding: "10px 12px" }}
-                        title="Copy status link"
-                      >
-                        Copy link
-                      </button>
+                  {/* Status + actions row */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      justifyContent: "flex-end",
+                    }}
+                  >
+                    <div className="metaPill">
+                      {statusEmoji} <strong>{statusLabel}</strong>
                     </div>
+
+                    <button
+                      type="button"
+                      className="btnGhost"
+                      onClick={async () => {
+                        await copyToClipboard(statusUrl);
+                        setToast("Link copied 🕊️");
+                      }}
+                      title="Copy status link"
+                    >
+                      Copy link
+                    </button>
                   </div>
 
                   {/* time row */}
-                  <div className="muted" style={{ marginTop: 2 }}>
+                  <div className="muted" style={{ marginTop: 10 }}>
                     Sent (UTC): {sentUtc} • <strong>ETA (UTC):</strong> {etaUtc}
                     {!l.delivered && <> • (T-minus {countdown})</>}
                   </div>
