@@ -888,6 +888,47 @@ body {
 }
 
 /* -------------------------------------------------
+   Sleeping pigeon — calm heartbeat pulse
+------------------------------------------------- */
+
+/* Hide flight pulse while sleeping */
+.pigeonMarker.sleep .pigeonPulseRing {
+  display: none;
+}
+
+/* Red heartbeat ring */
+.pigeonSleepRing{
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 2px solid rgba(217, 45, 32, 0.55);
+  transform: scale(0.55);
+  opacity: 0;
+  z-index: 2;
+  display: none;
+}
+
+/* Activate heartbeat only in sleep */
+.pigeonMarker.sleep .pigeonSleepRing{
+  display: block;
+  animation: sleepyHeartbeat 2.4s ease-out infinite;
+}
+
+/* Red dot while sleeping */
+.pigeonMarker.sleep .pigeonDot{
+  background: #d92d20;
+  border-color: #fff;
+}
+
+/* Slow, organic heartbeat */
+@keyframes sleepyHeartbeat{
+  0%   { transform: scale(0.55); opacity: 0.0; }
+  18%  { opacity: 0.55; }
+  40%  { transform: scale(0.85); opacity: 0.25; }
+  100% { transform: scale(1.05); opacity: 0.0; }
+}
+
+/* -------------------------------------------------
    Shared: animated pulse dot (timeline + anywhere)
 ------------------------------------------------- */
 .livePulseRow{

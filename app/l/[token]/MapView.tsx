@@ -203,12 +203,12 @@ export default function MapView(props: {
       L.divIcon({
         className: `pigeonMarker ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""}`,
         html: `
-          <div class="pigeonPulseWrap">
-            <span class="pigeonPulseRing"></span>
-            <span class="pigeonPulseRing ring2"></span>
-            <span class="pigeonSleepRing"></span>
-            <div class="pigeonDot"></div>
-          </div>
+  <div class="pigeonPulseWrap">
+    <span class="pigeonPulseRing"></span>
+    <span class="pigeonPulseRing ring2"></span>
+    <span class="pigeonSleepRing"></span>   <!-- 👈 ADD THIS -->
+    <div class="pigeonDot"></div>
+  </div>
         `,
         iconSize: [44, 44],
         iconAnchor: [22, 22],
