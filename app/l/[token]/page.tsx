@@ -24,8 +24,8 @@ type Letter = {
   sent_at: string;
   eta_at: string;
 
-  // ✅ NEW: comes from /api/letters/[token]
-  eta_utc_text?: string; // e.g. "1/3/2026, 8:22:10 PM UTC"
+  // ✅ comes from /api/letters/[token]
+  eta_utc_text?: string;
 };
 
 type Checkpoint = {
@@ -35,8 +35,8 @@ type Checkpoint = {
   at: string;
 };
 
-// ✅ map style union
-type MapStyle = "carto-positron" | "carto-voyager" | "carto-dark";
+// ✅ UPDATED: matches MapView.tsx
+type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
@@ -68,11 +68,9 @@ function milestoneTimeISO(sentISO: string, etaISO: string, fraction: number) {
   return new Date(t).toISOString();
 }
 
-// ✅ NEW: ultra-simple UTC label fallback (if API hasn’t added eta_utc_text yet)
 function formatUtcFallback(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
-  // ISO is always UTC — this is crude but consistent and “UTC”.
   return `${d.toISOString().replace("T", " ").replace("Z", "")} UTC`;
 }
 
@@ -298,17 +296,25 @@ function RailTimeline({
 
           return (
             <div key={it.key} className="railItem">
-              <div className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${shouldPop ? "pop" : ""}`}>
+              <div
+                className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${
+                  shouldPop ? "pop" : ""
+                }`}
+              >
                 <span className="railDot">{isPast ? "✓" : ""}</span>
               </div>
 
-              <div className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${isCurrent ? "current" : ""}`}>
+              <div
+                className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${
+                  isCurrent ? "current" : ""
+                }`}
+              >
                 {isCurrent && (
-  <div className="pigeonTag livePulseRow">
-    <span className="livePulseDot" aria-hidden />
-    <span>Pigeon is here</span>
-  </div>
-)}
+                  <div className="pigeonTag livePulseRow">
+                    <span className="livePulseDot" aria-hidden />
+                    <span>Pigeon is here</span>
+                  </div>
+                )}
 
                 <div className="railTitleRow">
                   <div className="railTitle">{it.name}</div>
@@ -342,9 +348,20 @@ export default function LetterStatusPage() {
 
   const [mapStyle, setMapStyle] = useState<MapStyle>("carto-positron");
 
+  // ✅ UPDATED: migrate old saved "carto-dark" to new light option
   useEffect(() => {
-    const saved = window.localStorage.getItem("pigeon_map_style") as MapStyle | null;
-    if (saved) setMapStyle(saved);
+    const rawSaved = window.localStorage.getItem("pigeon_map_style");
+    const saved = (rawSaved || "").trim();
+
+    if (saved === "carto-dark") {
+      setMapStyle("carto-positron-nolabels");
+      window.localStorage.setItem("pigeon_map_style", "carto-positron-nolabels");
+      return;
+    }
+
+    if (saved === "carto-positron" || saved === "carto-voyager" || saved === "carto-positron-nolabels") {
+      setMapStyle(saved);
+    }
   }, []);
 
   useEffect(() => {
@@ -466,12 +483,15 @@ export default function LetterStatusPage() {
       at: cp.at,
       kind: "checkpoint" as const,
     }));
-const ms = milestones.map((m) => ({
-  key: `ms-${m.pct}`,
-  name: m.label, // ✅ no pigeon
-  at: m.atISO,
-  kind: "milestone" as const,
-}));
+
+    // ✅ no pigeon emoji in milestones
+    const ms = milestones.map((m) => ({
+      key: `ms-${m.pct}`,
+      name: m.label,
+      at: m.atISO,
+      kind: "milestone" as const,
+    }));
+
     return [...cps, ...ms].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
   }, [checkpoints, milestones]);
 
@@ -491,7 +511,6 @@ const ms = milestones.map((m) => ({
     return timelineItems[idx]?.key ?? null;
   }, [timelineItems, now, delivered]);
 
-  // ✅ NEW: one source of truth for what we print on screen
   const etaTextUTC = useMemo(() => {
     if (!letter) return "";
     return (letter.eta_utc_text && letter.eta_utc_text.trim()) || formatUtcFallback(letter.eta_at);
@@ -522,7 +541,6 @@ const ms = milestones.map((m) => ({
   return (
     <main className="pageBg">
       <main className="wrap">
-        {/* TOP ROUTE BANNER */}
         <section className="routeBanner">
           <div className="bannerTop">
             <div>
@@ -567,13 +585,11 @@ const ms = milestones.map((m) => ({
 
             <div className="etaBox">
               <div className="kicker">ETA (UTC)</div>
-              {/* ✅ CHANGED: show UTC text (matches emails) */}
               <div className="etaTime">{etaTextUTC}</div>
               {!delivered && <div className="etaSub">T-minus {countdown}</div>}
             </div>
           </div>
 
-          {/* stats row */}
           <div className="statsRow">
             <div className="stat">
               <span className="ico">
@@ -607,7 +623,6 @@ const ms = milestones.map((m) => ({
           </div>
         </section>
 
-        {/* LETTER */}
         <div className="card" style={{ marginTop: 14, position: "relative" }}>
           <ConfettiBurst show={confetti} />
 
@@ -637,7 +652,6 @@ const ms = milestones.map((m) => ({
 
               {!delivered || revealStage !== "open" ? (
                 <div style={{ position: delivered ? "absolute" : "relative", inset: 0 }}>
-                  {/* ✅ CHANGED: use same UTC string here too */}
                   <WaxSealOverlay etaText={etaTextUTC} cracking={delivered && revealStage === "crack"} />
                 </div>
               ) : null}
@@ -647,9 +661,7 @@ const ms = milestones.map((m) => ({
           <div className="token">Token: {letter.public_token}</div>
         </div>
 
-        {/* GRID */}
         <div className="grid">
-          {/* MAP CARD */}
           <div className="card">
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
               <div className="kicker">Map</div>
@@ -663,6 +675,7 @@ const ms = milestones.map((m) => ({
                 >
                   Light
                 </button>
+
                 <button
                   type="button"
                   className={`mapStyleBtn ${mapStyle === "carto-voyager" ? "on" : ""}`}
@@ -671,13 +684,15 @@ const ms = milestones.map((m) => ({
                 >
                   Voyager
                 </button>
+
+                {/* ✅ REPLACED: Dark -> No labels */}
                 <button
                   type="button"
-                  className={`mapStyleBtn ${mapStyle === "carto-dark" ? "on" : ""}`}
-                  onClick={() => setMapStyle("carto-dark")}
-                  aria-pressed={mapStyle === "carto-dark"}
+                  className={`mapStyleBtn ${mapStyle === "carto-positron-nolabels" ? "on" : ""}`}
+                  onClick={() => setMapStyle("carto-positron-nolabels")}
+                  aria-pressed={mapStyle === "carto-positron-nolabels"}
                 >
-                  Dark
+                  No Labels
                 </button>
               </div>
             </div>
@@ -699,6 +714,7 @@ const ms = milestones.map((m) => ({
                   <span key={p} className="barTick" style={{ left: `${p}%` }} />
                 ))}
               </div>
+
               <div className="barMeta">
                 <div className="mutedStrong">{Math.round(progress * 100)}%</div>
                 <div className="muted">{currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}</div>
@@ -715,7 +731,6 @@ const ms = milestones.map((m) => ({
             </div>
           </div>
 
-          {/* TIMELINE CARD */}
           <div className="card">
             <div className="cardHead">
               <div>

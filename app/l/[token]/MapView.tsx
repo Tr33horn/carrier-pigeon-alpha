@@ -12,7 +12,8 @@ import {
 import L from "leaflet";
 
 // ✅ Match the LetterStatusPage values
-export type MapStyle = "carto-positron" | "carto-voyager" | "carto-dark";
+// Swapped "carto-dark" -> "carto-positron-nolabels" (light + no labels)
+export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
@@ -28,15 +29,14 @@ function getCarto(style: MapStyle) {
     return {
       url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
       attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-      isDark: false,
     };
   }
 
-  if (style === "carto-dark") {
+  // ✅ NEW: light, no labels
+  if (style === "carto-positron-nolabels") {
     return {
-      url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      url: "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
       attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-      isDark: true,
     };
   }
 
@@ -44,7 +44,6 @@ function getCarto(style: MapStyle) {
   return {
     url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-    isDark: false,
   };
 }
 
@@ -107,63 +106,67 @@ export default function MapView(props: {
 
   const inFlight = useMemo(() => clamp01(props.progress) < 1, [props.progress]);
 
-const pigeonIcon = useMemo(
-  () =>
-    L.divIcon({
-      className: inFlight ? "pigeonMarker live" : "pigeonMarker",
-      html: `
-        <div class="pigeonPulseWrap">
-          <span class="pigeonPulseRing"></span>
-          <span class="pigeonPulseRing ring2"></span>
-          <div class="pigeonDot"></div>
-        </div>
-      `,
-      iconSize: [44, 44],
-      iconAnchor: [22, 22],
-    }),
-  [inFlight]
-);
+  // ✅ Pulsing live marker (no pigeon emoji)
+  const liveIcon = useMemo(
+    () =>
+      L.divIcon({
+        className: inFlight ? "pigeonMarker live" : "pigeonMarker",
+        html: `
+          <div class="pigeonPulseWrap">
+            <span class="pigeonPulseRing"></span>
+            <span class="pigeonPulseRing ring2"></span>
+            <div class="pigeonDot"></div>
+          </div>
+        `,
+        iconSize: [44, 44],
+        iconAnchor: [22, 22],
+      }),
+    [inFlight]
+  );
 
-const originIcon = useMemo(
-  () =>
-    L.divIcon({
-      className: "routeMarker originDot",
-      html: `<span></span>`,
-      iconSize: [12, 12],
-      iconAnchor: [6, 6],
-    }),
-  []
-);
+  // ✅ Origin = small filled dot
+  const originIcon = useMemo(
+    () =>
+      L.divIcon({
+        className: "routeMarker originDot",
+        html: `<span></span>`,
+        iconSize: [12, 12],
+        iconAnchor: [6, 6],
+      }),
+    []
+  );
 
-const destIcon = useMemo(
-  () =>
-    L.divIcon({
-      className: "routeMarker destPin",
-      html: `
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.2"
-          />
-          <circle cx="12" cy="10" r="2.5" fill="currentColor"/>
-        </svg>
-      `,
-      iconSize: [22, 28],
-      iconAnchor: [11, 28],
-    }),
-  []
-);
+  // ✅ Destination = map pin icon
+  const destIcon = useMemo(
+    () =>
+      L.divIcon({
+        className: "routeMarker destPin",
+        html: `
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linejoin="round"
+            />
+            <circle cx="12" cy="10" r="2.5" fill="currentColor"/>
+          </svg>
+        `,
+        iconSize: [22, 28],
+        iconAnchor: [11, 28],
+      }),
+    []
+  );
 
   const line: [number, number][] = [
     [origin.lat, origin.lon],
     [dest.lat, dest.lon],
   ];
 
-  // ✅ Optional: better contrast on dark tiles
-  const routeColor = tile.isDark ? "rgba(255,255,255,0.85)" : "#121212";
-  const routeOpacity = tile.isDark ? 0.8 : 0.55;
+  // All styles are light now → keep route simple/consistent
+  const routeColor = "#121212";
+  const routeOpacity = 0.55;
 
   return (
     <div
@@ -197,7 +200,7 @@ const destIcon = useMemo(
         <Marker position={[origin.lat, origin.lon]} icon={originIcon} />
         <Marker position={[dest.lat, dest.lon]} icon={destIcon} />
 
-        <Marker position={[current.lat, current.lon]} icon={pigeonIcon}>
+        <Marker position={[current.lat, current.lon]} icon={liveIcon}>
           <Tooltip
             direction="top"
             offset={[0, -10]}
