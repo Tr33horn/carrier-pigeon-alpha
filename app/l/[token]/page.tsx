@@ -567,23 +567,32 @@ export default function LetterStatusPage() {
   }, [checkpoints]);
 
   // ✅ Timeline items: checkpoints in idx order, then milestones (does NOT reorder checkpoints)
-  const timelineItems = useMemo(() => {
-    const cps = checkpointsOrdered.map((cp) => ({
+const timelineItems = useMemo(() => {
+  const hideFromTimeline = (label?: string) => {
+    const s = (label || "").trim().toLowerCase();
+    // tweak these if your label text differs
+    return s === "5% reached" || s.includes("5% reached");
+  };
+
+  const cps = checkpointsOrdered
+    .filter((cp) => !hideFromTimeline(cp.name))
+    .map((cp) => ({
       key: `cp-${cp.id}`,
       name: cp.name,
       at: cp.at,
       kind: "checkpoint" as const,
     }));
 
-    const ms = milestones.map((m) => ({
-      key: `ms-${m.pct}`,
-      name: m.label,
-      at: m.atISO,
-      kind: "milestone" as const,
-    }));
+  const ms = milestones.map((m) => ({
+    key: `ms-${m.pct}`,
+    name: m.label,
+    at: m.atISO,
+    kind: "milestone" as const,
+  }));
 
-    return [...cps, ...ms];
-  }, [checkpointsOrdered, milestones]);
+  // checkpoints stay in idx order; milestones stay after
+  return [...cps, ...ms];
+}, [checkpointsOrdered, milestones]);
 
   // Current key: still time-based, but doesn’t depend on sorting-by-at anymore
   const currentTimelineKey = useMemo(() => {
