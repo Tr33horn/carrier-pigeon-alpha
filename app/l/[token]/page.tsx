@@ -646,7 +646,7 @@ export default function LetterStatusPage() {
                         <Ico name="pin" />
                       </span>
                       <span>
-                        Currently over: <strong>{currentlyOver}</strong>
+                        Location: <strong>{currentlyOver}</strong>
                       </span>
                     </div>
                   </>
