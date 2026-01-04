@@ -1,10 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, Polyline, Marker, Tooltip, useMap } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Polyline,
+  Marker,
+  Tooltip,
+  useMap,
+} from "react-leaflet";
 import L from "leaflet";
 
-export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
+// ✅ Match the LetterStatusPage values
+export type MapStyle =
+  | "carto-positron"
+  | "carto-voyager"
+  | "carto-positron-nolabels";
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
@@ -46,22 +57,106 @@ function FitBounds({ bounds }: { bounds: [number, number][] }) {
   return null;
 }
 
-function normalizeGeoText(text?: string) {
-  const t = (text || "").trim();
-  if (!t) return "";
+/** Keep tooltips sane + always include "Location:" */
+function normalizeTooltip(text?: string) {
+  let t = (text || "").trim();
+  if (!t) return "Location: Somewhere over the U.S.";
 
-  // Strip accidental prefixes coming from upstream
-  return t
-    .replace(/^currently over:\s*/i, "")
-    .replace(/^location:\s*/i, "")
-    .trim();
+  // strip accidental prefixes
+  t = t.replace(/^currently over:\s*/i, "").trim();
+
+  if (!/^location:\s*/i.test(t)) t = `Location: ${t}`;
+  return t;
+}
+
+/** tiny deterministic "random" from coords so each route gets its own vibe */
+function seedFromCoords(o: { lat: number; lon: number }, d: { lat: number; lon: number }) {
+  const n =
+    Math.sin(o.lat * 12.9898 + o.lon * 78.233 + d.lat * 37.719 + d.lon * 11.131) * 43758.5453;
+  return n - Math.floor(n); // 0..1
+}
+
+/** Quadratic Bezier point */
+function bezier2(
+  a: { x: number; y: number },
+  c: { x: number; y: number },
+  b: { x: number; y: number },
+  t: number
+) {
+  const u = 1 - t;
+  const x = u * u * a.x + 2 * u * t * c.x + t * t * b.x;
+  const y = u * u * a.y + 2 * u * t * c.y + t * t * b.y;
+  return { x, y };
+}
+
+/**
+ * Build a static (non-animated) curve whose shape depends on progress.
+ * That means it only "changes" when the pigeon advances.
+ */
+function makeStaticWindCurve(args: {
+  origin: { lat: number; lon: number };
+  dest: { lat: number; lon: number };
+  progress: number; // 0..1
+  points?: number;
+  endT?: number; // 0..1 (for partial path)
+}) {
+  const { origin, dest } = args;
+  const steps = Math.max(16, args.points ?? 44);
+  const endT = clamp01(args.endT ?? 1);
+
+  // XY in lon/lat
+  const A = { x: origin.lon, y: origin.lat };
+  const B = { x: dest.lon, y: dest.lat };
+
+  const dx = B.x - A.x;
+  const dy = B.y - A.y;
+  const dist = Math.hypot(dx, dy);
+
+  // midpoint
+  const mx = (A.x + B.x) / 2;
+  const my = (A.y + B.y) / 2;
+
+  // perpendicular unit
+  const px = -dy;
+  const py = dx;
+  const plen = Math.hypot(px, py) || 1;
+  const ux = px / plen;
+  const uy = py / plen;
+
+  // stable per-route seed
+  const s = seedFromCoords(origin, dest);
+
+  // base arc proportional to distance, clamped (degrees-ish)
+  const baseArc = Math.min(2.2, Math.max(0.18, dist * 0.16));
+
+  // "wind" varies with progress, not time (static unless progress changes)
+  // seed offsets the phase so every route is unique
+  const p = clamp01(args.progress);
+  const wind =
+    Math.sin((p * 6.0 + s * 10.0) * Math.PI * 2) * 0.18 +
+    Math.sin((p * 2.7 + s * 3.3) * Math.PI * 2) * 0.10;
+
+  const arc = baseArc * (1 + wind);
+
+  const C = { x: mx + ux * arc, y: my + uy * arc };
+
+  const pts: [number, number][] = [];
+  const N = Math.floor(steps * endT);
+
+  for (let i = 0; i <= N; i++) {
+    const t = (i / Math.max(1, N)) * endT;
+    const p2 = bezier2(A, C, B, t);
+    pts.push([p2.y, p2.x]);
+  }
+
+  return pts;
 }
 
 export default function MapView(props: {
   origin: { lat: number; lon: number };
   dest: { lat: number; lon: number };
   progress: number; // 0..1
-  tooltipText?: string; // e.g. "Over Yakima Valley" OR "Yakima Valley" OR "Delivered"
+  tooltipText?: string;
   mapStyle?: MapStyle;
 }) {
   const { origin, dest } = props;
@@ -69,9 +164,12 @@ export default function MapView(props: {
   const mapStyle: MapStyle = props.mapStyle ?? "carto-positron";
   const tile = useMemo(() => getCarto(mapStyle), [mapStyle]);
 
-  const [displayProgress, setDisplayProgress] = useState(() => clamp01(props.progress));
+  const [displayProgress, setDisplayProgress] = useState(() =>
+    clamp01(props.progress)
+  );
   const rafRef = useRef<number | null>(null);
 
+  // smooth marker progress (unchanged)
   useEffect(() => {
     const from = displayProgress;
     const to = clamp01(props.progress);
@@ -103,6 +201,7 @@ export default function MapView(props: {
 
   const inFlight = useMemo(() => clamp01(props.progress) < 1, [props.progress]);
 
+  // icons
   const liveIcon = useMemo(
     () =>
       L.divIcon({
@@ -153,20 +252,29 @@ export default function MapView(props: {
     []
   );
 
-  const line: [number, number][] = [
+  // bounds should remain stable (origin + dest only)
+  const boundsLine: [number, number][] = [
     [origin.lat, origin.lon],
     [dest.lat, dest.lon],
   ];
 
-  const routeColor = "#121212";
-  const routeOpacity = 0.55;
+  // 1) straight ideal route (static)
+  const straightLine: [number, number][] = boundsLine;
 
-  const geoText = useMemo(() => {
-    const t = normalizeGeoText(props.tooltipText);
-    if (!t) return "Somewhere over the U.S.";
-    if (!inFlight) return "Delivered";
-    return t;
-  }, [props.tooltipText, inFlight]);
+  // 2) dotted "actual flown" route so far (static, depends on progress)
+  const flownPts = useMemo(() => {
+    const p = clamp01(props.progress);
+    if (p <= 0.0001) return [[origin.lat, origin.lon]] as [number, number][];
+    return makeStaticWindCurve({
+      origin,
+      dest,
+      progress: p,
+      points: 52,
+      endT: p, // only up to progress
+    });
+  }, [origin, dest, props.progress]);
+
+  const tooltip = useMemo(() => normalizeTooltip(props.tooltipText), [props.tooltipText]);
 
   return (
     <div
@@ -186,14 +294,28 @@ export default function MapView(props: {
       >
         <TileLayer attribution={tile.attribution} url={tile.url} />
 
-        <FitBounds bounds={line} />
+        <FitBounds bounds={boundsLine} />
 
+        {/* Ideal straight line route */}
         <Polyline
-          positions={line}
+          positions={straightLine}
           pathOptions={{
-            color: routeColor,
+            color: "#121212",
             weight: 3,
-            opacity: routeOpacity,
+            opacity: 0.35,
+          }}
+        />
+
+        {/* Actual flown route so far (dotted + slightly "windy") */}
+        <Polyline
+          positions={flownPts}
+          pathOptions={{
+            color: "#121212",
+            weight: 3,
+            opacity: 0.75,
+            dashArray: "6 8",
+            lineCap: "round",
+            lineJoin: "round",
           }}
         />
 
@@ -211,7 +333,7 @@ export default function MapView(props: {
           >
             <span className="pigeonTooltipRow">
               {inFlight && <span className="pigeonLiveDot" />}
-              <span className="pigeonTooltipText">{geoText}</span>
+              <span className="pigeonTooltipText">{tooltip}</span>
             </span>
           </Tooltip>
         </Marker>
