@@ -201,7 +201,7 @@ export default function MapView(props: {
   const liveIcon = useMemo(
     () =>
       L.divIcon({
-        className: `pigeonMarker ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""}`,
+className: `pigeonMarker ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} ${isDelivered ? "delivered" : ""}`,
         html: `
   <div class="pigeonPulseWrap">
     <span class="pigeonPulseRing"></span>

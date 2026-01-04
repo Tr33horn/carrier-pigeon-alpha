@@ -838,94 +838,69 @@ body {
   border: 1px solid rgba(255,255,255,0.30);
 }
 
-/* Sleeping mode: stop the black pulse rings */
-.pigeonMarker.sleep .pigeonPulseRing { display: none; }
+/* -------------------------------------------------
+   Sleeping pigeon marker — "sleepy heartbeat"
+   (single source of truth; no duplicates)
+------------------------------------------------- */
 
-/* Red sleep pulse ring */
-.pigeonSleepRing{
-  position:absolute;
-  inset:0;
-  border-radius:999px;
-  border:2px solid rgba(217,45,32,0.65);
-  transform: scale(0.55);
+/* While sleeping: kill the flight pulse rings (even if .live is present) */
+.pigeonMarker.sleep .pigeonPulseRing {
+  display: none !important;
+}
+
+/* Sleep ring element (your MapView injects <span class="pigeonSleepRing"></span>) */
+.pigeonSleepRing {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 2px solid rgba(217, 45, 32, 0.55);
+  transform: scale(0.60);
   opacity: 0;
   z-index: 2;
-  display: none; /* only show when sleeping */
+  display: none; /* only show in sleep mode */
 }
 
-.pigeonMarker.sleep .pigeonSleepRing{
+/* Turn it on only in sleep mode */
+.pigeonMarker.sleep .pigeonSleepRing {
   display: block;
-  animation: sleepPulse 1.8s ease-out infinite;
-}
-
-@keyframes sleepPulse{
-  0%   { transform: scale(0.55); opacity: 0.0; }
-  20%  { opacity: 0.55; }
-  100% { transform: scale(1.05); opacity: 0.0; }
+  animation: sleepyHeartbeat 2.6s ease-in-out infinite;
 }
 
 /* Sleeping dot becomes red */
-.pigeonMarker.sleep .pigeonDot{
+.pigeonMarker.sleep .pigeonDot {
   background: #d92d20;
   border-color: #fff;
 }
 
-/* Tooltip dot red + no animation */
-.pigeonLiveDot.sleep{
+/* Tooltip dot becomes red + stops pulsing */
+.pigeonLiveDot.sleep {
   background: #d92d20;
   box-shadow: none;
   animation: none;
 }
 
-/* Optional: make the LIVE pill visually “sleep” too */
-.liveWrap.sleep{
-  background: rgba(217,45,32,0.92);
+/* Optional: pill style if you like the red SLEEPING look */
+.liveWrap.sleep {
+  background: rgba(217, 45, 32, 0.92);
 }
-.liveDot.sleep{
+.liveDot.sleep {
   background: #fff;
   box-shadow: none;
   animation: none;
 }
 
-/* -------------------------------------------------
-   Sleeping pigeon — calm heartbeat pulse
-------------------------------------------------- */
+/* A calm double-beat: bump...bump...rest */
+@keyframes sleepyHeartbeat {
+  0%   { transform: scale(0.60); opacity: 0.00; }
+  12%  { opacity: 0.55; }
+  20%  { transform: scale(0.82); opacity: 0.28; }
 
-/* Hide flight pulse while sleeping */
-.pigeonMarker.sleep .pigeonPulseRing {
-  display: none;
-}
+  /* tiny second beat */
+  32%  { transform: scale(0.76); opacity: 0.20; }
+  40%  { transform: scale(0.90); opacity: 0.22; }
 
-/* Red heartbeat ring */
-.pigeonSleepRing{
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-  border: 2px solid rgba(217, 45, 32, 0.55);
-  transform: scale(0.55);
-  opacity: 0;
-  z-index: 2;
-  display: none;
-}
-
-/* Activate heartbeat only in sleep */
-.pigeonMarker.sleep .pigeonSleepRing{
-  display: block;
-  animation: sleepyHeartbeat 2.4s ease-out infinite;
-}
-
-/* Red dot while sleeping */
-.pigeonMarker.sleep .pigeonDot{
-  background: #d92d20;
-  border-color: #fff;
-}
-
-/* Slow, organic heartbeat */
-@keyframes sleepyHeartbeat{
-  0%   { transform: scale(0.55); opacity: 0.0; }
-  18%  { opacity: 0.55; }
-  40%  { transform: scale(0.85); opacity: 0.25; }
-  100% { transform: scale(1.05); opacity: 0.0; }
+  /* fade out + rest */
+  100% { transform: scale(1.06); opacity: 0.00; }
 }
 
 /* -------------------------------------------------

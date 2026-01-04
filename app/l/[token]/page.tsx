@@ -108,6 +108,12 @@ function formatUtcFallback(iso: string) {
   return `${d.toISOString().replace("T", " ").replace("Z", "")} UTC`;
 }
 
+function addHoursISO(iso: string, hours: number) {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return iso;
+  return new Date(t + hours * 3600_000).toISOString();
+}
+
 /* ---------- tiny icon system (inline SVG) ---------- */
 function Ico({
   name,
@@ -330,11 +336,15 @@ function RailTimeline({
 
           return (
             <div key={it.key} className="railItem">
-              <div className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${shouldPop ? "pop" : ""}`}>
+              <div
+                className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${shouldPop ? "pop" : ""}`}
+              >
                 <span className="railDot">{isPast ? "✓" : ""}</span>
               </div>
 
-              <div className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${isCurrent ? "current" : ""}`}>
+              <div
+                className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${isCurrent ? "current" : ""}`}
+              >
                 {isCurrent && (
                   <div className="pigeonTag livePulseRow">
                     <span className="livePulseDot" aria-hidden />
@@ -431,7 +441,7 @@ export default function LetterStatusPage() {
         setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
         setCurrentOverText(typeof data.current_over_text === "string" ? data.current_over_text : null);
 
-        // ✅ NEW: sleep-aware flight info
+        // ✅ sleep-aware flight info
         setFlight((data.flight ?? null) as Flight | null);
 
         // ✅ items (badges/addons)
@@ -480,11 +490,13 @@ export default function LetterStatusPage() {
     return (letter.eta_at_adjusted && letter.eta_at_adjusted.trim()) || letter.eta_at;
   }, [letter]);
 
-  // ✅ sleep-aware progress (server is source of truth)
+  const sleeping = !!flight?.sleeping;
+
+  // ✅ server is source of truth (progress)
   const progress = useMemo(() => {
     if (flight && Number.isFinite(flight.progress)) return clamp01(flight.progress);
-    // fallback (should rarely happen)
     if (!letter) return 0;
+
     const sent = new Date(letter.sent_at).getTime();
     const eta = new Date(effectiveEtaISO).getTime();
     const t = now.getTime();
@@ -528,10 +540,8 @@ export default function LetterStatusPage() {
     return Math.max(0, Math.floor((now.getTime() - lastFetchedAt.getTime()) / 1000));
   }, [now, lastFetchedAt]);
 
-  // ✅ prefer server current_over_text, then cp.geo_text, then cp.name
   const currentlyOver = useMemo(() => {
     if (delivered) return "Delivered";
-
     if (currentOverText && currentOverText.trim()) return currentOverText;
 
     const fallback =
@@ -542,16 +552,16 @@ export default function LetterStatusPage() {
     return fallback;
   }, [delivered, currentOverText, currentCheckpoint]);
 
-  // ✅ The actual tooltip string should come from server (sleep-aware, includes "Location:")
+  // ✅ prefer server tooltip (sleep-aware; should already include "Location:")
   const mapTooltip = useMemo(() => {
     if (flight?.tooltip_text && flight.tooltip_text.trim()) return flight.tooltip_text;
-    // fallback (keeps label)
     if (delivered) return "Location: Delivered";
     return `Location: ${currentlyOver || "somewhere over the U.S."}`;
   }, [flight?.tooltip_text, delivered, currentlyOver]);
 
   const showLive = !delivered;
 
+  // ✅ timeline: checkpoints + milestones + (optional) current sleep window
   const timelineItems = useMemo(() => {
     const cps = checkpoints.map((cp) => ({
       key: `cp-${cp.id}`,
@@ -567,8 +577,31 @@ export default function LetterStatusPage() {
       kind: "milestone" as const,
     }));
 
-    return [...cps, ...ms].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
-  }, [checkpoints, milestones]);
+    const sleepEvents: { key: string; name: string; at: string; kind: "milestone" }[] = [];
+
+    // Only add sleep window if currently sleeping and we have a wake time
+    if (!delivered && sleeping && flight?.sleep_until_iso) {
+      const wakeISO = flight.sleep_until_iso;
+      const sleepStartISO = addHoursISO(wakeISO, -8);
+
+      sleepEvents.push(
+        {
+          key: `sleep-start-${wakeISO}`,
+          name: "Pigeon fell asleep 💤",
+          at: sleepStartISO,
+          kind: "milestone" as const,
+        },
+        {
+          key: `sleep-end-${wakeISO}`,
+          name: "Pigeon woke up ☀️",
+          at: wakeISO,
+          kind: "milestone" as const,
+        }
+      );
+    }
+
+    return [...cps, ...ms, ...sleepEvents].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  }, [checkpoints, milestones, delivered, sleeping, flight?.sleep_until_iso]);
 
   const currentTimelineKey = useMemo(() => {
     if (delivered) return null;
@@ -588,7 +621,6 @@ export default function LetterStatusPage() {
 
   const etaTextUTC = useMemo(() => {
     if (!letter) return "";
-    // your route API now formats eta_utc_text from eta_at_adjusted
     return (letter.eta_utc_text && letter.eta_utc_text.trim()) || formatUtcFallback(effectiveEtaISO);
   }, [letter, effectiveEtaISO]);
 
@@ -601,8 +633,12 @@ export default function LetterStatusPage() {
     });
   }, [items.badges]);
 
-  const sleeping = !!flight?.sleeping;
-  const markerMode: Flight["marker_mode"] = delivered ? "delivered" : sleeping ? "sleeping" : "flying";
+  // ✅ markerMode: prefer server, then derived fallback
+  const markerMode: Flight["marker_mode"] = useMemo(() => {
+    if (delivered) return "delivered";
+    if (flight?.marker_mode) return flight.marker_mode;
+    return sleeping ? "sleeping" : "flying";
+  }, [delivered, flight?.marker_mode, sleeping]);
 
   if (error) {
     return (
@@ -717,6 +753,7 @@ export default function LetterStatusPage() {
         </section>
 
         <div className="card" style={{ marginTop: 14, position: "relative" }}>
+          {/* ✅ Confetti only on delivery */}
           <ConfettiBurst show={confetti} />
 
           <div className="cardHead" style={{ marginBottom: 8 }}>
@@ -739,10 +776,7 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div
-                className={delivered && revealStage === "open" ? "bodyReveal" : ""}
-                style={{ opacity: delivered ? 1 : 0 }}
-              >
+              <div className={delivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: delivered ? 1 : 0 }}>
                 <div className="body">{delivered ? (letter.body ?? "") : ""}</div>
               </div>
 
@@ -794,14 +828,14 @@ export default function LetterStatusPage() {
             </div>
 
             <div style={{ marginTop: 12 }}>
-<MapView
-  origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-  dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-  progress={progress}
-  tooltipText={mapTooltip}
-  mapStyle={mapStyle}
-  markerMode={markerMode}
-/>
+              <MapView
+                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+                progress={progress}
+                tooltipText={mapTooltip}
+                mapStyle={mapStyle}
+                markerMode={markerMode}
+              />
             </div>
 
             <div style={{ marginTop: 14 }}>
@@ -891,11 +925,7 @@ export default function LetterStatusPage() {
                           </div>
                         </div>
 
-                        {b.subtitle ? (
-                          <div className="muted" style={{ marginTop: 4 }}>
-                            {b.subtitle}
-                          </div>
-                        ) : null}
+                        {b.subtitle ? <div className="muted" style={{ marginTop: 4 }}>{b.subtitle}</div> : null}
                       </div>
                     </div>
                   ))}
