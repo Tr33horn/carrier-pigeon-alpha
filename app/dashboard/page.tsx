@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { checkpointGeoText } from "@/app/lib/geo";
 
 type DashboardLetter = {
   id: string;
@@ -474,6 +475,25 @@ export default function DashboardPage() {
                   ? { lat: l.current_lat, lon: l.current_lon }
                   : null;
 
+                  const geoPoint =
+  current ??
+  (Number.isFinite(l.origin_lat) &&
+  Number.isFinite(l.origin_lon) &&
+  Number.isFinite(l.dest_lat) &&
+  Number.isFinite(l.dest_lon)
+    ? {
+        lat: l.origin_lat + (l.dest_lat - l.origin_lat) * clamp01(l.progress ?? 0),
+        lon: l.origin_lon + (l.dest_lon - l.origin_lon) * clamp01(l.progress ?? 0),
+      }
+    : null);
+
+const geoText =
+  l.delivered
+    ? "Delivered"
+    : geoPoint
+    ? checkpointGeoText(geoPoint.lat, geoPoint.lon)
+    : "somewhere over the U.S.";
+
               const sentUtc =
                 (l.sent_utc_text && l.sent_utc_text.trim()) || formatUtcFallback(l.sent_at);
               const etaUtc =
@@ -492,6 +512,9 @@ export default function DashboardPage() {
                           • {l.origin_name} → {l.dest_name}
                         </span>
                       </div>
+                      <div className="muted" style={{ marginTop: 6 }}>
+  📍 <strong>{geoText}</strong>
+</div>
                     </div>
 
                     {canThumb ? (
