@@ -4,6 +4,251 @@ import { supabaseServer } from "../../../lib/supabaseServer";
 // ✅ geo helpers
 import { checkpointGeoText, geoRegionForPoint } from "../../../lib/geo";
 
+/* -------------------------------------------------
+   Sleep / flight realism helpers (self-contained)
+------------------------------------------------- */
+
+type SleepConfig = {
+  sleepStartHour: number; // local hour 0-23
+  sleepEndHour: number; // local hour 0-23
+};
+
+const SLEEP: SleepConfig = { sleepStartHour: 22, sleepEndHour: 6 }; // 10pm -> 6am (8h)
+
+function clamp(n: number, a: number, b: number) {
+  return Math.max(a, Math.min(b, n));
+}
+
+/**
+ * Rough “local time” offset from longitude (good vibe > perfect geography)
+ * -120 => ~UTC-8, -75 => ~UTC-5
+ */
+function offsetMinutesFromLon(lon: number) {
+  if (!Number.isFinite(lon)) return 0;
+  const hours = Math.round(lon / 15); // -120/15=-8
+  return clamp(hours * 60, -600, -240); // clamp to US-ish offsets
+}
+
+function toLocalMs(utcMs: number, offsetMin: number) {
+  return utcMs + offsetMin * 60_000;
+}
+function toUtcMs(localMs: number, offsetMin: number) {
+  return localMs - offsetMin * 60_000;
+}
+
+function isSleepingAt(utcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
+  const localMs = toLocalMs(utcMs, offsetMin);
+  const d = new Date(localMs);
+  const h = d.getUTCHours(); // localMs already shifted
+
+  const wraps = cfg.sleepStartHour > cfg.sleepEndHour; // 22 -> 6 wraps
+  if (!wraps) return h >= cfg.sleepStartHour && h < cfg.sleepEndHour;
+  return h >= cfg.sleepStartHour || h < cfg.sleepEndHour;
+}
+
+function nextBoundaryUtcMs(utcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
+  const localMs = toLocalMs(utcMs, offsetMin);
+  const d = new Date(localMs);
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth();
+  const day = d.getUTCDate();
+
+  const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
+
+  const mkLocal = (yy: number, mm: number, dd: number, hh: number) =>
+    Date.UTC(yy, mm, dd, hh, 0, 0, 0);
+
+  const todaySleepStartLocal = mkLocal(y, m, day, cfg.sleepStartHour);
+  const todaySleepEndLocal = mkLocal(y, m, day, cfg.sleepEndHour);
+  const tomorrowStartLocal = mkLocal(y, m, day + 1, cfg.sleepStartHour);
+  const tomorrowEndLocal = mkLocal(y, m, day + 1, cfg.sleepEndHour);
+
+  // Candidate local boundaries (then convert to UTC)
+  const candidatesLocal: number[] = [];
+
+  // Always include tomorrow midnight for safety stepping
+  candidatesLocal.push(Date.UTC(y, m, day + 1, 0, 0, 0, 0));
+
+  candidatesLocal.push(todaySleepStartLocal);
+
+  if (wraps) {
+    // Sleep end is “tomorrow” when we’re in the wrapping window
+    candidatesLocal.push(tomorrowEndLocal);
+  } else {
+    candidatesLocal.push(todaySleepEndLocal);
+  }
+
+  // also include next day's sleep start/end so stepping doesn't stall
+  candidatesLocal.push(tomorrowStartLocal);
+  candidatesLocal.push(tomorrowEndLocal);
+
+  const candidatesUtc = candidatesLocal
+    .map((lm) => toUtcMs(lm, offsetMin))
+    .filter((t) => t > utcMs + 1);
+
+  if (!candidatesUtc.length) return utcMs + 3600_000;
+  return Math.min(...candidatesUtc);
+}
+
+function awakeMsBetween(startUtcMs: number, endUtcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
+  if (endUtcMs <= startUtcMs) return 0;
+
+  let t = startUtcMs;
+  let awake = 0;
+
+  // guard so we don't ever infinite loop
+  let guard = 0;
+
+  while (t < endUtcMs && guard < 100000) {
+    guard++;
+    const sleeping = isSleepingAt(t, offsetMin, cfg);
+    const next = Math.min(nextBoundaryUtcMs(t, offsetMin, cfg), endUtcMs);
+    if (!sleeping) awake += next - t;
+    t = next;
+  }
+
+  return awake;
+}
+
+function etaFromRequiredAwakeMs(sentUtcMs: number, requiredAwakeMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
+  let t = sentUtcMs;
+  let remaining = requiredAwakeMs;
+
+  let guard = 0;
+
+  while (remaining > 0 && guard < 100000) {
+    guard++;
+
+    const sleeping = isSleepingAt(t, offsetMin, cfg);
+    const next = nextBoundaryUtcMs(t, offsetMin, cfg);
+
+    if (sleeping) {
+      t = next;
+      continue;
+    }
+
+    const chunk = Math.min(remaining, next - t);
+    remaining -= chunk;
+    t += chunk;
+  }
+
+  return t;
+}
+
+function nextWakeUtcMs(nowUtcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
+  if (!isSleepingAt(nowUtcMs, offsetMin, cfg)) return null;
+
+  let t = nowUtcMs;
+  let guard = 0;
+
+  while (guard < 10000) {
+    guard++;
+    const next = nextBoundaryUtcMs(t, offsetMin, cfg);
+    t = next;
+    if (!isSleepingAt(t + 1, offsetMin, cfg)) return t;
+  }
+
+  return null;
+}
+
+function sleepUntilLocalText(sleepUntilUtcMs: number, offsetMin: number) {
+  const localMs = toLocalMs(sleepUntilUtcMs, offsetMin);
+  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(localMs));
+}
+
+function stripOverPrefix(s: string) {
+  return (s || "").replace(/^over\s+/i, "").trim();
+}
+
+/**
+ * Create “Pigeon slept …” events as synthetic checkpoints
+ * so your existing timeline can render them.
+ */
+function buildSleepEvents(args: {
+  sentMs: number;
+  nowMs: number;
+  offsetMin: number;
+  cfg?: SleepConfig;
+}) {
+  const { sentMs, nowMs, offsetMin } = args;
+  const cfg = args.cfg ?? SLEEP;
+
+  if (!Number.isFinite(sentMs) || !Number.isFinite(nowMs) || nowMs <= sentMs) return [];
+
+  // We'll scan local days from sent -> now.
+  const localStart = new Date(toLocalMs(sentMs, offsetMin));
+  const localEnd = new Date(toLocalMs(nowMs, offsetMin));
+
+  // normalize to local midnight for stepping
+  const startY = localStart.getUTCFullYear();
+  const startM = localStart.getUTCMonth();
+  const startD = localStart.getUTCDate();
+
+  const endY = localEnd.getUTCFullYear();
+  const endM = localEnd.getUTCMonth();
+  const endD = localEnd.getUTCDate();
+
+  const events: any[] = [];
+
+  // helper to compare (y,m,d) tuples
+  const tupleLE = (a: [number, number, number], b: [number, number, number]) =>
+    a[0] < b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] <= b[2])));
+
+  let y = startY, m = startM, d = startD;
+
+  while (tupleLE([y, m, d], [endY, endM, endD])) {
+    const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
+
+    const sleepStartLocal = Date.UTC(y, m, d, cfg.sleepStartHour, 0, 0, 0);
+    const sleepEndLocal = wraps
+      ? Date.UTC(y, m, d + 1, cfg.sleepEndHour, 0, 0, 0)
+      : Date.UTC(y, m, d, cfg.sleepEndHour, 0, 0, 0);
+
+    const sleepStartUtc = toUtcMs(sleepStartLocal, offsetMin);
+    const sleepEndUtc = toUtcMs(sleepEndLocal, offsetMin);
+
+    // Only include sleeps that have started by "now" and also after sent
+    if (sleepStartUtc <= nowMs && sleepEndUtc >= sentMs) {
+      // Only show if the sleep actually overlaps the journey window
+      const started = Math.max(sleepStartUtc, sentMs);
+      const wake = sleepEndUtc;
+
+      if (started <= nowMs) {
+        const wakeText = sleepUntilLocalText(wake, offsetMin);
+        events.push({
+          id: `sleep-${y}-${m + 1}-${d}`,
+          idx: 10_000 + events.length, // large so it won't collide; UI sorts by time anyway
+          at: new Date(started).toISOString(),
+          lat: null,
+          lon: null,
+          geo_text: "Sleeping",
+          region_id: null,
+          region_label: null,
+          name: `Pigeon slept — wakes at ${wakeText}`,
+          _sleep_meta: {
+            sleep_start_utc: new Date(sleepStartUtc).toISOString(),
+            sleep_end_utc: new Date(sleepEndUtc).toISOString(),
+            wake_local_text: wakeText,
+          },
+        });
+      }
+    }
+
+    // advance one local day
+    const next = new Date(Date.UTC(y, m, d + 1, 0, 0, 0, 0));
+    y = next.getUTCFullYear();
+    m = next.getUTCMonth();
+    d = next.getUTCDate();
+  }
+
+  // Only keep events that have started (past or ongoing)
+  return events.filter((e) => Date.parse(e.at) <= nowMs);
+}
+
+/* -------------------------------------------------
+   Existing formatting
+------------------------------------------------- */
+
 function formatUtc(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
@@ -68,9 +313,6 @@ function computeBadgesFromRegions(args: {
 
   const out: BadgeDef[] = [];
 
-  // ✅ NOTE: These region IDs MUST match your US_REGIONS ids.
-  // Your current US_REGIONS uses: "cascades-n", "rockies-n", "great-plains", etc.
-
   if (crossed("cascades-n")) {
     out.push({
       code: "crossed_cascades",
@@ -104,7 +346,6 @@ function computeBadgesFromRegions(args: {
     });
   }
 
-  // ✅ Appalachians exists in your US_REGIONS as "appalachians"
   if (crossed("appalachians")) {
     out.push({
       code: "crossed_appalachians",
@@ -116,8 +357,6 @@ function computeBadgesFromRegions(args: {
     });
   }
 
-  // ✅ Optional: “presence” style badges (only if region exists)
-  // Example: Snake River Plain exists as "snake-river"
   if (has("snake-river")) {
     out.push({
       code: "over_snake_river_plain",
@@ -129,11 +368,6 @@ function computeBadgesFromRegions(args: {
     });
   }
 
-  // ❌ Removed for now (not in your US_REGIONS yet):
-  // - mississippi
-  // - southwest_desert (you have mojave + sonoran instead)
-
-  // ✅ Delivered badge (only when delivered)
   if (delivered) {
     out.push({
       code: "delivered",
@@ -196,10 +430,38 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     return NextResponse.json({ error: cErr.message }, { status: 500 });
   }
 
-  // Decide delivery server-side
   const nowMs = Date.now();
-  const etaMs = Date.parse(meta.eta_at);
-  const delivered = Number.isFinite(etaMs) ? nowMs >= etaMs : true;
+  const sentMs = Date.parse(meta.sent_at);
+
+  // -----------------------------
+  // ✅ Sleep-aware flight math
+  // -----------------------------
+  const offsetMin = offsetMinutesFromLon(meta.origin_lon);
+
+  const requiredAwakeMs =
+    meta.speed_kmh > 0
+      ? (meta.distance_km / meta.speed_kmh) * 3600_000
+      : 0;
+
+  const etaAdjustedMs =
+    Number.isFinite(sentMs) && requiredAwakeMs > 0
+      ? etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin)
+      : Date.parse(meta.eta_at);
+
+  const delivered = Number.isFinite(etaAdjustedMs) ? nowMs >= etaAdjustedMs : true;
+
+  const awakeSoFar =
+    Number.isFinite(sentMs) && nowMs > sentMs
+      ? awakeMsBetween(sentMs, Math.min(nowMs, etaAdjustedMs), offsetMin)
+      : 0;
+
+  const progress =
+    requiredAwakeMs > 0 ? clamp(awakeSoFar / requiredAwakeMs, 0, 1) : 1;
+
+  const sleeping = isSleepingAt(nowMs, offsetMin);
+  const wakeMs = nextWakeUtcMs(nowMs, offsetMin);
+  const sleep_until_iso = wakeMs ? new Date(wakeMs).toISOString() : null;
+  const sleep_local_text = wakeMs ? sleepUntilLocalText(wakeMs, offsetMin) : "";
 
   // Only fetch body AFTER delivery
   let body: string | null = null;
@@ -213,7 +475,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   }
 
   // ✅ Upgrade checkpoint labels + add geo_text + region_id
-  const cps = (checkpoints ?? []).map((cp: any, i: number, arr: any[]) => {
+  const cpsBase = (checkpoints ?? []).map((cp: any, i: number, arr: any[]) => {
     const isFirst = i === 0;
     const isLast = i === arr.length - 1;
 
@@ -224,7 +486,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
 
     const region =
       Number.isFinite(cp.lat) && Number.isFinite(cp.lon)
-        ? geoRegionForPoint(cp.lat, cp.lon) // { id, label } or null
+        ? geoRegionForPoint(cp.lat, cp.lon)
         : null;
 
     const upgradedName = isFirst
@@ -242,11 +504,20 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     };
   });
 
+  // ✅ Inject sleep events into checkpoints so timeline can show them
+  const sleepEvents = Number.isFinite(sentMs)
+    ? buildSleepEvents({ sentMs, nowMs, offsetMin })
+    : [];
+
+  const cps = [...cpsBase, ...sleepEvents].sort(
+    (a: any, b: any) => Date.parse(a.at) - Date.parse(b.at)
+  );
+
   // ✅ compute current_over_text (geo only) for map/tooltips
   let current_over_text = delivered ? "Delivered" : "somewhere over the U.S.";
-  if (!delivered && cps.length) {
-    let cur = cps[0];
-    for (const cp of cps) {
+  if (!delivered && cpsBase.length) {
+    let cur = cpsBase[0];
+    for (const cp of cpsBase) {
       const t = Date.parse(cp.at);
       if (Number.isFinite(t) && t <= nowMs) cur = cp;
       else break;
@@ -254,8 +525,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     current_over_text = cur?.geo_text || current_over_text;
   }
 
-  // ✅ Award badges (based on past checkpoints only)
-  const past = cps.filter((cp: any) => {
+  // ✅ Tooltip copy (server-prepared so UI stays consistent)
+  const geoBase = delivered ? "Delivered" : stripOverPrefix(current_over_text);
+  const tooltip_text = delivered
+    ? `Location: Delivered`
+    : sleeping
+    ? `Location: Sleeping — ${geoBase || "somewhere over the U.S."}`
+    : `Location: ${geoBase || "somewhere over the U.S."}`;
+
+  // ✅ Award badges (based on past checkpoints only — NOT sleep events)
+  const past = cpsBase.filter((cp: any) => {
     const t = Date.parse(cp.at);
     return Number.isFinite(t) && t <= nowMs;
   });
@@ -277,7 +556,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     dest: { name: meta.dest_name, regionId: destRegion?.id ?? null },
     pastRegionIds,
     delivered,
-    deliveredAtISO: delivered ? new Date(Math.max(nowMs, etaMs || nowMs)).toISOString() : undefined,
+    deliveredAtISO: delivered ? new Date(Math.max(nowMs, etaAdjustedMs || nowMs)).toISOString() : undefined,
   });
 
   // ✅ Upsert badges (idempotent) — set earned_at so sorting works
@@ -319,15 +598,29 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const badges = (items ?? []).filter((x: any) => x.kind === "badge");
   const addons = (items ?? []).filter((x: any) => x.kind === "addon");
 
+  const etaAdjustedISO = Number.isFinite(etaAdjustedMs)
+    ? new Date(etaAdjustedMs).toISOString()
+    : meta.eta_at;
+
   return NextResponse.json({
     letter: {
       ...meta,
       body,
-      eta_utc_text: formatUtc(meta.eta_at),
+      // ✅ IMPORTANT: status page should use this for countdown/seal
+      eta_at_adjusted: etaAdjustedISO,
+      eta_utc_text: formatUtc(etaAdjustedISO),
     },
     checkpoints: cps,
     delivered,
     current_over_text,
+    flight: {
+      progress, // ✅ sleep-aware progress 0..1
+      sleeping,
+      sleep_until_iso,
+      sleep_local_text,
+      tooltip_text, // ✅ "Location: ..." (sleeping-aware)
+      marker_mode: delivered ? "delivered" : sleeping ? "sleeping" : "flying",
+    },
     items: {
       badges,
       addons,

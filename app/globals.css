@@ -838,6 +838,55 @@ body {
   border: 1px solid rgba(255,255,255,0.30);
 }
 
+/* Sleeping mode: stop the black pulse rings */
+.pigeonMarker.sleep .pigeonPulseRing { display: none; }
+
+/* Red sleep pulse ring */
+.pigeonSleepRing{
+  position:absolute;
+  inset:0;
+  border-radius:999px;
+  border:2px solid rgba(217,45,32,0.65);
+  transform: scale(0.55);
+  opacity: 0;
+  z-index: 2;
+  display: none; /* only show when sleeping */
+}
+
+.pigeonMarker.sleep .pigeonSleepRing{
+  display: block;
+  animation: sleepPulse 1.8s ease-out infinite;
+}
+
+@keyframes sleepPulse{
+  0%   { transform: scale(0.55); opacity: 0.0; }
+  20%  { opacity: 0.55; }
+  100% { transform: scale(1.05); opacity: 0.0; }
+}
+
+/* Sleeping dot becomes red */
+.pigeonMarker.sleep .pigeonDot{
+  background: #d92d20;
+  border-color: #fff;
+}
+
+/* Tooltip dot red + no animation */
+.pigeonLiveDot.sleep{
+  background: #d92d20;
+  box-shadow: none;
+  animation: none;
+}
+
+/* Optional: make the LIVE pill visually “sleep” too */
+.liveWrap.sleep{
+  background: rgba(217,45,32,0.92);
+}
+.liveDot.sleep{
+  background: #fff;
+  box-shadow: none;
+  animation: none;
+}
+
 /* -------------------------------------------------
    Shared: animated pulse dot (timeline + anywhere)
 ------------------------------------------------- */

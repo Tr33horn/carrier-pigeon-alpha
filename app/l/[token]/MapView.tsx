@@ -17,6 +17,8 @@ export type MapStyle =
   | "carto-voyager"
   | "carto-positron-nolabels";
 
+export type MarkerMode = "flying" | "sleeping" | "delivered";
+
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
@@ -90,7 +92,6 @@ function makeNearStraightDriftPath(args: {
   const steps = Math.max(18, args.points ?? 56);
   const p = clamp01(args.progress);
 
-  // Base line in lon/lat "xy"
   const A = { x: origin.lon, y: origin.lat };
   const B = { x: dest.lon, y: dest.lat };
 
@@ -105,44 +106,27 @@ function makeNearStraightDriftPath(args: {
   const ux = px / plen;
   const uy = py / plen;
 
-  // stable per-route seed
   const s = seedFromCoords(origin, dest);
 
-  /**
-   * DRIFT SCALE:
-   * We want "tiny fluctuations", not an arc.
-   * dist is in degrees. Typical cross-country dist ~ 35-45 degrees.
-   *
-   * base = very small % of distance, clamped.
-   * (0.004 * 40) = 0.16 degrees max BEFORE clamps (too big),
-   * so we clamp hard to keep it subtle.
-   */
-  const base = Math.min(0.06, Math.max(0.01, dist * 0.0012)); // ~0.01 .. 0.06 degrees
+  // subtle scale clamp
+  const base = Math.min(0.06, Math.max(0.01, dist * 0.0012));
+  const travelGain = 0.35 + 0.65 * Math.sqrt(p);
 
-  // Drift increases a bit as the pigeon travels (so early path is straighter)
-  const travelGain = 0.35 + 0.65 * Math.sqrt(p); // 0.35..1.0
-
-  // Small multi-frequency wiggle; depends on t and overall progress (static per progress)
   const pts: [number, number][] = [];
   const N = Math.max(2, Math.floor(steps * p));
 
   for (let i = 0; i <= N; i++) {
     const t = (i / Math.max(1, N)) * p;
 
-    // straight interpolation point
     const x0 = A.x + dx * t;
     const y0 = A.y + dy * t;
 
-    // Tiny wiggle (bounded around ~[-1..1])
     const w =
       Math.sin((t * 8 + s * 3 + p * 1.3) * Math.PI * 2) * 0.55 +
       Math.sin((t * 3.5 + s * 7 + p * 0.7) * Math.PI * 2) * 0.35 +
       Math.sin((t * 13 + s * 11 + p * 2.1) * Math.PI * 2) * 0.10;
 
-    // taper near ends so it doesn't pull off origin/dest
-    const taper = Math.sin(Math.PI * (i / Math.max(1, N))); // 0..1..0
-
-    // Final offset in lon/lat degrees (small)
+    const taper = Math.sin(Math.PI * (i / Math.max(1, N)));
     const off = base * travelGain * taper * w;
 
     const x = x0 + ux * off;
@@ -151,7 +135,6 @@ function makeNearStraightDriftPath(args: {
     pts.push([y, x]); // [lat, lon]
   }
 
-  // Ensure at least the origin is included
   if (pts.length === 0) pts.push([origin.lat, origin.lon]);
 
   return pts;
@@ -163,15 +146,16 @@ export default function MapView(props: {
   progress: number; // 0..1
   tooltipText?: string;
   mapStyle?: MapStyle;
+
+  // ✅ NEW
+  markerMode?: MarkerMode; // "flying" | "sleeping" | "delivered"
 }) {
   const { origin, dest } = props;
 
   const mapStyle: MapStyle = props.mapStyle ?? "carto-positron";
   const tile = useMemo(() => getCarto(mapStyle), [mapStyle]);
 
-  const [displayProgress, setDisplayProgress] = useState(() =>
-    clamp01(props.progress)
-  );
+  const [displayProgress, setDisplayProgress] = useState(() => clamp01(props.progress));
   const rafRef = useRef<number | null>(null);
 
   // smooth marker progress (unchanged)
@@ -204,24 +188,32 @@ export default function MapView(props: {
     lon: lerp(origin.lon, dest.lon, displayProgress),
   };
 
-  const inFlight = useMemo(() => clamp01(props.progress) < 1, [props.progress]);
+  // ✅ Mode derived from prop (source of truth) + fallback to progress
+  const mode: MarkerMode =
+    props.markerMode ??
+    (clamp01(props.progress) >= 1 ? "delivered" : "flying");
+
+  const isFlying = mode === "flying";
+  const isSleeping = mode === "sleeping";
+  const isDelivered = mode === "delivered";
 
   // icons
   const liveIcon = useMemo(
     () =>
       L.divIcon({
-        className: inFlight ? "pigeonMarker live" : "pigeonMarker",
+        className: `pigeonMarker ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""}`,
         html: `
           <div class="pigeonPulseWrap">
             <span class="pigeonPulseRing"></span>
             <span class="pigeonPulseRing ring2"></span>
+            <span class="pigeonSleepRing"></span>
             <div class="pigeonDot"></div>
           </div>
         `,
         iconSize: [44, 44],
         iconAnchor: [22, 22],
       }),
-    [inFlight]
+    [isFlying, isSleeping]
   );
 
   const originIcon = useMemo(
@@ -257,7 +249,7 @@ export default function MapView(props: {
     []
   );
 
-  // bounds should remain stable (origin + dest only)
+  // bounds stable (origin + dest only)
   const boundsLine: [number, number][] = [
     [origin.lat, origin.lon],
     [dest.lat, dest.lon],
@@ -273,16 +265,19 @@ export default function MapView(props: {
     return makeNearStraightDriftPath({
       origin,
       dest,
-      progress: p, // only up to progress
+      progress: p,
       points: 60,
     });
   }, [origin, dest, props.progress]);
 
-  const tooltip = useMemo(() => normalizeTooltip(props.tooltipText), [props.tooltipText]);
+  const tooltip = useMemo(
+    () => normalizeTooltip(props.tooltipText),
+    [props.tooltipText]
+  );
 
   // Colors
   const idealColor = "#121212";
-  const flownColor = "#16a34a"; // blue-ish (Tailwind blue-600 vibe)
+  const flownColor = "#16a34a"; // ✅ status green
 
   return (
     <div
@@ -337,10 +332,12 @@ export default function MapView(props: {
             opacity={1}
             permanent
             interactive={false}
-            className={inFlight ? "pigeonTooltip live" : "pigeonTooltip"}
+            className={`pigeonTooltip ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""}`}
           >
             <span className="pigeonTooltipRow">
-              {inFlight && <span className="pigeonLiveDot" />}
+              {!isDelivered && (
+                <span className={`pigeonLiveDot ${isSleeping ? "sleep" : ""}`} />
+              )}
               <span className="pigeonTooltipText">{tooltip}</span>
             </span>
           </Tooltip>

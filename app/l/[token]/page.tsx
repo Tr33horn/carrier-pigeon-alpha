@@ -24,6 +24,9 @@ type Letter = {
   sent_at: string;
   eta_at: string;
 
+  // ✅ NEW from route.ts
+  eta_at_adjusted?: string;
+
   // ✅ comes from /api/letters/[token]
   eta_utc_text?: string;
 };
@@ -33,7 +36,6 @@ type Checkpoint = {
   idx: number;
   name: string;
   at: string;
-  // ✅ NEW: comes from route.ts upgrade
   geo_text?: string;
 };
 
@@ -66,19 +68,20 @@ type LetterItems = {
   addons: AddonItem[];
 };
 
+type Flight = {
+  progress: number; // ✅ sleep-aware 0..1
+  sleeping: boolean;
+  sleep_until_iso: string | null;
+  sleep_local_text: string; // e.g. "6:00 AM"
+  tooltip_text: string; // ✅ already "Location: ..."
+  marker_mode: "flying" | "sleeping" | "delivered";
+};
+
 // ✅ UPDATED: matches MapView.tsx
 type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
-}
-
-function progressFraction(sentISO: string, etaISO: string, now = new Date()) {
-  const sent = new Date(sentISO).getTime();
-  const eta = new Date(etaISO).getTime();
-  const t = now.getTime();
-  if (eta <= sent) return 1;
-  return clamp01((t - sent) / (eta - sent));
 }
 
 function formatCountdown(ms: number) {
@@ -103,11 +106,6 @@ function formatUtcFallback(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
   return `${d.toISOString().replace("T", " ").replace("Z", "")} UTC`;
-}
-
-/** Strip redundant leading “Over …” for tooltips/labels */
-function stripOverPrefix(s: string) {
-  return (s || "").replace(/^over\s+/i, "").trim();
 }
 
 /* ---------- tiny icon system (inline SVG) ---------- */
@@ -332,19 +330,11 @@ function RailTimeline({
 
           return (
             <div key={it.key} className="railItem">
-              <div
-                className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${
-                  shouldPop ? "pop" : ""
-                }`}
-              >
+              <div className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${shouldPop ? "pop" : ""}`}>
                 <span className="railDot">{isPast ? "✓" : ""}</span>
               </div>
 
-              <div
-                className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${
-                  isCurrent ? "current" : ""
-                }`}
-              >
+              <div className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${isCurrent ? "current" : ""}`}>
                 {isCurrent && (
                   <div className="pigeonTag livePulseRow">
                     <span className="livePulseDot" aria-hidden />
@@ -379,13 +369,13 @@ export default function LetterStatusPage() {
   const [letter, setLetter] = useState<Letter | null>(null);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [items, setItems] = useState<LetterItems>({ badges: [], addons: [] });
-  const [error, setError] = useState<string | null>(null);
+  const [flight, setFlight] = useState<Flight | null>(null);
 
+  const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
   const [delivered, setDelivered] = useState(false);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
-  // ✅ server-computed “current_over_text”
   const [currentOverText, setCurrentOverText] = useState<string | null>(null);
 
   const prevDelivered = useRef(false);
@@ -434,13 +424,15 @@ export default function LetterStatusPage() {
           setError(data?.error ?? "Letter not found");
           return;
         }
-
         if (!alive) return;
 
         setLetter(data.letter as Letter);
         setDelivered(!!data.delivered);
         setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
         setCurrentOverText(typeof data.current_over_text === "string" ? data.current_over_text : null);
+
+        // ✅ NEW: sleep-aware flight info
+        setFlight((data.flight ?? null) as Flight | null);
 
         // ✅ items (badges/addons)
         const nextItems = (data.items ?? {}) as Partial<LetterItems>;
@@ -483,16 +475,28 @@ export default function LetterStatusPage() {
     prevDelivered.current = delivered;
   }, [delivered]);
 
+  const effectiveEtaISO = useMemo(() => {
+    if (!letter) return "";
+    return (letter.eta_at_adjusted && letter.eta_at_adjusted.trim()) || letter.eta_at;
+  }, [letter]);
+
+  // ✅ sleep-aware progress (server is source of truth)
   const progress = useMemo(() => {
+    if (flight && Number.isFinite(flight.progress)) return clamp01(flight.progress);
+    // fallback (should rarely happen)
     if (!letter) return 0;
-    return progressFraction(letter.sent_at, letter.eta_at, now);
-  }, [letter, now]);
+    const sent = new Date(letter.sent_at).getTime();
+    const eta = new Date(effectiveEtaISO).getTime();
+    const t = now.getTime();
+    if (eta <= sent) return 1;
+    return clamp01((t - sent) / (eta - sent));
+  }, [flight, letter, effectiveEtaISO, now]);
 
   const countdown = useMemo(() => {
     if (!letter) return "";
-    const msLeft = new Date(letter.eta_at).getTime() - now.getTime();
+    const msLeft = new Date(effectiveEtaISO).getTime() - now.getTime();
     return formatCountdown(msLeft);
-  }, [letter, now]);
+  }, [letter, effectiveEtaISO, now]);
 
   const currentCheckpoint = useMemo(() => {
     if (!checkpoints.length || !letter) return null;
@@ -513,11 +517,11 @@ export default function LetterStatusPage() {
     ];
 
     return defs.map((m) => {
-      const atISO = milestoneTimeISO(letter.sent_at, letter.eta_at, m.frac);
+      const atISO = milestoneTimeISO(letter.sent_at, effectiveEtaISO, m.frac);
       const isPast = now.getTime() >= new Date(atISO).getTime();
       return { ...m, atISO, isPast };
     });
-  }, [letter, now]);
+  }, [letter, effectiveEtaISO, now]);
 
   const secondsSinceFetch = useMemo(() => {
     if (!lastFetchedAt) return null;
@@ -538,12 +542,13 @@ export default function LetterStatusPage() {
     return fallback;
   }, [delivered, currentOverText, currentCheckpoint]);
 
-  // ✅ map tooltip: keep "Location:" label, but remove "Over " to avoid "Location: Over ..."
+  // ✅ The actual tooltip string should come from server (sleep-aware, includes "Location:")
   const mapTooltip = useMemo(() => {
+    if (flight?.tooltip_text && flight.tooltip_text.trim()) return flight.tooltip_text;
+    // fallback (keeps label)
     if (delivered) return "Location: Delivered";
-    const base = stripOverPrefix(currentlyOver || "somewhere over the U.S.");
-    return `Location: ${base || "somewhere over the U.S."}`;
-  }, [delivered, currentlyOver]);
+    return `Location: ${currentlyOver || "somewhere over the U.S."}`;
+  }, [flight?.tooltip_text, delivered, currentlyOver]);
 
   const showLive = !delivered;
 
@@ -583,18 +588,21 @@ export default function LetterStatusPage() {
 
   const etaTextUTC = useMemo(() => {
     if (!letter) return "";
-    return (letter.eta_utc_text && letter.eta_utc_text.trim()) || formatUtcFallback(letter.eta_at);
-  }, [letter]);
+    // your route API now formats eta_utc_text from eta_at_adjusted
+    return (letter.eta_utc_text && letter.eta_utc_text.trim()) || formatUtcFallback(effectiveEtaISO);
+  }, [letter, effectiveEtaISO]);
 
   const badgesSorted = useMemo(() => {
     const b = items.badges ?? [];
-    // earned_at may be null; keep stable order
     return [...b].sort((a, c) => {
       const ta = a.earned_at ? Date.parse(a.earned_at) : 0;
       const tb = c.earned_at ? Date.parse(c.earned_at) : 0;
       return ta - tb;
     });
   }, [items.badges]);
+
+  const sleeping = !!flight?.sleeping;
+  const markerMode: Flight["marker_mode"] = delivered ? "delivered" : sleeping ? "sleeping" : "flying";
 
   if (error) {
     return (
@@ -633,12 +641,17 @@ export default function LetterStatusPage() {
               <div className="subRow">
                 {showLive ? (
                   <>
+                    {/* ✅ LIVE or SLEEPING pill */}
                     <div className="liveStack" style={{ minWidth: 230, flex: "0 0 auto" }}>
-                      <div className="liveWrap">
-                        <span className="liveDot" />
-                        <span className="liveText">LIVE</span>
+                      <div className={`liveWrap ${sleeping ? "sleep" : ""}`}>
+                        <span className={`liveDot ${sleeping ? "sleep" : ""}`} />
+                        <span className="liveText">{sleeping ? "SLEEPING" : "LIVE"}</span>
                       </div>
-                      <div className="liveSub">Last updated: {secondsSinceFetch ?? 0}s ago</div>
+                      <div className="liveSub">
+                        {sleeping
+                          ? `Wakes at ${flight?.sleep_local_text || "soon"}`
+                          : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
+                      </div>
                     </div>
 
                     <div className="metaPill" style={{ flex: "1 1 auto" }}>
@@ -726,7 +739,10 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div className={delivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: delivered ? 1 : 0 }}>
+              <div
+                className={delivered && revealStage === "open" ? "bodyReveal" : ""}
+                style={{ opacity: delivered ? 1 : 0 }}
+              >
                 <div className="body">{delivered ? (letter.body ?? "") : ""}</div>
               </div>
 
@@ -782,8 +798,9 @@ export default function LetterStatusPage() {
   origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
   dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
   progress={progress}
-  tooltipText={mapTooltip}   // ✅ ensures “Location:” shows
+  tooltipText={mapTooltip}
   mapStyle={mapStyle}
+  markerMode={markerMode}
 />
             </div>
 
@@ -830,7 +847,7 @@ export default function LetterStatusPage() {
               <RailTimeline items={timelineItems} now={now} currentKey={currentTimelineKey} />
             </div>
 
-            {/* ✅ NEW: Badges card */}
+            {/* Badges */}
             <div className="card">
               <div className="cardHead" style={{ marginBottom: 10 }}>
                 <div>
@@ -845,9 +862,7 @@ export default function LetterStatusPage() {
 
               {badgesSorted.length === 0 ? (
                 <div className="soft">
-                  <div className="muted">
-                    None yet. The bird’s still grinding XP. 🕊️
-                  </div>
+                  <div className="muted">None yet. The bird’s still grinding XP. 🕊️</div>
                 </div>
               ) : (
                 <div className="stack">
