@@ -12,8 +12,10 @@ import {
 import L from "leaflet";
 
 // ✅ Match the LetterStatusPage values
-// Swapped "carto-dark" -> "carto-positron-nolabels" (light + no labels)
-export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
+export type MapStyle =
+  | "carto-positron"
+  | "carto-voyager"
+  | "carto-positron-nolabels";
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
@@ -24,7 +26,6 @@ function clamp01(n: number) {
 }
 
 function getCarto(style: MapStyle) {
-  // CARTO raster tiles
   if (style === "carto-voyager") {
     return {
       url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
@@ -32,7 +33,6 @@ function getCarto(style: MapStyle) {
     };
   }
 
-  // ✅ NEW: light, no labels
   if (style === "carto-positron-nolabels") {
     return {
       url: "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
@@ -40,7 +40,6 @@ function getCarto(style: MapStyle) {
     };
   }
 
-  // carto-positron (light default)
   return {
     url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
@@ -58,11 +57,18 @@ function FitBounds({ bounds }: { bounds: [number, number][] }) {
   return null;
 }
 
+function normalizeGeoText(text?: string) {
+  const t = (text || "").trim();
+  if (!t) return "";
+  // Strip accidental prefixes coming from upstream
+  return t.replace(/^currently over:\s*/i, "").trim();
+}
+
 export default function MapView(props: {
   origin: { lat: number; lon: number };
   dest: { lat: number; lon: number };
   progress: number; // 0..1
-  tooltipText?: string;
+  tooltipText?: string; // should be a plain phrase like "Over Yakima Valley"
   mapStyle?: MapStyle;
 }) {
   const { origin, dest } = props;
@@ -164,9 +170,13 @@ export default function MapView(props: {
     [dest.lat, dest.lon],
   ];
 
-  // All styles are light now → keep route simple/consistent
   const routeColor = "#121212";
   const routeOpacity = 0.55;
+
+  const geoText = useMemo(() => {
+    const t = normalizeGeoText(props.tooltipText);
+    return t || "Somewhere over the U.S.";
+  }, [props.tooltipText]);
 
   return (
     <div
@@ -211,9 +221,7 @@ export default function MapView(props: {
           >
             <span className="pigeonTooltipRow">
               {inFlight && <span className="pigeonLiveDot" />}
-              <span className="pigeonTooltipText">
-                {props.tooltipText || "Currently over: somewhere over the U.S."}
-              </span>
+              <span className="pigeonTooltipText">{geoText}</span>
             </span>
           </Tooltip>
         </Marker>
