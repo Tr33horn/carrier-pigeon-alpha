@@ -55,36 +55,27 @@ function nextBoundaryUtcMs(utcMs: number, offsetMin: number, cfg: SleepConfig = 
 
   const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
 
-  const mkLocal = (yy: number, mm: number, dd: number, hh: number) =>
-    Date.UTC(yy, mm, dd, hh, 0, 0, 0);
+  const mkLocal = (yy: number, mm: number, dd: number, hh: number) => Date.UTC(yy, mm, dd, hh, 0, 0, 0);
 
   const todaySleepStartLocal = mkLocal(y, m, day, cfg.sleepStartHour);
   const todaySleepEndLocal = mkLocal(y, m, day, cfg.sleepEndHour);
   const tomorrowStartLocal = mkLocal(y, m, day + 1, cfg.sleepStartHour);
   const tomorrowEndLocal = mkLocal(y, m, day + 1, cfg.sleepEndHour);
 
-  // Candidate local boundaries (then convert to UTC)
   const candidatesLocal: number[] = [];
-
-  // Always include tomorrow midnight for safety stepping
   candidatesLocal.push(Date.UTC(y, m, day + 1, 0, 0, 0, 0));
-
   candidatesLocal.push(todaySleepStartLocal);
 
   if (wraps) {
-    // Sleep end is “tomorrow” when we’re in the wrapping window
     candidatesLocal.push(tomorrowEndLocal);
   } else {
     candidatesLocal.push(todaySleepEndLocal);
   }
 
-  // also include next day's sleep start/end so stepping doesn't stall
   candidatesLocal.push(tomorrowStartLocal);
   candidatesLocal.push(tomorrowEndLocal);
 
-  const candidatesUtc = candidatesLocal
-    .map((lm) => toUtcMs(lm, offsetMin))
-    .filter((t) => t > utcMs + 1);
+  const candidatesUtc = candidatesLocal.map((lm) => toUtcMs(lm, offsetMin)).filter((t) => t > utcMs + 1);
 
   if (!candidatesUtc.length) return utcMs + 3600_000;
   return Math.min(...candidatesUtc);
@@ -96,9 +87,7 @@ function awakeMsBetween(startUtcMs: number, endUtcMs: number, offsetMin: number,
   let t = startUtcMs;
   let awake = 0;
 
-  // guard so we don't ever infinite loop
   let guard = 0;
-
   while (t < endUtcMs && guard < 100000) {
     guard++;
     const sleeping = isSleepingAt(t, offsetMin, cfg);
@@ -115,7 +104,6 @@ function etaFromRequiredAwakeMs(sentUtcMs: number, requiredAwakeMs: number, offs
   let remaining = requiredAwakeMs;
 
   let guard = 0;
-
   while (remaining > 0 && guard < 100000) {
     guard++;
 
@@ -162,24 +150,16 @@ function stripOverPrefix(s: string) {
 
 /**
  * Create “Pigeon slept …” events as synthetic checkpoints
- * so your existing timeline can render them.
  */
-function buildSleepEvents(args: {
-  sentMs: number;
-  nowMs: number;
-  offsetMin: number;
-  cfg?: SleepConfig;
-}) {
+function buildSleepEvents(args: { sentMs: number; nowMs: number; offsetMin: number; cfg?: SleepConfig }) {
   const { sentMs, nowMs, offsetMin } = args;
   const cfg = args.cfg ?? SLEEP;
 
   if (!Number.isFinite(sentMs) || !Number.isFinite(nowMs) || nowMs <= sentMs) return [];
 
-  // We'll scan local days from sent -> now.
   const localStart = new Date(toLocalMs(sentMs, offsetMin));
   const localEnd = new Date(toLocalMs(nowMs, offsetMin));
 
-  // normalize to local midnight for stepping
   const startY = localStart.getUTCFullYear();
   const startM = localStart.getUTCMonth();
   const startD = localStart.getUTCDate();
@@ -190,26 +170,23 @@ function buildSleepEvents(args: {
 
   const events: any[] = [];
 
-  // helper to compare (y,m,d) tuples
   const tupleLE = (a: [number, number, number], b: [number, number, number]) =>
     a[0] < b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] <= b[2])));
 
-  let y = startY, m = startM, d = startD;
+  let y = startY,
+    m = startM,
+    d = startD;
 
   while (tupleLE([y, m, d], [endY, endM, endD])) {
     const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
 
     const sleepStartLocal = Date.UTC(y, m, d, cfg.sleepStartHour, 0, 0, 0);
-    const sleepEndLocal = wraps
-      ? Date.UTC(y, m, d + 1, cfg.sleepEndHour, 0, 0, 0)
-      : Date.UTC(y, m, d, cfg.sleepEndHour, 0, 0, 0);
+    const sleepEndLocal = wraps ? Date.UTC(y, m, d + 1, cfg.sleepEndHour, 0, 0, 0) : Date.UTC(y, m, d, cfg.sleepEndHour, 0, 0, 0);
 
     const sleepStartUtc = toUtcMs(sleepStartLocal, offsetMin);
     const sleepEndUtc = toUtcMs(sleepEndLocal, offsetMin);
 
-    // Only include sleeps that have started by "now" and also after sent
     if (sleepStartUtc <= nowMs && sleepEndUtc >= sentMs) {
-      // Only show if the sleep actually overlaps the journey window
       const started = Math.max(sleepStartUtc, sentMs);
       const wake = sleepEndUtc;
 
@@ -217,7 +194,8 @@ function buildSleepEvents(args: {
         const wakeText = sleepUntilLocalText(wake, offsetMin);
         events.push({
           id: `sleep-${y}-${m + 1}-${d}`,
-          idx: 10_000 + events.length, // large so it won't collide; UI sorts by time anyway
+          idx: 10_000 + events.length,
+          kind: "sleep", // ✅ explicit for UI
           at: new Date(started).toISOString(),
           lat: null,
           lon: null,
@@ -234,19 +212,17 @@ function buildSleepEvents(args: {
       }
     }
 
-    // advance one local day
     const next = new Date(Date.UTC(y, m, d + 1, 0, 0, 0, 0));
     y = next.getUTCFullYear();
     m = next.getUTCMonth();
     d = next.getUTCDate();
   }
 
-  // Only keep events that have started (past or ongoing)
   return events.filter((e) => Date.parse(e.at) <= nowMs);
 }
 
 /* -------------------------------------------------
-   Existing formatting
+   Formatting
 ------------------------------------------------- */
 
 function formatUtc(iso: string) {
@@ -272,7 +248,7 @@ type LetterItemInsert = {
   subtitle?: string | null;
   icon?: string | null;
   rarity?: "common" | "rare" | "legendary";
-  earned_at?: string; // ISO string
+  earned_at?: string;
   meta?: any;
 };
 
@@ -286,17 +262,15 @@ type BadgeDef = {
   earned_at?: string;
 };
 
-/** Turn a region sequence into "crossed_*" badges (idempotent + extendable) */
 function computeBadgesFromRegions(args: {
   origin?: { name?: string; regionId?: string | null };
   dest?: { name?: string; regionId?: string | null };
-  pastRegionIds: string[]; // in order
+  pastRegionIds: string[];
   delivered?: boolean;
   deliveredAtISO?: string;
 }) {
   const { pastRegionIds, delivered, deliveredAtISO } = args;
 
-  // Reduce to change-points only: [a,a,a,b,b,c] => [a,b,c]
   const seq: string[] = [];
   for (const r of pastRegionIds) {
     if (!r) continue;
@@ -304,8 +278,6 @@ function computeBadgesFromRegions(args: {
   }
 
   const has = (id: string) => seq.includes(id);
-
-  // "Crossed X" style: award once they've been in region AND later left it
   const crossed = (regionId: string) => {
     const i = seq.indexOf(regionId);
     return i !== -1 && i < seq.length - 1;
@@ -380,7 +352,6 @@ function computeBadgesFromRegions(args: {
     });
   }
 
-  // Dedup by code just in case
   const seen = new Set<string>();
   return out.filter((b) => (seen.has(b.code) ? false : (seen.add(b.code), true)));
 }
@@ -388,7 +359,6 @@ function computeBadgesFromRegions(args: {
 export async function GET(_req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
 
-  // First fetch: metadata ONLY (no body)
   const { data: meta, error: metaErr } = await supabaseServer
     .from("letters")
     .select(
@@ -407,7 +377,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
       distance_km,
       speed_kmh,
       sent_at,
-      eta_at
+      eta_at,
+      archived_at
     `
     )
     .eq("public_token", token)
@@ -418,6 +389,17 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   if (metaErr || !meta) {
     return NextResponse.json({ error: metaErr?.message ?? "Not found" }, { status: 404 });
   }
+
+  // ✅ archived handling (freeze time)
+  const archived_at = meta.archived_at ?? null;
+  const archivedAtMs = archived_at ? Date.parse(archived_at) : NaN;
+  const archived = !!archived_at && Number.isFinite(archivedAtMs);
+
+  const realNowMs = Date.now();
+  const nowMs = archived ? Math.min(realNowMs, archivedAtMs) : realNowMs;
+
+  const server_now_iso = new Date(nowMs).toISOString();
+  const server_now_utc_text = formatUtc(server_now_iso);
 
   // Fetch checkpoints
   const { data: checkpoints, error: cErr } = await supabaseServer
@@ -430,47 +412,33 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     return NextResponse.json({ error: cErr.message }, { status: 500 });
   }
 
-  const nowMs = Date.now();
   const sentMs = Date.parse(meta.sent_at);
 
-  // -----------------------------
   // ✅ Sleep-aware flight math
-  // -----------------------------
   const offsetMin = offsetMinutesFromLon(meta.origin_lon);
 
-  const requiredAwakeMs =
-    meta.speed_kmh > 0
-      ? (meta.distance_km / meta.speed_kmh) * 3600_000
-      : 0;
+  const requiredAwakeMs = meta.speed_kmh > 0 ? (meta.distance_km / meta.speed_kmh) * 3600_000 : 0;
 
   const etaAdjustedMs =
-    Number.isFinite(sentMs) && requiredAwakeMs > 0
-      ? etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin)
-      : Date.parse(meta.eta_at);
+    Number.isFinite(sentMs) && requiredAwakeMs > 0 ? etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin) : Date.parse(meta.eta_at);
 
   const delivered = Number.isFinite(etaAdjustedMs) ? nowMs >= etaAdjustedMs : true;
 
   const awakeSoFar =
-    Number.isFinite(sentMs) && nowMs > sentMs
-      ? awakeMsBetween(sentMs, Math.min(nowMs, etaAdjustedMs), offsetMin)
-      : 0;
+    Number.isFinite(sentMs) && nowMs > sentMs ? awakeMsBetween(sentMs, Math.min(nowMs, etaAdjustedMs), offsetMin) : 0;
 
-  const progress =
-    requiredAwakeMs > 0 ? clamp(awakeSoFar / requiredAwakeMs, 0, 1) : 1;
+  const progress = requiredAwakeMs > 0 ? clamp(awakeSoFar / requiredAwakeMs, 0, 1) : 1;
 
-  const sleeping = isSleepingAt(nowMs, offsetMin);
-  const wakeMs = nextWakeUtcMs(nowMs, offsetMin);
+  // ✅ If archived, we don't want “currently sleeping/live” to wiggle
+  const sleeping = archived ? false : isSleepingAt(nowMs, offsetMin);
+  const wakeMs = archived ? null : nextWakeUtcMs(nowMs, offsetMin);
   const sleep_until_iso = wakeMs ? new Date(wakeMs).toISOString() : null;
   const sleep_local_text = wakeMs ? sleepUntilLocalText(wakeMs, offsetMin) : "";
 
   // Only fetch body AFTER delivery
   let body: string | null = null;
   if (delivered) {
-    const { data: bodyRow } = await supabaseServer
-      .from("letters")
-      .select("body")
-      .eq("id", meta.id)
-      .single();
+    const { data: bodyRow } = await supabaseServer.from("letters").select("body").eq("id", meta.id).single();
     body = bodyRow?.body ?? null;
   }
 
@@ -479,24 +447,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     const isFirst = i === 0;
     const isLast = i === arr.length - 1;
 
-    const geo =
-      Number.isFinite(cp.lat) && Number.isFinite(cp.lon)
-        ? checkpointGeoText(cp.lat, cp.lon)
-        : "somewhere over the U.S.";
+    const geo = Number.isFinite(cp.lat) && Number.isFinite(cp.lon) ? checkpointGeoText(cp.lat, cp.lon) : "somewhere over the U.S.";
 
-    const region =
-      Number.isFinite(cp.lat) && Number.isFinite(cp.lon)
-        ? geoRegionForPoint(cp.lat, cp.lon)
-        : null;
+    const region = Number.isFinite(cp.lat) && Number.isFinite(cp.lon) ? geoRegionForPoint(cp.lat, cp.lon) : null;
 
-    const upgradedName = isFirst
-      ? `Departed roost — ${geo}`
-      : isLast
-      ? `Final descent — ${geo}`
-      : geo;
+    const upgradedName = isFirst ? `Departed roost — ${geo}` : isLast ? `Final descent — ${geo}` : geo;
 
     return {
       ...cp,
+      kind: "checkpoint",
       geo_text: geo,
       region_id: region?.id ?? null,
       region_label: region?.label ?? null,
@@ -504,16 +463,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     };
   });
 
-  // ✅ Inject sleep events into checkpoints so timeline can show them
-  const sleepEvents = Number.isFinite(sentMs)
-    ? buildSleepEvents({ sentMs, nowMs, offsetMin })
-    : [];
+  // ✅ Inject sleep events (not for archived — timeline should be stable)
+  const sleepEvents = !archived && Number.isFinite(sentMs) ? buildSleepEvents({ sentMs, nowMs, offsetMin }) : [];
 
-  const cps = [...cpsBase, ...sleepEvents].sort(
-    (a: any, b: any) => Date.parse(a.at) - Date.parse(b.at)
-  );
+  const cps = [...cpsBase, ...sleepEvents].sort((a: any, b: any) => Date.parse(a.at) - Date.parse(b.at));
 
-  // ✅ compute current_over_text (geo only) for map/tooltips
+  // ✅ current_over_text (geo only) for map/tooltips
   let current_over_text = delivered ? "Delivered" : "somewhere over the U.S.";
   if (!delivered && cpsBase.length) {
     let cur = cpsBase[0];
@@ -525,7 +480,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     current_over_text = cur?.geo_text || current_over_text;
   }
 
-  // ✅ Tooltip copy (server-prepared so UI stays consistent)
+  // ✅ Tooltip copy
   const geoBase = delivered ? "Delivered" : stripOverPrefix(current_over_text);
   const tooltip_text = delivered
     ? `Location: Delivered`
@@ -533,7 +488,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     ? `Location: Sleeping — ${geoBase || "somewhere over the U.S."}`
     : `Location: ${geoBase || "somewhere over the U.S."}`;
 
-  // ✅ Award badges (based on past checkpoints only — NOT sleep events)
+  // ✅ Award badges (past checkpoints only — NOT sleep events)
   const past = cpsBase.filter((cp: any) => {
     const t = Date.parse(cp.at);
     return Number.isFinite(t) && t <= nowMs;
@@ -542,25 +497,23 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const pastRegionIds = past.map((cp: any) => cp.region_id).filter(Boolean) as string[];
 
   const originRegion =
-    Number.isFinite(meta.origin_lat) && Number.isFinite(meta.origin_lon)
-      ? geoRegionForPoint(meta.origin_lat, meta.origin_lon)
-      : null;
+    Number.isFinite(meta.origin_lat) && Number.isFinite(meta.origin_lon) ? geoRegionForPoint(meta.origin_lat, meta.origin_lon) : null;
 
   const destRegion =
-    Number.isFinite(meta.dest_lat) && Number.isFinite(meta.dest_lon)
-      ? geoRegionForPoint(meta.dest_lat, meta.dest_lon)
-      : null;
+    Number.isFinite(meta.dest_lat) && Number.isFinite(meta.dest_lon) ? geoRegionForPoint(meta.dest_lat, meta.dest_lon) : null;
+
+  const deliveredAtISO =
+    delivered && Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : delivered ? new Date(nowMs).toISOString() : undefined;
 
   const computedBadges = computeBadgesFromRegions({
     origin: { name: meta.origin_name, regionId: originRegion?.id ?? null },
     dest: { name: meta.dest_name, regionId: destRegion?.id ?? null },
     pastRegionIds,
     delivered,
-    deliveredAtISO: delivered ? new Date(Math.max(nowMs, etaAdjustedMs || nowMs)).toISOString() : undefined,
+    deliveredAtISO,
   });
 
-  // ✅ Upsert badges (idempotent) — set earned_at so sorting works
-  if (computedBadges.length) {
+  if (!archived && computedBadges.length) {
     const earnedAtDefault = new Date(nowMs).toISOString();
 
     const rows: LetterItemInsert[] = computedBadges.map((b) => ({
@@ -575,16 +528,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
       meta: b.meta ?? {},
     }));
 
-    const { error: upsertErr } = await supabaseServer
-      .from("letter_items")
-      .upsert(rows, { onConflict: "letter_id,kind,code" });
+    const { error: upsertErr } = await supabaseServer.from("letter_items").upsert(rows, { onConflict: "letter_id,kind,code" });
 
-    if (upsertErr) {
-      console.error("BADGE UPSERT ERROR:", upsertErr);
-    }
+    if (upsertErr) console.error("BADGE UPSERT ERROR:", upsertErr);
   }
 
-  // ✅ Fetch items to return (badges + addons later)
   const { data: items, error: itemsErr } = await supabaseServer
     .from("letter_items")
     .select("id, kind, code, title, subtitle, icon, rarity, earned_at, meta")
@@ -598,32 +546,41 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const badges = (items ?? []).filter((x: any) => x.kind === "badge");
   const addons = (items ?? []).filter((x: any) => x.kind === "addon");
 
-  const etaAdjustedISO = Number.isFinite(etaAdjustedMs)
-    ? new Date(etaAdjustedMs).toISOString()
-    : meta.eta_at;
+  const etaAdjustedISO = Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : meta.eta_at;
 
   return NextResponse.json({
+    archived,
+    archived_at: archived ? archived_at : null,
+
+    // ✅ for client-side freezing when archived
+    server_now_iso,
+    server_now_utc_text,
+
     letter: {
       ...meta,
       body,
-      // ✅ IMPORTANT: status page should use this for countdown/seal
+
       eta_at_adjusted: etaAdjustedISO,
       eta_utc_text: formatUtc(etaAdjustedISO),
+
+      archived_at: archived ? archived_at : null,
     },
+
     checkpoints: cps,
     delivered,
     current_over_text,
+
     flight: {
-      progress, // ✅ sleep-aware progress 0..1
+      progress,
       sleeping,
       sleep_until_iso,
       sleep_local_text,
-      tooltip_text, // ✅ "Location: ..." (sleeping-aware)
+      tooltip_text,
+
+      // ✅ IMPORTANT: archived should reflect frozen state, not force delivered
       marker_mode: delivered ? "delivered" : sleeping ? "sleeping" : "flying",
     },
-    items: {
-      badges,
-      addons,
-    },
+
+    items: { badges, addons },
   });
 }

@@ -24,11 +24,14 @@ type Letter = {
   sent_at: string;
   eta_at: string;
 
-  // ✅ NEW from route.ts
+  // from route.ts
   eta_at_adjusted?: string;
 
-  // ✅ comes from /api/letters/[token]
+  // from /api/letters/[token]
   eta_utc_text?: string;
+
+  // optional convenience (you included this in your latest API)
+  archived_at?: string | null;
 };
 
 type Checkpoint = {
@@ -69,15 +72,14 @@ type LetterItems = {
 };
 
 type Flight = {
-  progress: number; // ✅ sleep-aware 0..1
+  progress: number; // sleep-aware 0..1
   sleeping: boolean;
   sleep_until_iso: string | null;
   sleep_local_text: string; // e.g. "6:00 AM"
-  tooltip_text: string; // ✅ already "Location: ..."
+  tooltip_text: string; // "Location: ..."
   marker_mode: "flying" | "sleeping" | "delivered";
 };
 
-// ✅ UPDATED: matches MapView.tsx
 type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
 
 type TimelineKind = "checkpoint" | "sleep" | "day";
@@ -161,46 +163,21 @@ function Ico({
             strokeWidth="2.4"
             strokeLinejoin="round"
           />
-          <path
-            d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z"
-            stroke="currentColor"
-            strokeWidth="2.4"
-          />
+          <path d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z" stroke="currentColor" strokeWidth="2.4" />
         </svg>
       );
     case "speed":
       return (
         <svg {...common}>
-          <path
-            d="M5 13a7 7 0 0 1 14 0"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-          />
-          <path
-            d="M12 13l4.5-4.5"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M4 13h2M18 13h2"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-          />
+          <path d="M5 13a7 7 0 0 1 14 0" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+          <path d="M12 13l4.5-4.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M4 13h2M18 13h2" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
         </svg>
       );
     case "distance":
       return (
         <svg {...common}>
-          <path
-            d="M7 7h10M7 17h10"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-          />
+          <path d="M7 7h10M7 17h10" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
           <path
             d="M9 9l-2-2 2-2M15 15l2 2-2 2"
             stroke="currentColor"
@@ -213,13 +190,7 @@ function Ico({
     case "check":
       return (
         <svg {...common}>
-          <path
-            d="M20 6 9 17l-5-5"
-            stroke="currentColor"
-            strokeWidth="2.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     case "mail":
@@ -281,16 +252,8 @@ function ConfettiBurst({ show }: { show: boolean }) {
   );
 }
 
-/* ---------- timeline rail (grouped by day + sleep block) ---------- */
-function RailTimeline({
-  items,
-  now,
-  currentKey,
-}: {
-  items: TimelineItem[];
-  now: Date;
-  currentKey: string | null;
-}) {
+/* ---------- timeline rail (grouped by day + sleep blocks) ---------- */
+function RailTimeline({ items, now, currentKey }: { items: TimelineItem[]; now: Date; currentKey: string | null }) {
   const [popped, setPopped] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -396,6 +359,13 @@ function rarityLabel(r?: string) {
   return "Common";
 }
 
+function isSleepCheckpoint(cp: Checkpoint) {
+  const id = (cp.id || "").toLowerCase();
+  const name = (cp.name || "").toLowerCase();
+  const geo = (cp.geo_text || "").toLowerCase();
+  return id.startsWith("sleep-") || geo === "sleeping" || name.includes("pigeon slept") || name.startsWith("sleeping");
+}
+
 export default function LetterStatusPage() {
   const params = useParams();
   const raw = (params as any)?.token;
@@ -405,6 +375,13 @@ export default function LetterStatusPage() {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [items, setItems] = useState<LetterItems>({ badges: [], addons: [] });
   const [flight, setFlight] = useState<Flight | null>(null);
+
+  const [archived, setArchived] = useState(false);
+  const [archivedAtISO, setArchivedAtISO] = useState<string | null>(null);
+
+  // ✅ NEW: server snapshot time (source of truth for "frozen now")
+  const [serverNowISO, setServerNowISO] = useState<string | null>(null);
+  const [serverNowUtcText, setServerNowUtcText] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
@@ -438,10 +415,16 @@ export default function LetterStatusPage() {
     window.localStorage.setItem("pigeon_map_style", mapStyle);
   }, [mapStyle]);
 
+  // ✅ clock: freeze when archived (use server snapshot time, NOT archived_at)
   useEffect(() => {
+    if (archived && serverNowISO) {
+      setNow(new Date(serverNowISO));
+      return;
+    }
+
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [archived, serverNowISO]);
 
   useEffect(() => {
     if (!token) return;
@@ -461,7 +444,16 @@ export default function LetterStatusPage() {
         }
         if (!alive) return;
 
+        // ✅ snapshot time returned by server
+        setServerNowISO(typeof data.server_now_iso === "string" ? data.server_now_iso : null);
+        setServerNowUtcText(typeof data.server_now_utc_text === "string" ? data.server_now_utc_text : null);
+
         setLetter(data.letter as Letter);
+
+        setArchived(!!data.archived);
+        const aISO = (data.archived_at as string | null) || (data.letter?.archived_at as string | null) || null;
+        setArchivedAtISO(aISO && String(aISO).trim() ? String(aISO) : null);
+
         setDelivered(!!data.delivered);
         setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
         setCurrentOverText(typeof data.current_over_text === "string" ? data.current_over_text : null);
@@ -483,13 +475,21 @@ export default function LetterStatusPage() {
     };
 
     void load();
+
+    // ✅ stop polling when archived (snapshot)
+    if (archived) {
+      return () => {
+        alive = false;
+      };
+    }
+
     const interval = setInterval(() => void load(), 15000);
 
     return () => {
       alive = false;
       clearInterval(interval);
     };
-  }, [token]);
+  }, [token, archived]);
 
   // Prefer adjusted ETA for countdown/progress (when present)
   const effectiveEtaISO = useMemo(() => {
@@ -500,20 +500,22 @@ export default function LetterStatusPage() {
   const sleeping = !!flight?.sleeping;
 
   /**
-   * ✅ UI safety net for "zombie letters":
-   * If the ORIGINAL eta_at is clearly in the past, treat as delivered even if server says otherwise.
-   * This prevents old letters from becoming LIVE after ETA adjustment logic changes.
+   * UI safety net for "zombie letters"
    */
   const uiDelivered = useMemo(() => {
     if (!letter) return delivered;
 
     const etaOriginalMs = Date.parse(letter.eta_at);
-    const etaOriginalPassed = Number.isFinite(etaOriginalMs) && now.getTime() > etaOriginalMs + 60_000; // 1 min grace
+    const etaOriginalPassed = Number.isFinite(etaOriginalMs) && now.getTime() > etaOriginalMs + 60_000;
 
     if (delivered) return true;
+
+    // Archived snapshots should not “force delivered” based on original ETA.
+    if (archived) return false;
+
     if (sleeping) return false;
     return etaOriginalPassed;
-  }, [letter, delivered, sleeping, now]);
+  }, [letter, delivered, sleeping, now, archived]);
 
   // progress: prefer server flight.progress; fallback local
   const progress = useMemo(() => {
@@ -549,16 +551,23 @@ export default function LetterStatusPage() {
     });
   }, [letter, effectiveEtaISO, now]);
 
+  // ✅ sort by time for “what happened when” (fixes sleep blocks landing in wrong day)
+  const checkpointsByTime = useMemo(() => {
+    const cps = [...checkpoints];
+    cps.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+    return cps;
+  }, [checkpoints]);
+
   // current checkpoint (time-based “latest past”)
   const currentCheckpoint = useMemo(() => {
-    if (!checkpoints.length || !letter) return null;
+    if (!checkpointsByTime.length || !letter) return null;
     const t = now.getTime();
     let current: Checkpoint | null = null;
-    for (const cp of checkpoints) {
+    for (const cp of checkpointsByTime) {
       if (new Date(cp.at).getTime() <= t) current = cp;
     }
-    return current ?? checkpoints[0];
-  }, [checkpoints, letter, now]);
+    return current ?? checkpointsByTime[0];
+  }, [checkpointsByTime, letter, now]);
 
   const secondsSinceFetch = useMemo(() => {
     if (!lastFetchedAt) return null;
@@ -583,55 +592,27 @@ export default function LetterStatusPage() {
     return `Location: ${currentlyOver || "somewhere over the U.S."}`;
   }, [flight?.tooltip_text, uiDelivered, currentlyOver]);
 
-  const showLive = !uiDelivered;
-
-  // ✅ Stable checkpoint ordering by idx
-  const checkpointsOrdered = useMemo(() => {
-    const cps = [...checkpoints];
-    cps.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
-    return cps;
-  }, [checkpoints]);
+  // ✅ status banner: archived is a third state
+  const showLive = !uiDelivered && !archived;
 
   /**
    * ✅ RIGHT RAIL TIMELINE:
-   * - checkpoints ONLY (no % milestones)
-   * - grouped by day via inserted "day" header items
-   * - adds a "sleep" block when sleeping
+   * - checkpoints only (no % milestones)
+   * - sleep blocks come from server-injected sleep checkpoints
+   * - grouped by day with header rows
    */
   const timelineItems = useMemo(() => {
-    const base: TimelineItem[] = checkpointsOrdered.map((cp) => ({
+    const base: TimelineItem[] = checkpointsByTime.map((cp) => ({
       key: `cp-${cp.id}`,
       name: cp.name,
       at: cp.at,
-      kind: "checkpoint",
+      kind: isSleepCheckpoint(cp) ? "sleep" : "checkpoint",
     }));
 
-    // If sleeping now, inject a sleep row "at now" so it becomes the current rail item.
-    // (This is UI-only; doesn’t mutate checkpoints.)
-    const withSleep: TimelineItem[] = (() => {
-      if (!flight) return base;
-
-      if (!flight.sleeping) return base;
-
-      const sleepAt = new Date().toISOString(); // show as current
-      const sleepUntil = flight.sleep_local_text || (flight.sleep_until_iso ? timeLabelLocal(flight.sleep_until_iso) : "soon");
-
-      return [
-        ...base,
-        {
-          key: `sleep-${sleepAt}`,
-          name: `Sleeping — wakes at ${sleepUntil}`,
-          at: sleepAt,
-          kind: "sleep",
-        },
-      ];
-    })();
-
-    // Group by local day by inserting header rows
     const grouped: TimelineItem[] = [];
     let lastDay = "";
 
-    for (const it of withSleep) {
+    for (const it of base) {
       const d = dayLabelLocal(it.at);
       if (d && d !== lastDay) {
         grouped.push({
@@ -646,7 +627,7 @@ export default function LetterStatusPage() {
     }
 
     return grouped;
-  }, [checkpointsOrdered, flight]);
+  }, [checkpointsByTime]);
 
   // Current key (ignore day headers)
   const currentTimelineKey = useMemo(() => {
@@ -667,7 +648,6 @@ export default function LetterStatusPage() {
       }
     }
 
-    // If nothing is "past" yet, just pick the first real item
     return bestKey ?? realItems[0].key;
   }, [timelineItems, now, uiDelivered]);
 
@@ -726,6 +706,8 @@ export default function LetterStatusPage() {
     );
   }
 
+  const archivedLabel = archivedAtISO ? `Archived • ${new Date(archivedAtISO).toLocaleString()}` : "Archived";
+
   return (
     <main className="pageBg">
       <main className="wrap">
@@ -762,6 +744,15 @@ export default function LetterStatusPage() {
                       </span>
                     </div>
                   </>
+                ) : archived ? (
+                  <div className="metaPill">
+                    <span className="ico">
+                      <Ico name="timeline" />
+                    </span>
+                    <span>
+                      <strong>ARCHIVED</strong> — snapshot view. <span style={{ opacity: 0.75 }}>{archivedLabel}</span>
+                    </span>
+                  </div>
                 ) : (
                   <div className="metaPill">
                     <span className="ico">
@@ -778,7 +769,15 @@ export default function LetterStatusPage() {
             <div className="etaBox">
               <div className="kicker">ETA (UTC)</div>
               <div className="etaTime">{etaTextUTC}</div>
-              {!uiDelivered && <div className="etaSub">T-minus {countdown}</div>}
+
+              {!uiDelivered && !archived && <div className="etaSub">T-minus {countdown}</div>}
+
+              {/* ✅ Archived snapshot shows the frozen time used by the server */}
+              {archived && (
+                <div className="etaSub">
+                  Snapshot: <span style={{ fontVariantNumeric: "tabular-nums" }}>{serverNowUtcText ?? "frozen"}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -838,10 +837,7 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div
-                className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""}
-                style={{ opacity: uiDelivered ? 1 : 0 }}
-              >
+              <div className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: uiDelivered ? 1 : 0 }}>
                 <div className="body">{uiDelivered ? (letter.body ?? "") : ""}</div>
               </div>
 
@@ -937,7 +933,7 @@ export default function LetterStatusPage() {
                   <span className="ico">
                     <Ico name="live" />
                   </span>
-                  {uiDelivered ? "Final" : "Auto"}
+                  {uiDelivered || archived ? "Final" : "Auto"}
                 </div>
               </div>
 

@@ -109,12 +109,8 @@ function RouteThumb(props: {
     const d = props.dest;
     const c = props.current;
 
-    const lons = [o.lon, d.lon, c?.lon].filter(
-      (v): v is number => Number.isFinite(v)
-    );
-    const lats = [o.lat, d.lat, c?.lat].filter(
-      (v): v is number => Number.isFinite(v)
-    );
+    const lons = [o.lon, d.lon, c?.lon].filter((v): v is number => Number.isFinite(v));
+    const lats = [o.lat, d.lat, c?.lat].filter((v): v is number => Number.isFinite(v));
 
     const minLon = Math.min(...lons);
     const maxLon = Math.max(...lons);
@@ -201,6 +197,9 @@ export default function DashboardPage() {
 
   const [toast, setToast] = useState<string | null>(null);
 
+  // ✅ archive UX state
+  const [archivingId, setArchivingId] = useState<string | null>(null);
+
   // tick so countdowns animate
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -245,9 +244,7 @@ export default function DashboardPage() {
       localStorage.setItem("cp_sender_email", e);
 
       const res = await fetch(
-        `/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(
-          qs
-        )}`,
+        `/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(qs)}`,
         { cache: "no-store" }
       );
 
@@ -260,6 +257,44 @@ export default function DashboardPage() {
       setLetters([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  // ✅ Archive (soft delete)
+  async function archiveLetter(letter: DashboardLetter) {
+    if (archivingId) return; // prevent double-clicks / overlapping archives
+
+    const ok = window.confirm(
+      `Archive this letter?\n\n"${letter.subject?.trim() ? letter.subject : "(No subject)"}"\n\nThis hides it from your dashboard but keeps the public link working.`
+    );
+    if (!ok) return;
+
+    setArchivingId(letter.id);
+
+    // snapshot for rollback
+    const prevSnapshot = letters;
+
+    // optimistic remove
+    setLetters((cur) => cur.filter((x) => x.id !== letter.id));
+
+    try {
+      const res = await fetch(`/api/letters/archive/${encodeURIComponent(letter.public_token)}`, {
+        method: "POST",
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Archive failed");
+
+      setToast("Archived ✅");
+      void load(); // refresh so counts/stats stay honest
+    } catch (err: any) {
+      // rollback
+      setLetters(prevSnapshot);
+      setToast("Archive failed ❌");
+      console.error("ARCHIVE ERROR:", err);
+    } finally {
+      setArchivingId(null);
     }
   }
 
@@ -339,11 +374,7 @@ export default function DashboardPage() {
 
               <div className="metaPill" style={{ gap: 10 }}>
                 <span style={{ opacity: 0.7 }}>Filter</span>
-                <select
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value as Filter)}
-                  className="dashSelect"
-                >
+                <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)} className="dashSelect">
                   <option value="all">All</option>
                   <option value="inflight">In flight</option>
                   <option value="delivered">Delivered</option>
@@ -352,11 +383,7 @@ export default function DashboardPage() {
 
               <div className="metaPill" style={{ gap: 10 }}>
                 <span style={{ opacity: 0.7 }}>Sort</span>
-                <select
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value as Sort)}
-                  className="dashSelect"
-                >
+                <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="dashSelect">
                   <option value="newest">Newest</option>
                   <option value="etaSoonest">ETA soonest</option>
                   <option value="oldest">Oldest</option>
@@ -402,14 +429,7 @@ export default function DashboardPage() {
               />
             </label>
 
-            <div
-              style={{
-                display: "flex",
-                gap: 12,
-                flexWrap: "wrap",
-                alignItems: "center",
-              }}
-            >
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
               <button onClick={() => load()} disabled={loading} className="btnPrimary">
                 {loading ? "Loading…" : "Load letters"}
               </button>
@@ -463,9 +483,7 @@ export default function DashboardPage() {
 
               const statusPath = `/l/${l.public_token}`;
               const statusUrl =
-                typeof window !== "undefined"
-                  ? `${window.location.origin}${statusPath}`
-                  : statusPath;
+                typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
 
               const canThumb =
                 Number.isFinite(l.origin_lat) &&
@@ -474,9 +492,7 @@ export default function DashboardPage() {
                 Number.isFinite(l.dest_lon);
 
               const current =
-                l.current_lat != null && l.current_lon != null
-                  ? { lat: l.current_lat, lon: l.current_lon }
-                  : null;
+                l.current_lat != null && l.current_lon != null ? { lat: l.current_lat, lon: l.current_lon } : null;
 
               const geoPoint =
                 current ??
@@ -490,19 +506,17 @@ export default function DashboardPage() {
                     }
                   : null);
 
-              const geoText =
-                l.delivered
-                  ? "Delivered"
-                  : geoPoint
-                  ? checkpointGeoText(geoPoint.lat, geoPoint.lon)
-                  : "somewhere over the U.S.";
+              const geoText = l.delivered
+                ? "Delivered"
+                : geoPoint
+                ? checkpointGeoText(geoPoint.lat, geoPoint.lon)
+                : "somewhere over the U.S.";
 
-              const sentUtc =
-                (l.sent_utc_text && l.sent_utc_text.trim()) || formatUtcFallback(l.sent_at);
-              const etaUtc =
-                (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(l.eta_at);
+              const sentUtc = (l.sent_utc_text && l.sent_utc_text.trim()) || formatUtcFallback(l.sent_at);
+              const etaUtc = (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(l.eta_at);
 
               const badgeCount = Math.max(0, Number(l.badges_count ?? 0));
+              const isArchivingThis = archivingId === l.id;
 
               return (
                 <div key={l.id} className="card">
@@ -546,7 +560,6 @@ export default function DashboardPage() {
                       {statusEmoji} <strong>{statusLabel}</strong>
                     </div>
 
-                    {/* ✅ Badges pill */}
                     <div className="metaPill" title="Badges earned so far">
                       🏅 <strong>{badgeCount}</strong>&nbsp;{badgeCount === 1 ? "Badge" : "Badges"}
                     </div>
@@ -559,8 +572,20 @@ export default function DashboardPage() {
                         setToast("Link copied 🕊️");
                       }}
                       title="Copy status link"
+                      disabled={isArchivingThis}
                     >
                       Copy link
+                    </button>
+
+                    {/* ✅ ARCHIVE */}
+                    <button
+                      type="button"
+                      className="btnGhost"
+                      onClick={() => void archiveLetter(l)}
+                      title="Archive letter (soft delete)"
+                      disabled={isArchivingThis}
+                    >
+                      {isArchivingThis ? "Archiving…" : "Archive"}
                     </button>
                   </div>
 

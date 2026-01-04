@@ -28,7 +28,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
   }
 
-  // Pull the most recent letters sent by this sender email
+  // Pull the most recent letters sent by this sender email (exclude archived)
   const { data, error } = await supabaseServer
     .from("letters")
     .select(
@@ -51,10 +51,12 @@ export async function GET(req: Request) {
       delivered_notified_at,
       sender_receipt_sent_at,
       distance_km,
-      speed_kmh
+      speed_kmh,
+      archived_at
     `
     )
     .eq("from_email", email)
+    .is("archived_at", null) // ✅ HIDE ARCHIVED (soft delete)
     .order("sent_at", { ascending: false })
     .limit(50);
 
@@ -62,17 +64,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const now = Date.now();
+  const nowMs = Date.now();
 
   let letters = (data ?? []).map((l: any) => {
     const sent = Date.parse(l.sent_at);
     const eta = Date.parse(l.eta_at);
 
-    const delivered = Number.isFinite(eta) ? now >= eta : true;
+    // Dashboard definition: delivered when ORIGINAL ETA has passed
+    // (status page does sleep-aware logic)
+    const delivered = Number.isFinite(eta) ? nowMs >= eta : true;
 
     const progress =
       Number.isFinite(sent) && Number.isFinite(eta) && eta > sent
-        ? Math.max(0, Math.min(1, (now - sent) / (eta - sent)))
+        ? Math.max(0, Math.min(1, (nowMs - sent) / (eta - sent)))
         : 1;
 
     // current position for mini map + UI (linear interp)
@@ -106,14 +110,7 @@ export async function GET(req: Request) {
   // Optional server-side search filtering (still returns <= 50 base list)
   if (q) {
     letters = letters.filter((l: any) => {
-      const hay = [
-        l.subject,
-        l.to_name,
-        l.to_email,
-        l.origin_name,
-        l.dest_name,
-        l.public_token,
-      ]
+      const hay = [l.subject, l.to_name, l.to_email, l.origin_name, l.dest_name, l.public_token]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -122,7 +119,6 @@ export async function GET(req: Request) {
   }
 
   // ✅ Badge counts (cheap, no badge payload)
-  // Only do this if we have letters to look up.
   const letterIds = letters.map((l: any) => l.id).filter(Boolean);
   if (letterIds.length) {
     const { data: badgeRows, error: badgeErr } = await supabaseServer
@@ -141,7 +137,7 @@ export async function GET(req: Request) {
         badges_count: counts.get(l.id) ?? 0,
       }));
     }
-    // If badgeErr happens, we just leave badges_count = 0 and still return letters.
+    // If badgeErr happens, we still return letters (badges_count stays 0)
   }
 
   return NextResponse.json({ letters });
