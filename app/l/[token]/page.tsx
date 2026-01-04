@@ -108,12 +108,6 @@ function formatUtcFallback(iso: string) {
   return `${d.toISOString().replace("T", " ").replace("Z", "")} UTC`;
 }
 
-function addHoursISO(iso: string, hours: number) {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return iso;
-  return new Date(t + hours * 3600_000).toISOString();
-}
-
 /* ---------- tiny icon system (inline SVG) ---------- */
 function Ico({
   name,
@@ -383,9 +377,11 @@ export default function LetterStatusPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
-  const [delivered, setDelivered] = useState(false);
-  const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
+  // store raw server delivered, but DON'T trust it as sole truth
+  const [deliveredRaw, setDeliveredRaw] = useState(false);
+
+  const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
   const [currentOverText, setCurrentOverText] = useState<string | null>(null);
 
   const prevDelivered = useRef(false);
@@ -437,14 +433,14 @@ export default function LetterStatusPage() {
         if (!alive) return;
 
         setLetter(data.letter as Letter);
-        setDelivered(!!data.delivered);
+        setDeliveredRaw(!!data.delivered);
         setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
         setCurrentOverText(typeof data.current_over_text === "string" ? data.current_over_text : null);
 
-        // ✅ sleep-aware flight info
+        // sleep-aware flight info
         setFlight((data.flight ?? null) as Flight | null);
 
-        // ✅ items (badges/addons)
+        // items (badges/addons)
         const nextItems = (data.items ?? {}) as Partial<LetterItems>;
         setItems({
           badges: Array.isArray(nextItems.badges) ? (nextItems.badges as BadgeItem[]) : [],
@@ -468,6 +464,30 @@ export default function LetterStatusPage() {
     };
   }, [token]);
 
+  const effectiveEtaISO = useMemo(() => {
+    if (!letter) return "";
+    return (letter.eta_at_adjusted && letter.eta_at_adjusted.trim()) || letter.eta_at;
+  }, [letter]);
+
+  // ✅ Derive "delivered" from multiple signals so UI can't flip back to LIVE
+  const delivered = useMemo(() => {
+    if (!letter) return false;
+
+    // strongest: explicit markers from server
+    if (deliveredRaw) return true;
+    if (flight?.marker_mode === "delivered") return true;
+
+    // strong: progress already at/over 1
+    if (typeof flight?.progress === "number" && Number.isFinite(flight.progress) && flight.progress >= 1) return true;
+
+    // fallback: ETA reached
+    const etaT = Date.parse(effectiveEtaISO);
+    if (Number.isFinite(etaT) && now.getTime() >= etaT) return true;
+
+    return false;
+  }, [letter, deliveredRaw, flight?.marker_mode, flight?.progress, effectiveEtaISO, now]);
+
+  // reveal animation when delivered flips true (derived)
   useEffect(() => {
     if (!prevDelivered.current && delivered) {
       setRevealStage("crack");
@@ -485,18 +505,11 @@ export default function LetterStatusPage() {
     prevDelivered.current = delivered;
   }, [delivered]);
 
-  const effectiveEtaISO = useMemo(() => {
-    if (!letter) return "";
-    return (letter.eta_at_adjusted && letter.eta_at_adjusted.trim()) || letter.eta_at;
-  }, [letter]);
-
-  const sleeping = !!flight?.sleeping;
-
-  // ✅ server is source of truth (progress)
+  // ✅ sleep-aware progress (server is source of truth)
   const progress = useMemo(() => {
     if (flight && Number.isFinite(flight.progress)) return clamp01(flight.progress);
-    if (!letter) return 0;
 
+    if (!letter) return 0;
     const sent = new Date(letter.sent_at).getTime();
     const eta = new Date(effectiveEtaISO).getTime();
     const t = now.getTime();
@@ -540,8 +553,10 @@ export default function LetterStatusPage() {
     return Math.max(0, Math.floor((now.getTime() - lastFetchedAt.getTime()) / 1000));
   }, [now, lastFetchedAt]);
 
+  // prefer server current_over_text, then cp.geo_text, then cp.name
   const currentlyOver = useMemo(() => {
     if (delivered) return "Delivered";
+
     if (currentOverText && currentOverText.trim()) return currentOverText;
 
     const fallback =
@@ -552,7 +567,7 @@ export default function LetterStatusPage() {
     return fallback;
   }, [delivered, currentOverText, currentCheckpoint]);
 
-  // ✅ prefer server tooltip (sleep-aware; should already include "Location:")
+  // tooltip string should come from server (sleep-aware, includes "Location:")
   const mapTooltip = useMemo(() => {
     if (flight?.tooltip_text && flight.tooltip_text.trim()) return flight.tooltip_text;
     if (delivered) return "Location: Delivered";
@@ -561,13 +576,14 @@ export default function LetterStatusPage() {
 
   const showLive = !delivered;
 
-  // ✅ timeline: checkpoints + milestones + (optional) current sleep window
+  // ✅ Fix: stable ordering + tie-breakers to prevent “rearranged” log
   const timelineItems = useMemo(() => {
     const cps = checkpoints.map((cp) => ({
       key: `cp-${cp.id}`,
       name: cp.name,
       at: cp.at,
       kind: "checkpoint" as const,
+      _idx: cp.idx ?? 0,
     }));
 
     const ms = milestones.map((m) => ({
@@ -575,33 +591,27 @@ export default function LetterStatusPage() {
       name: m.label,
       at: m.atISO,
       kind: "milestone" as const,
+      _pct: m.pct,
     }));
 
-    const sleepEvents: { key: string; name: string; at: string; kind: "milestone" }[] = [];
+    const combined = [...cps, ...ms];
 
-    // Only add sleep window if currently sleeping and we have a wake time
-    if (!delivered && sleeping && flight?.sleep_until_iso) {
-      const wakeISO = flight.sleep_until_iso;
-      const sleepStartISO = addHoursISO(wakeISO, -8);
+    combined.sort((a: any, b: any) => {
+      const ta = new Date(a.at).getTime();
+      const tb = new Date(b.at).getTime();
+      if (ta !== tb) return ta - tb;
 
-      sleepEvents.push(
-        {
-          key: `sleep-start-${wakeISO}`,
-          name: "Pigeon fell asleep 💤",
-          at: sleepStartISO,
-          kind: "milestone" as const,
-        },
-        {
-          key: `sleep-end-${wakeISO}`,
-          name: "Pigeon woke up ☀️",
-          at: wakeISO,
-          kind: "milestone" as const,
-        }
-      );
-    }
+      // tie-break 1: checkpoints first
+      if (a.kind !== b.kind) return a.kind === "checkpoint" ? -1 : 1;
 
-    return [...cps, ...ms, ...sleepEvents].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
-  }, [checkpoints, milestones, delivered, sleeping, flight?.sleep_until_iso]);
+      // tie-break 2: checkpoint idx, then milestone pct
+      if (a.kind === "checkpoint") return (a._idx ?? 0) - (b._idx ?? 0);
+      return (a._pct ?? 0) - (b._pct ?? 0);
+    });
+
+    // strip private fields
+    return combined.map(({ _idx, _pct, ...rest }: any) => rest);
+  }, [checkpoints, milestones]);
 
   const currentTimelineKey = useMemo(() => {
     if (delivered) return null;
@@ -633,12 +643,12 @@ export default function LetterStatusPage() {
     });
   }, [items.badges]);
 
-  // ✅ markerMode: prefer server, then derived fallback
-  const markerMode: Flight["marker_mode"] = useMemo(() => {
-    if (delivered) return "delivered";
-    if (flight?.marker_mode) return flight.marker_mode;
-    return sleeping ? "sleeping" : "flying";
-  }, [delivered, flight?.marker_mode, sleeping]);
+  // sleeping is irrelevant once delivered
+  const sleeping = !!flight?.sleeping && !delivered;
+
+  // ✅ markerMode: trust server, but force delivered if we derived delivered
+  const markerMode: Flight["marker_mode"] =
+    delivered ? "delivered" : (flight?.marker_mode ?? (sleeping ? "sleeping" : "flying"));
 
   if (error) {
     return (
@@ -677,7 +687,7 @@ export default function LetterStatusPage() {
               <div className="subRow">
                 {showLive ? (
                   <>
-                    {/* ✅ LIVE or SLEEPING pill */}
+                    {/* LIVE or SLEEPING pill */}
                     <div className="liveStack" style={{ minWidth: 230, flex: "0 0 auto" }}>
                       <div className={`liveWrap ${sleeping ? "sleep" : ""}`}>
                         <span className={`liveDot ${sleeping ? "sleep" : ""}`} />
@@ -753,7 +763,6 @@ export default function LetterStatusPage() {
         </section>
 
         <div className="card" style={{ marginTop: 14, position: "relative" }}>
-          {/* ✅ Confetti only on delivery */}
           <ConfettiBurst show={confetti} />
 
           <div className="cardHead" style={{ marginBottom: 8 }}>
