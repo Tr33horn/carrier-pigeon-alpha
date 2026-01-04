@@ -28,7 +28,7 @@ type DashboardLetter = {
   delivered: boolean;
   progress: number; // 0..1
 
-  // from your API
+  // from API (optional but expected)
   current_lat: number | null;
   current_lon: number | null;
 
@@ -58,8 +58,27 @@ function emailLooksValid(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
+/** Fallback formatter (only used if server text fields missing) */
+function formatUtcFallback(iso: string) {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  return (
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(d) + " UTC"
+  );
+}
+
 async function copyToClipboard(text: string) {
   if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+
+  // fallback
   const ta = document.createElement("textarea");
   ta.value = text;
   ta.style.position = "fixed";
@@ -86,8 +105,12 @@ function RouteThumb(props: {
     const d = props.dest;
     const c = props.current;
 
-    const lons = [o.lon, d.lon, c?.lon].filter((v): v is number => Number.isFinite(v));
-    const lats = [o.lat, d.lat, c?.lat].filter((v): v is number => Number.isFinite(v));
+    const lons = [o.lon, d.lon, c?.lon].filter(
+      (v): v is number => Number.isFinite(v)
+    );
+    const lats = [o.lat, d.lat, c?.lat].filter(
+      (v): v is number => Number.isFinite(v)
+    );
 
     const minLon = Math.min(...lons);
     const maxLon = Math.max(...lons);
@@ -163,6 +186,7 @@ function RouteThumb(props: {
 export default function DashboardPage() {
   const [email, setEmail] = useState("");
   const [q, setQ] = useState("");
+
   const [letters, setLetters] = useState<DashboardLetter[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -170,6 +194,7 @@ export default function DashboardPage() {
 
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("newest");
+
   const [toast, setToast] = useState<string | null>(null);
 
   // tick so countdowns animate
@@ -178,18 +203,18 @@ export default function DashboardPage() {
     return () => clearInterval(t);
   }, []);
 
-  // load saved email
+  // load saved email (once)
   useEffect(() => {
     const saved = localStorage.getItem("cp_sender_email");
     if (saved) setEmail(saved);
   }, []);
 
-  // auto-load once if saved email exists
+  // auto-load once if saved email is valid
   useEffect(() => {
     const saved = localStorage.getItem("cp_sender_email");
     if (saved && emailLooksValid(saved)) {
-      // fire and forget; if it fails we’ll show error on user action
-      load(saved, q).catch(() => {});
+      // load with empty q by default
+      void load(saved, "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -217,9 +242,12 @@ export default function DashboardPage() {
       localStorage.setItem("cp_sender_email", e);
 
       const res = await fetch(
-        `/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(qs)}`,
+        `/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(
+          qs
+        )}`,
         { cache: "no-store" }
       );
+
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to load");
 
@@ -252,7 +280,7 @@ export default function DashboardPage() {
 
       if (sort === "etaSoonest") return aEta - bEta;
       if (sort === "oldest") return aSent - bSent;
-      return bSent - aSent;
+      return bSent - aSent; // newest
     });
 
     return list;
@@ -268,7 +296,8 @@ export default function DashboardPage() {
               <div className="kicker">Mailbox</div>
               <h1 className="h1">Dashboard</h1>
               <p className="muted" style={{ marginTop: 6 }}>
-                View letters you’ve sent by entering the sender email you used on the write form.
+                View letters you’ve sent by entering the sender email you used on
+                the write form.
               </p>
             </div>
 
@@ -278,7 +307,15 @@ export default function DashboardPage() {
           </div>
 
           {letters.length > 0 && (
-            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <div
+              style={{
+                marginTop: 12,
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
               <div className="metaPill">
                 Total: <strong>{stats.total}</strong>
               </div>
@@ -293,7 +330,11 @@ export default function DashboardPage() {
 
               <div className="metaPill" style={{ gap: 10 }}>
                 <span style={{ opacity: 0.7 }}>Filter</span>
-                <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)} className="dashSelect">
+                <select
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value as Filter)}
+                  className="dashSelect"
+                >
                   <option value="all">All</option>
                   <option value="inflight">In flight</option>
                   <option value="delivered">Delivered</option>
@@ -302,7 +343,11 @@ export default function DashboardPage() {
 
               <div className="metaPill" style={{ gap: 10 }}>
                 <span style={{ opacity: 0.7 }}>Sort</span>
-                <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="dashSelect">
+                <select
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value as Sort)}
+                  className="dashSelect"
+                >
                   <option value="newest">Newest</option>
                   <option value="etaSoonest">ETA soonest</option>
                   <option value="oldest">Oldest</option>
@@ -326,7 +371,9 @@ export default function DashboardPage() {
             <label className="field">
               <span className="fieldLabel">Sender email</span>
               <input
-                className={`input ${email.trim() && !emailLooksValid(email) ? "invalid" : ""}`}
+                className={`input ${
+                  email.trim() && !emailLooksValid(email) ? "invalid" : ""
+                }`}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@email.com"
@@ -343,12 +390,25 @@ export default function DashboardPage() {
               />
             </label>
 
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-              <button onClick={() => load()} disabled={loading} className="btnPrimary">
+            <div
+              style={{
+                display: "flex",
+                gap: 12,
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
+              <button
+                onClick={() => load()}
+                disabled={loading}
+                className="btnPrimary"
+              >
                 {loading ? "Loading…" : "Load letters"}
               </button>
 
-              <div className="muted">Tip: search is server-side (fast + consistent).</div>
+              <div className="muted">
+                Tip: search is server-side (fast + consistent).
+              </div>
             </div>
 
             {error && <div className="errorText">❌ {error}</div>}
@@ -375,6 +435,7 @@ export default function DashboardPage() {
           ) : (
             filteredSorted.map((l) => {
               const pct = Math.round(clamp01(l.progress ?? 0) * 100);
+
               const etaMs = new Date(l.eta_at).getTime() - now.getTime();
               const countdown = formatCountdown(etaMs);
 
@@ -382,6 +443,10 @@ export default function DashboardPage() {
               const statusEmoji = l.delivered ? "✅" : "🕊️";
 
               const statusPath = `/l/${l.public_token}`;
+              const statusUrl =
+                typeof window !== "undefined"
+                  ? `${window.location.origin}${statusPath}`
+                  : statusPath;
 
               const canThumb =
                 Number.isFinite(l.origin_lat) &&
@@ -389,57 +454,65 @@ export default function DashboardPage() {
                 Number.isFinite(l.dest_lat) &&
                 Number.isFinite(l.dest_lon);
 
-              const statusUrl =
-                typeof window !== "undefined"
-                  ? `${window.location.origin}${statusPath}`
-                  : statusPath;
+              const current =
+                l.current_lat != null && l.current_lon != null
+                  ? { lat: l.current_lat, lon: l.current_lon }
+                  : null;
+
+              const sentUtc = (l.sent_utc_text && l.sent_utc_text.trim()) || formatUtcFallback(l.sent_at);
+              const etaUtc = (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(l.eta_at);
 
               return (
                 <div key={l.id} className="card">
-                  <div className="dashRowTop" style={{ marginBottom: 10 }}>
-                    <div className="dashRowMain">
-                      <div className="kicker">Letter</div>
-                      <div className="h2">{l.subject?.trim() ? l.subject : "(No subject)"}</div>
-                      <div className="muted" style={{ marginTop: 6 }}>
-                        To: <strong>{l.to_name || "Recipient"}</strong>{" "}
-                        <span style={{ opacity: 0.65 }}>
-                          • {l.origin_name} → {l.dest_name}
-                        </span>
+                  {/* TOP ROW: title + thumb + actions */}
+                  <div className="cardHead" style={{ alignItems: "flex-start", marginBottom: 10 }}>
+                    <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                      <div>
+                        <div className="kicker">Letter</div>
+                        <div className="h2">
+                          {l.subject?.trim() ? l.subject : "(No subject)"}
+                        </div>
+                        <div className="muted" style={{ marginTop: 6 }}>
+                          To: <strong>{l.to_name || "Recipient"}</strong>{" "}
+                          <span style={{ opacity: 0.65 }}>
+                            • {l.origin_name} → {l.dest_name}
+                          </span>
+                        </div>
                       </div>
+
+                      {canThumb ? (
+                        <RouteThumb
+                          origin={{ lat: l.origin_lat, lon: l.origin_lon }}
+                          dest={{ lat: l.dest_lat, lon: l.dest_lon }}
+                          current={current}
+                          progress={l.progress ?? 0}
+                        />
+                      ) : null}
                     </div>
 
-                    {canThumb ? (
-                      <RouteThumb
-                        origin={{ lat: l.origin_lat, lon: l.origin_lon }}
-                        dest={{ lat: l.dest_lat, lon: l.dest_lon }}
-                        current={l.current_lat != null && l.current_lon != null ? { lat: l.current_lat, lon: l.current_lon } : null}
-                        progress={l.progress ?? 0}
-                      />
-                    ) : null}
-                  </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <div className="metaPill">
+                        {statusEmoji} <strong>{statusLabel}</strong>
+                      </div>
 
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                    <div className="metaPill">
-                      {statusEmoji} <strong>{statusLabel}</strong>
+                      <button
+                        type="button"
+                        className="btnGhost"
+                        onClick={async () => {
+                          await copyToClipboard(statusUrl);
+                          setToast("Link copied 🕊️");
+                        }}
+                        style={{ padding: "10px 12px" }}
+                        title="Copy status link"
+                      >
+                        Copy link
+                      </button>
                     </div>
-
-                    <button
-                      type="button"
-                      className="btnGhost"
-                      onClick={async () => {
-                        await copyToClipboard(statusUrl);
-                        setToast("Link copied 🕊️");
-                      }}
-                      style={{ padding: "10px 12px" }}
-                      title="Copy status link"
-                    >
-                      Copy link
-                    </button>
                   </div>
 
-                  <div className="muted" style={{ marginTop: 10 }}>
-                    Sent (UTC): {l.sent_utc_text || `${l.sent_at} UTC`} •{" "}
-                    <strong>ETA (UTC):</strong> {l.eta_utc_text || `${l.eta_at} UTC`}
+                  {/* time row */}
+                  <div className="muted" style={{ marginTop: 2 }}>
+                    Sent (UTC): {sentUtc} • <strong>ETA (UTC):</strong> {etaUtc}
                     {!l.delivered && <> • (T-minus {countdown})</>}
                   </div>
 

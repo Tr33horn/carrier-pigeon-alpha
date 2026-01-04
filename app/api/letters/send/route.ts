@@ -3,6 +3,23 @@ import crypto from "crypto";
 import { supabaseServer } from "../../../lib/supabaseServer";
 import { Resend } from "resend";
 
+// ✅ Geo label system
+import { ROUTE_TUNED_REGIONS } from "../../../lib/geo/geoRegions.routes";
+import { geoLabelFor, type GeoRegion } from "../../../lib/geo/geoLabel";
+
+// If you later add a bigger map:
+// import { US_GEO_REGIONS } from "../../../lib/geo/geoRegions.us";
+
+// ✅ Toggle this ON only after you add DB columns:
+//   letter_checkpoints.region_id (text)
+//   letter_checkpoints.region_kind (text)
+const STORE_REGION_META = false;
+
+const REGIONS: GeoRegion[] = [
+  ...ROUTE_TUNED_REGIONS,
+  // ...US_GEO_REGIONS,
+];
+
 function toRad(deg: number) {
   return (deg * Math.PI) / 180;
 }
@@ -25,39 +42,6 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
-function generateCheckpoints(
-  sentAt: Date,
-  etaAt: Date,
-  oLat: number,
-  oLon: number,
-  dLat: number,
-  dLon: number
-) {
-  const count = 8;
-  const totalMs = etaAt.getTime() - sentAt.getTime();
-  const labels = [
-    "Departed roost",
-    "Cruising altitude",
-    "Tailwind acquired",
-    "Crossing the plains",
-    "Snack break (imaginary)",
-    "Over the mountains",
-    "Approaching destination",
-    "Final descent",
-  ];
-
-  return Array.from({ length: count }, (_, i) => {
-    const t = i / (count - 1);
-    return {
-      idx: i,
-      name: labels[i] ?? `Checkpoint ${i + 1}`,
-      lat: lerp(oLat, dLat, t),
-      lon: lerp(oLon, dLon, t),
-      at: new Date(sentAt.getTime() + totalMs * t).toISOString(),
-    };
-  });
-}
-
 /** Simple email check (same vibe as your client validation) */
 function isEmailValid(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -78,6 +62,127 @@ function formatUtc(iso: string) {
     timeZone: "UTC",
     timeZoneName: "short",
   }).format(d);
+}
+
+/**
+ * Sticky endpoints:
+ * - Near destination: prefer a "metro" region around the destination if present.
+ * - Near origin: we still keep your fun "Departed roost" label for idx=0.
+ */
+function stickyGeoLabel(opts: {
+  lat: number;
+  lon: number;
+  origin: { lat: number; lon: number };
+  dest: { lat: number; lon: number };
+  progress: number; // 0..1
+  regions: GeoRegion[];
+}) {
+  const { lat, lon, dest, progress, regions } = opts;
+
+  // Default resolver (bbox priority)
+  const base = geoLabelFor(lat, lon, regions);
+
+  // "Sticky" zone near destination: last ~12% of flight
+  // (tweak this if you want it to grab sooner/later)
+  const nearDest = progress >= 0.88;
+
+  if (!nearDest) return base;
+
+  // Try to find a destination metro region the point also falls inside
+  // If your tuned list includes "Denver metro", "New York metro", etc. with kind:"metro",
+  // this will make the label snap to that near the end.
+  let bestMetro: GeoRegion | null = null;
+
+  for (const r of regions) {
+    if (r.kind !== "metro") continue;
+
+    // Quick bbox check against the CURRENT point
+    const b = r.bbox;
+    const inBbox = lat >= b.minLat && lat <= b.maxLat && lon >= b.minLon && lon <= b.maxLon;
+    if (!inBbox) continue;
+
+    // Prefer metro regions that are closer to the actual destination coordinate
+    const dKm = distanceKm(dest.lat, dest.lon, lat, lon);
+
+    if (!bestMetro) {
+      bestMetro = r;
+      (bestMetro as any).__dKm = dKm;
+      continue;
+    }
+
+    const bestD = (bestMetro as any).__dKm as number;
+    if (dKm < bestD) {
+      bestMetro = r;
+      (bestMetro as any).__dKm = dKm;
+    }
+  }
+
+  if (!bestMetro) return base;
+
+  // Turn metro region into a label
+  return {
+    text: `Over ${bestMetro.name}`,
+    regionId: bestMetro.id,
+    kind: bestMetro.kind,
+  };
+}
+
+function generateCheckpoints(
+  sentAt: Date,
+  etaAt: Date,
+  oLat: number,
+  oLon: number,
+  dLat: number,
+  dLon: number
+) {
+  const count = 8;
+  const totalMs = etaAt.getTime() - sentAt.getTime();
+
+  // Fallback labels (your existing vibe)
+  const fallback = [
+    "Departed roost",
+    "Cruising altitude",
+    "Tailwind acquired",
+    "Crossing the plains",
+    "Snack break (imaginary)",
+    "Over the mountains",
+    "Approaching destination",
+    "Final descent",
+  ];
+
+  return Array.from({ length: count }, (_, i) => {
+    const t = i / (count - 1);
+    const lat = lerp(oLat, dLat, t);
+    const lon = lerp(oLon, dLon, t);
+    const at = new Date(sentAt.getTime() + totalMs * t).toISOString();
+
+    const geo = stickyGeoLabel({
+      lat,
+      lon,
+      origin: { lat: oLat, lon: oLon },
+      dest: { lat: dLat, lon: dLon },
+      progress: t,
+      regions: REGIONS,
+    });
+
+    // Keep endpoints intentional
+    const name =
+      i === 0
+        ? "Departed roost"
+        : i === count - 1
+        ? "Final descent"
+        : geo?.text || fallback[i] || `Checkpoint ${i + 1}`;
+
+    return {
+      idx: i,
+      name,
+      lat,
+      lon,
+      at,
+      region_id: geo?.regionId ?? null,
+      region_kind: geo?.kind ?? null,
+    };
+  });
 }
 
 export async function POST(req: Request) {
@@ -192,14 +297,23 @@ export async function POST(req: Request) {
   const { error: cpErr } = await supabaseServer
     .from("letter_checkpoints")
     .insert(
-      checkpoints.map((cp) => ({
-        letter_id: letter.id,
-        idx: cp.idx,
-        name: cp.name,
-        lat: cp.lat,
-        lon: cp.lon,
-        at: cp.at,
-      }))
+      checkpoints.map((cp) => {
+        const baseRow: any = {
+          letter_id: letter.id,
+          idx: cp.idx,
+          name: cp.name,
+          lat: cp.lat,
+          lon: cp.lon,
+          at: cp.at,
+        };
+
+        if (STORE_REGION_META) {
+          baseRow.region_id = cp.region_id;
+          baseRow.region_kind = cp.region_kind;
+        }
+
+        return baseRow;
+      })
     );
 
   if (cpErr) {
@@ -215,7 +329,7 @@ export async function POST(req: Request) {
     const base = process.env.APP_BASE_URL || "http://localhost:3000";
     const statusUrl = `${base}/l/${publicToken}`;
 
-    // ✅ FIX: consistent UTC formatting
+    // ✅ Consistent UTC formatting
     const etaText = formatUtc(letter.eta_at);
 
     await resend.emails.send({
