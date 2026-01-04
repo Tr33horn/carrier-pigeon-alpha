@@ -778,13 +778,13 @@ export default function LetterStatusPage() {
             </div>
 
             <div style={{ marginTop: 12 }}>
-              <MapView
-                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-                progress={progress}
-                tooltipText={mapTooltip} // ✅ Location: ... restored
-                mapStyle={mapStyle}
-              />
+<MapView
+  origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+  dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+  progress={progress}
+  tooltipText={mapTooltip}   // ✅ ensures “Location:” shows
+  mapStyle={mapStyle}
+/>
             </div>
 
             <div style={{ marginTop: 14 }}>
