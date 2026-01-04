@@ -33,6 +33,8 @@ type Checkpoint = {
   idx: number;
   name: string;
   at: string;
+  // ✅ NEW: comes from route.ts upgrade
+  geo_text?: string;
 };
 
 // ✅ UPDATED: matches MapView.tsx
@@ -342,13 +344,15 @@ export default function LetterStatusPage() {
   const [delivered, setDelivered] = useState(false);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
+  // ✅ NEW: server-computed “Currently over” text (best source of truth)
+  const [currentOverText, setCurrentOverText] = useState<string | null>(null);
+
   const prevDelivered = useRef(false);
   const [revealStage, setRevealStage] = useState<"idle" | "crack" | "open">("idle");
   const [confetti, setConfetti] = useState(false);
 
   const [mapStyle, setMapStyle] = useState<MapStyle>("carto-positron");
 
-  // ✅ UPDATED: migrate old saved "carto-dark" to new light option
   useEffect(() => {
     const rawSaved = window.localStorage.getItem("pigeon_map_style");
     const saved = (rawSaved || "").trim();
@@ -391,9 +395,14 @@ export default function LetterStatusPage() {
         }
 
         if (!alive) return;
+
         setLetter(data.letter as Letter);
         setDelivered(!!data.delivered);
         setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
+
+        // ✅ NEW: pull the server’s geo label
+        setCurrentOverText(typeof data.current_over_text === "string" ? data.current_over_text : null);
+
         setLastFetchedAt(new Date());
       } catch (e: any) {
         console.error("LOAD ERROR:", e);
@@ -469,22 +478,30 @@ export default function LetterStatusPage() {
     return Math.max(0, Math.floor((now.getTime() - lastFetchedAt.getTime()) / 1000));
   }, [now, lastFetchedAt]);
 
+  // ✅ UPDATED: prefer server “current_over_text”, then checkpoint geo_text, then name.
   const currentlyOver = useMemo(() => {
     if (delivered) return "Delivered";
-    return currentCheckpoint?.name ? currentCheckpoint.name : "somewhere over the U.S.";
-  }, [delivered, currentCheckpoint]);
+
+    if (currentOverText && currentOverText.trim()) return currentOverText;
+
+    const fallback =
+      (currentCheckpoint?.geo_text && currentCheckpoint.geo_text.trim()) ||
+      (currentCheckpoint?.name && currentCheckpoint.name.trim()) ||
+      "somewhere over the U.S.";
+
+    return fallback;
+  }, [delivered, currentOverText, currentCheckpoint]);
 
   const showLive = !delivered;
 
   const timelineItems = useMemo(() => {
     const cps = checkpoints.map((cp) => ({
       key: `cp-${cp.id}`,
-      name: cp.name,
+      name: cp.name, // ✅ route.ts already upgraded cp.name to geo text / sticky endpoints
       at: cp.at,
       kind: "checkpoint" as const,
     }));
 
-    // ✅ no pigeon emoji in milestones
     const ms = milestones.map((m) => ({
       key: `ms-${m.pct}`,
       name: m.label,
@@ -685,7 +702,6 @@ export default function LetterStatusPage() {
                   Voyager
                 </button>
 
-                {/* ✅ REPLACED: Dark -> No labels */}
                 <button
                   type="button"
                   className={`mapStyleBtn ${mapStyle === "carto-positron-nolabels" ? "on" : ""}`}
@@ -717,7 +733,7 @@ export default function LetterStatusPage() {
 
               <div className="barMeta">
                 <div className="mutedStrong">{Math.round(progress * 100)}%</div>
-                <div className="muted">{currentCheckpoint ? `Current: ${currentCheckpoint.name}` : ""}</div>
+                <div className="muted">{`Current: ${currentlyOver}`}</div>
               </div>
 
               <div className="chips">
