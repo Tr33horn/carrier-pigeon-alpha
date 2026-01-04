@@ -1,21 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  Polyline,
-  Marker,
-  Tooltip,
-  useMap,
-} from "react-leaflet";
+import { MapContainer, TileLayer, Polyline, Marker, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 
-// ✅ Match the LetterStatusPage values
-export type MapStyle =
-  | "carto-positron"
-  | "carto-voyager"
-  | "carto-positron-nolabels";
+export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
@@ -60,15 +49,19 @@ function FitBounds({ bounds }: { bounds: [number, number][] }) {
 function normalizeGeoText(text?: string) {
   const t = (text || "").trim();
   if (!t) return "";
+
   // Strip accidental prefixes coming from upstream
-  return t.replace(/^currently over:\s*/i, "").trim();
+  return t
+    .replace(/^currently over:\s*/i, "")
+    .replace(/^location:\s*/i, "")
+    .trim();
 }
 
 export default function MapView(props: {
   origin: { lat: number; lon: number };
   dest: { lat: number; lon: number };
   progress: number; // 0..1
-  tooltipText?: string; // should be a plain phrase like "Over Yakima Valley"
+  tooltipText?: string; // e.g. "Over Yakima Valley" OR "Yakima Valley" OR "Delivered"
   mapStyle?: MapStyle;
 }) {
   const { origin, dest } = props;
@@ -76,9 +69,7 @@ export default function MapView(props: {
   const mapStyle: MapStyle = props.mapStyle ?? "carto-positron";
   const tile = useMemo(() => getCarto(mapStyle), [mapStyle]);
 
-  const [displayProgress, setDisplayProgress] = useState(() =>
-    clamp01(props.progress)
-  );
+  const [displayProgress, setDisplayProgress] = useState(() => clamp01(props.progress));
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -112,7 +103,6 @@ export default function MapView(props: {
 
   const inFlight = useMemo(() => clamp01(props.progress) < 1, [props.progress]);
 
-  // ✅ Pulsing live marker (no pigeon emoji)
   const liveIcon = useMemo(
     () =>
       L.divIcon({
@@ -130,7 +120,6 @@ export default function MapView(props: {
     [inFlight]
   );
 
-  // ✅ Origin = small filled dot
   const originIcon = useMemo(
     () =>
       L.divIcon({
@@ -142,7 +131,6 @@ export default function MapView(props: {
     []
   );
 
-  // ✅ Destination = map pin icon
   const destIcon = useMemo(
     () =>
       L.divIcon({
@@ -175,8 +163,10 @@ export default function MapView(props: {
 
   const geoText = useMemo(() => {
     const t = normalizeGeoText(props.tooltipText);
-    return t || "Somewhere over the U.S.";
-  }, [props.tooltipText]);
+    if (!t) return "Somewhere over the U.S.";
+    if (!inFlight) return "Delivered";
+    return t;
+  }, [props.tooltipText, inFlight]);
 
   return (
     <div

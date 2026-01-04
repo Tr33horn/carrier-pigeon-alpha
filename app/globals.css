@@ -460,6 +460,89 @@ body {
 .chipLabel { letter-spacing: -0.01em; }
 
 /* -------------------------------------------------
+   Badges (Status / Collectibles)
+------------------------------------------------- */
+
+.badgeGrid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.badgeTile{
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: 18px;
+  background: var(--soft);
+  border: 1px solid rgba(0,0,0,0.06);
+}
+
+.badgeIcon{
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(0,0,0,0.08);
+  background: rgba(0,0,0,0.03);
+  flex: 0 0 auto;
+  font-size: 20px;
+}
+
+.badgeTitle{
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.badgeSub{
+  margin-top: 4px;
+  opacity: 0.65;
+  font-weight: 750;
+  font-size: 12px;
+}
+
+.badgeMetaRow{
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+/* rarity pill (subtle, premium) */
+.badgeRarity{
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 900;
+  font-size: 12px;
+  background: rgba(255,255,255,0.70);
+  border: 1px solid rgba(0,0,0,0.10);
+}
+
+/* rarity variants */
+.badgeRarity.common{
+  background: rgba(255,255,255,0.70);
+}
+
+.badgeRarity.rare{
+  background: var(--alp-blue-18);
+  border-color: rgba(0,0,0,0.10);
+}
+
+.badgeRarity.legendary{
+  background: rgba(22,163,74,0.10);
+  border-color: rgba(22,163,74,0.30);
+  box-shadow: 0 10px 18px rgba(22,163,74,0.10);
+}
+
+/* -------------------------------------------------
    Status page route banner bits
 ------------------------------------------------- */
 .routeBanner {

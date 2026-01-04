@@ -1,48 +1,84 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { checkpointGeoText } from "@/app/lib/geo";
+import dynamic from "next/dynamic";
+import { useParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-type DashboardLetter = {
+const MapView = dynamic(() => import("@/app/l/[token]/MapView"), { ssr: false });
+
+type Letter = {
   id: string;
   public_token: string;
-
   from_name: string | null;
-  from_email: string | null;
-
   to_name: string | null;
-  to_email: string | null;
-
   subject: string | null;
-
+  body: string | null;
   origin_name: string;
   origin_lat: number;
   origin_lon: number;
-
   dest_name: string;
   dest_lat: number;
   dest_lon: number;
-
+  distance_km: number;
+  speed_kmh: number;
   sent_at: string;
   eta_at: string;
 
-  delivered: boolean;
-  progress: number; // 0..1
-
-  // from API (optional but expected)
-  current_lat: number | null;
-  current_lon: number | null;
-
-  sent_utc_text: string;
-  eta_utc_text: string;
-  eta_utc_iso: string | null;
+  // ✅ comes from /api/letters/[token]
+  eta_utc_text?: string;
 };
 
-type Filter = "all" | "inflight" | "delivered";
-type Sort = "newest" | "etaSoonest" | "oldest";
+type Checkpoint = {
+  id: string;
+  idx: number;
+  name: string;
+  at: string;
+  // ✅ NEW: comes from route.ts upgrade
+  geo_text?: string;
+};
+
+type BadgeItem = {
+  id: string;
+  kind: "badge";
+  code: string;
+  title: string;
+  subtitle?: string | null;
+  icon?: string | null;
+  rarity?: "common" | "rare" | "legendary";
+  earned_at?: string | null;
+  meta?: any;
+};
+
+type AddonItem = {
+  id: string;
+  kind: "addon";
+  code: string;
+  title: string;
+  subtitle?: string | null;
+  icon?: string | null;
+  rarity?: "common" | "rare" | "legendary";
+  earned_at?: string | null;
+  meta?: any;
+};
+
+type LetterItems = {
+  badges: BadgeItem[];
+  addons: AddonItem[];
+};
+
+// ✅ UPDATED: matches MapView.tsx
+type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
+}
+
+function progressFraction(sentISO: string, etaISO: string, now = new Date()) {
+  const sent = new Date(sentISO).getTime();
+  const eta = new Date(etaISO).getTime();
+  const t = now.getTime();
+  if (eta <= sent) return 1;
+  return clamp01((t - sent) / (eta - sent));
 }
 
 function formatCountdown(ms: number) {
@@ -55,542 +91,805 @@ function formatCountdown(ms: number) {
   return `${h}:${pad(m)}:${pad(s)}`;
 }
 
-function emailLooksValid(email: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+function milestoneTimeISO(sentISO: string, etaISO: string, fraction: number) {
+  const sent = new Date(sentISO).getTime();
+  const eta = new Date(etaISO).getTime();
+  if (!Number.isFinite(sent) || !Number.isFinite(eta) || eta <= sent) return etaISO;
+  const t = sent + (eta - sent) * fraction;
+  return new Date(t).toISOString();
 }
 
-/** Fallback formatter (only used if server text fields missing) */
 function formatUtcFallback(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
-  return (
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: "UTC",
-      year: "numeric",
-      month: "numeric",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      second: "2-digit",
-    }).format(d) + " UTC"
-  );
+  return `${d.toISOString().replace("T", " ").replace("Z", "")} UTC`;
 }
 
-async function copyToClipboard(text: string) {
-  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
-
-  // fallback
-  const ta = document.createElement("textarea");
-  ta.value = text;
-  ta.style.position = "fixed";
-  ta.style.left = "-9999px";
-  document.body.appendChild(ta);
-  ta.select();
-  document.execCommand("copy");
-  document.body.removeChild(ta);
+/** Strip redundant leading “Over …” for tooltips/labels */
+function stripOverPrefix(s: string) {
+  return (s || "").replace(/^over\s+/i, "").trim();
 }
 
-/* ---------- Mini route thumbnail (no Leaflet) ---------- */
-function RouteThumb(props: {
-  origin: { lat: number; lon: number };
-  dest: { lat: number; lon: number };
-  current?: { lat: number; lon: number } | null;
-  progress: number; // 0..1
+/* ---------- tiny icon system (inline SVG) ---------- */
+function Ico({
+  name,
+  size = 16,
+}: {
+  name: "live" | "pin" | "speed" | "distance" | "check" | "mail" | "timeline";
+  size?: number;
 }) {
-  const W = 160;
-  const H = 74;
-  const pad = 10;
+  const common = {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    xmlns: "http://www.w3.org/2000/svg",
+    style: { display: "block" as const },
+  };
 
-  const pts = useMemo(() => {
-    const o = props.origin;
-    const d = props.dest;
-    const c = props.current;
+  switch (name) {
+    case "pin":
+      return (
+        <svg {...common}>
+          <path
+            d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z"
+            stroke="currentColor"
+            strokeWidth="2.4"
+          />
+        </svg>
+      );
+    case "speed":
+      return (
+        <svg {...common}>
+          <path
+            d="M5 13a7 7 0 0 1 14 0"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M12 13l4.5-4.5"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M4 13h2M18 13h2"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "distance":
+      return (
+        <svg {...common}>
+          <path
+            d="M7 7h10M7 17h10"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M9 9l-2-2 2-2M15 15l2 2-2 2"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "check":
+      return (
+        <svg {...common}>
+          <path
+            d="M20 6 9 17l-5-5"
+            stroke="currentColor"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "mail":
+      return (
+        <svg {...common}>
+          <path
+            d="M4 7h16v10H4V7Z"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
+          <path
+            d="m4 8 8 6 8-6"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "timeline":
+      return (
+        <svg {...common}>
+          <path
+            d="M7 6h10M7 12h10M7 18h10"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M4 6h.01M4 12h.01M4 18h.01"
+            stroke="currentColor"
+            strokeWidth="5"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "live":
+    default:
+      return (
+        <svg {...common}>
+          <path
+            d="M4 12a8 8 0 0 1 16 0"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M8 12a4 4 0 0 1 8 0"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+          <path
+            d="M12 12h.01"
+            stroke="currentColor"
+            strokeWidth="6"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+  }
+}
 
-    const lons = [o.lon, d.lon, c?.lon].filter(
-      (v): v is number => Number.isFinite(v)
-    );
-    const lats = [o.lat, d.lat, c?.lat].filter(
-      (v): v is number => Number.isFinite(v)
-    );
-
-    const minLon = Math.min(...lons);
-    const maxLon = Math.max(...lons);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-
-    const spanLon = Math.max(0.000001, maxLon - minLon);
-    const spanLat = Math.max(0.000001, maxLat - minLat);
-
-    const project = (lat: number, lon: number) => {
-      const x = pad + ((lon - minLon) / spanLon) * (W - pad * 2);
-      const y = pad + (1 - (lat - minLat) / spanLat) * (H - pad * 2);
-      return { x, y };
-    };
-
-    return {
-      o: project(o.lat, o.lon),
-      d: project(d.lat, d.lon),
-      c: c ? project(c.lat, c.lon) : null,
-    };
-  }, [props.origin, props.dest, props.current]);
-
-  const pct = Math.round(clamp01(props.progress ?? 0) * 100);
-
+/* ---------- wax seal overlay ---------- */
+function WaxSealOverlay({ etaText, cracking }: { etaText: string; cracking?: boolean }) {
   return (
-    <div className="routeThumb" aria-hidden>
-      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
-        <path
-          d={`M ${pts.o.x} ${pts.o.y} L ${pts.d.x} ${pts.d.y}`}
-          stroke="currentColor"
-          strokeWidth="3"
-          opacity="0.55"
-          strokeLinecap="round"
-        />
-
-        {/* origin: filled dot */}
-        <circle cx={pts.o.x} cy={pts.o.y} r="4.5" fill="currentColor" />
-
-        {/* destination: hollow ring */}
-        <circle
-          cx={pts.d.x}
-          cy={pts.d.y}
-          r="6.2"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          opacity="0.95"
-        />
-
-        {/* current: dot + pulse ring */}
-        {pts.c && (
-          <>
-            <circle cx={pts.c.x} cy={pts.c.y} r="4.6" fill="currentColor" />
-            <circle
-              className="thumbPulse"
-              cx={pts.c.x}
-              cy={pts.c.y}
-              r="11"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              opacity="0.35"
-            />
-          </>
-        )}
-      </svg>
-
-      <div className="routeThumbPct">{pct}%</div>
+    <div className={cracking ? "seal crack" : "seal"} style={{ position: "relative" }}>
+      <div className="sealCard">
+        <div className="sealVeil" />
+        <div className="sealRow">
+          <div className="wax" aria-label="Wax seal" title="Sealed until delivery">
+            <div className="waxInner">AH</div>
+          </div>
+          <div>
+            <div className="sealTitle">Sealed until delivery</div>
+            <div className="sealSub">Opens at {etaText}</div>
+            <div className="sealHint">No peeking. The bird is watching.</div>
+          </div>
+        </div>
+        <div className="sealNoise" />
+      </div>
     </div>
   );
 }
 
-export default function DashboardPage() {
-  const [email, setEmail] = useState("");
-  const [q, setQ] = useState("");
+function ConfettiBurst({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <div className="confetti" aria-hidden>
+      {Array.from({ length: 18 }).map((_, i) => (
+        <span key={i} className="confetti-bit" />
+      ))}
+    </div>
+  );
+}
 
-  const [letters, setLetters] = useState<DashboardLetter[]>([]);
+/* ---------- timeline rail ---------- */
+function RailTimeline({
+  items,
+  now,
+  currentKey,
+}: {
+  items: { key: string; name: string; at: string; kind: "checkpoint" | "milestone" }[];
+  now: Date;
+  currentKey: string | null;
+}) {
+  const [popped, setPopped] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const updates: Record<string, boolean> = {};
+    let changed = false;
+
+    for (const it of items) {
+      const isPast = new Date(it.at).getTime() <= now.getTime();
+      if (isPast && !popped[it.key]) {
+        updates[it.key] = true;
+        changed = true;
+      }
+    }
+
+    if (changed) setPopped((prev) => ({ ...prev, ...updates }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, now]);
+
+  return (
+    <div className="rail">
+      <div className="railLine" />
+      <div className="railList">
+        {items.map((it) => {
+          const isPast = new Date(it.at).getTime() <= now.getTime();
+          const isMilestone = it.kind === "milestone";
+          const shouldPop = popped[it.key] && isPast;
+          const isCurrent = currentKey === it.key;
+
+          return (
+            <div key={it.key} className="railItem">
+              <div
+                className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${
+                  shouldPop ? "pop" : ""
+                }`}
+              >
+                <span className="railDot">{isPast ? "✓" : ""}</span>
+              </div>
+
+              <div
+                className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${
+                  isCurrent ? "current" : ""
+                }`}
+              >
+                {isCurrent && (
+                  <div className="pigeonTag livePulseRow">
+                    <span className="livePulseDot" aria-hidden />
+                    <span>Pigeon is here</span>
+                  </div>
+                )}
+
+                <div className="railTitleRow">
+                  <div className="railTitle">{it.name}</div>
+                  <div className="railTime">{new Date(it.at).toLocaleString()}</div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function rarityLabel(r?: string) {
+  if (r === "legendary") return "Legendary";
+  if (r === "rare") return "Rare";
+  return "Common";
+}
+
+export default function LetterStatusPage() {
+  const params = useParams();
+  const raw = (params as any)?.token;
+  const token = Array.isArray(raw) ? raw[0] : raw;
+
+  const [letter, setLetter] = useState<Letter | null>(null);
+  const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
+  const [items, setItems] = useState<LetterItems>({ badges: [], addons: [] });
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+
   const [now, setNow] = useState(new Date());
+  const [delivered, setDelivered] = useState(false);
+  const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
-  const [filter, setFilter] = useState<Filter>("all");
-  const [sort, setSort] = useState<Sort>("newest");
+  // ✅ server-computed “current_over_text”
+  const [currentOverText, setCurrentOverText] = useState<string | null>(null);
 
-  const [toast, setToast] = useState<string | null>(null);
+  const prevDelivered = useRef(false);
+  const [revealStage, setRevealStage] = useState<"idle" | "crack" | "open">("idle");
+  const [confetti, setConfetti] = useState(false);
 
-  // tick so countdowns animate
+  const [mapStyle, setMapStyle] = useState<MapStyle>("carto-positron");
+
+  useEffect(() => {
+    const rawSaved = window.localStorage.getItem("pigeon_map_style");
+    const saved = (rawSaved || "").trim();
+
+    if (saved === "carto-dark") {
+      setMapStyle("carto-positron-nolabels");
+      window.localStorage.setItem("pigeon_map_style", "carto-positron-nolabels");
+      return;
+    }
+
+    if (saved === "carto-positron" || saved === "carto-voyager" || saved === "carto-positron-nolabels") {
+      setMapStyle(saved);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("pigeon_map_style", mapStyle);
+  }, [mapStyle]);
+
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // load saved email (once)
   useEffect(() => {
-    const saved = localStorage.getItem("cp_sender_email");
-    if (saved) setEmail(saved);
-  }, []);
+    if (!token) return;
 
-  // auto-load once if saved email is valid
+    let alive = true;
+
+    const load = async () => {
+      try {
+        setError(null);
+        const res = await fetch(`/api/letters/${encodeURIComponent(token)}`, { cache: "no-store" });
+        const data = await res.json();
+
+        if (!res.ok) {
+          if (!alive) return;
+          setError(data?.error ?? "Letter not found");
+          return;
+        }
+
+        if (!alive) return;
+
+        setLetter(data.letter as Letter);
+        setDelivered(!!data.delivered);
+        setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
+        setCurrentOverText(typeof data.current_over_text === "string" ? data.current_over_text : null);
+
+        // ✅ items (badges/addons)
+        const nextItems = (data.items ?? {}) as Partial<LetterItems>;
+        setItems({
+          badges: Array.isArray(nextItems.badges) ? (nextItems.badges as BadgeItem[]) : [],
+          addons: Array.isArray(nextItems.addons) ? (nextItems.addons as AddonItem[]) : [],
+        });
+
+        setLastFetchedAt(new Date());
+      } catch (e: any) {
+        console.error("LOAD ERROR:", e);
+        if (!alive) return;
+        setError(e?.message ?? String(e));
+      }
+    };
+
+    void load();
+    const interval = setInterval(() => void load(), 15000);
+
+    return () => {
+      alive = false;
+      clearInterval(interval);
+    };
+  }, [token]);
+
   useEffect(() => {
-    const saved = localStorage.getItem("cp_sender_email");
-    if (saved && emailLooksValid(saved)) {
-      void load(saved, "");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!prevDelivered.current && delivered) {
+      setRevealStage("crack");
+      setConfetti(true);
 
-  // toast auto-clear
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 1400);
-    return () => clearTimeout(t);
-  }, [toast]);
+      const t1 = setTimeout(() => setRevealStage("open"), 520);
+      const t2 = setTimeout(() => setConfetti(false), 1400);
 
-  async function load(emailOverride?: string, qOverride?: string) {
-    const e = (emailOverride ?? email).trim().toLowerCase();
-    const qs = (qOverride ?? q).trim();
-
-    if (!emailLooksValid(e)) {
-      setError("Enter a valid sender email.");
-      return;
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     }
 
-    setLoading(true);
-    setError(null);
+    prevDelivered.current = delivered;
+  }, [delivered]);
 
-    try {
-      localStorage.setItem("cp_sender_email", e);
+  const progress = useMemo(() => {
+    if (!letter) return 0;
+    return progressFraction(letter.sent_at, letter.eta_at, now);
+  }, [letter, now]);
 
-      const res = await fetch(
-        `/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(
-          qs
-        )}`,
-        { cache: "no-store" }
-      );
+  const countdown = useMemo(() => {
+    if (!letter) return "";
+    const msLeft = new Date(letter.eta_at).getTime() - now.getTime();
+    return formatCountdown(msLeft);
+  }, [letter, now]);
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "Failed to load");
-
-      setLetters((data.letters ?? []) as DashboardLetter[]);
-    } catch (err: any) {
-      setError(err?.message ?? String(err));
-      setLetters([]);
-    } finally {
-      setLoading(false);
+  const currentCheckpoint = useMemo(() => {
+    if (!checkpoints.length || !letter) return null;
+    const t = now.getTime();
+    let current: Checkpoint | null = null;
+    for (const cp of checkpoints) {
+      if (new Date(cp.at).getTime() <= t) current = cp;
     }
+    return current ?? checkpoints[0];
+  }, [checkpoints, letter, now]);
+
+  const milestones = useMemo(() => {
+    if (!letter) return [];
+    const defs = [
+      { pct: 25, frac: 0.25, label: "25% reached" },
+      { pct: 50, frac: 0.5, label: "50% reached" },
+      { pct: 75, frac: 0.75, label: "75% reached" },
+    ];
+
+    return defs.map((m) => {
+      const atISO = milestoneTimeISO(letter.sent_at, letter.eta_at, m.frac);
+      const isPast = now.getTime() >= new Date(atISO).getTime();
+      return { ...m, atISO, isPast };
+    });
+  }, [letter, now]);
+
+  const secondsSinceFetch = useMemo(() => {
+    if (!lastFetchedAt) return null;
+    return Math.max(0, Math.floor((now.getTime() - lastFetchedAt.getTime()) / 1000));
+  }, [now, lastFetchedAt]);
+
+  // ✅ prefer server current_over_text, then cp.geo_text, then cp.name
+  const currentlyOver = useMemo(() => {
+    if (delivered) return "Delivered";
+
+    if (currentOverText && currentOverText.trim()) return currentOverText;
+
+    const fallback =
+      (currentCheckpoint?.geo_text && currentCheckpoint.geo_text.trim()) ||
+      (currentCheckpoint?.name && currentCheckpoint.name.trim()) ||
+      "somewhere over the U.S.";
+
+    return fallback;
+  }, [delivered, currentOverText, currentCheckpoint]);
+
+  // ✅ map tooltip: keep "Location:" label, but remove "Over " to avoid "Location: Over ..."
+  const mapTooltip = useMemo(() => {
+    if (delivered) return "Location: Delivered";
+    const base = stripOverPrefix(currentlyOver || "somewhere over the U.S.");
+    return `Location: ${base || "somewhere over the U.S."}`;
+  }, [delivered, currentlyOver]);
+
+  const showLive = !delivered;
+
+  const timelineItems = useMemo(() => {
+    const cps = checkpoints.map((cp) => ({
+      key: `cp-${cp.id}`,
+      name: cp.name,
+      at: cp.at,
+      kind: "checkpoint" as const,
+    }));
+
+    const ms = milestones.map((m) => ({
+      key: `ms-${m.pct}`,
+      name: m.label,
+      at: m.atISO,
+      kind: "milestone" as const,
+    }));
+
+    return [...cps, ...ms].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  }, [checkpoints, milestones]);
+
+  const currentTimelineKey = useMemo(() => {
+    if (delivered) return null;
+    if (!timelineItems.length) return null;
+
+    const nowT = now.getTime();
+    let idx = 0;
+
+    for (let i = 0; i < timelineItems.length; i++) {
+      const t = new Date(timelineItems[i].at).getTime();
+      if (t <= nowT) idx = i;
+      else break;
+    }
+
+    return timelineItems[idx]?.key ?? null;
+  }, [timelineItems, now, delivered]);
+
+  const etaTextUTC = useMemo(() => {
+    if (!letter) return "";
+    return (letter.eta_utc_text && letter.eta_utc_text.trim()) || formatUtcFallback(letter.eta_at);
+  }, [letter]);
+
+  const badgesSorted = useMemo(() => {
+    const b = items.badges ?? [];
+    // earned_at may be null; keep stable order
+    return [...b].sort((a, c) => {
+      const ta = a.earned_at ? Date.parse(a.earned_at) : 0;
+      const tb = c.earned_at ? Date.parse(c.earned_at) : 0;
+      return ta - tb;
+    });
+  }, [items.badges]);
+
+  if (error) {
+    return (
+      <main className="pageBg">
+        <main className="wrap">
+          <h1 className="h1">Flight Status</h1>
+          <p className="err">❌ {error}</p>
+        </main>
+      </main>
+    );
   }
 
-  const stats = useMemo(() => {
-    const delivered = letters.filter((l) => l.delivered).length;
-    const inflight = letters.length - delivered;
-    return { delivered, inflight, total: letters.length };
-  }, [letters]);
-
-  const filteredSorted = useMemo(() => {
-    let list = [...letters];
-
-    if (filter === "inflight") list = list.filter((l) => !l.delivered);
-    if (filter === "delivered") list = list.filter((l) => l.delivered);
-
-    list.sort((a, b) => {
-      const aSent = Date.parse(a.sent_at);
-      const bSent = Date.parse(b.sent_at);
-      const aEta = Date.parse(a.eta_at);
-      const bEta = Date.parse(b.eta_at);
-
-      if (sort === "etaSoonest") return aEta - bEta;
-      if (sort === "oldest") return aSent - bSent;
-      return bSent - aSent; // newest
-    });
-
-    return list;
-  }, [letters, filter, sort]);
-
-  function onLookupKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      void load();
-    }
+  if (!letter) {
+    return (
+      <main className="pageBg">
+        <main className="wrap">
+          <h1 className="h1">Flight Status</h1>
+          <p className="muted">Loading…</p>
+        </main>
+      </main>
+    );
   }
 
   return (
     <main className="pageBg">
-      <div className="wrap">
-        {/* header */}
-        <div className="card">
-          <div className="cardHead">
+      <main className="wrap">
+        <section className="routeBanner">
+          <div className="bannerTop">
             <div>
-              <div className="kicker">Mailbox</div>
-              <h1 className="h1">Dashboard</h1>
-              <p className="muted" style={{ marginTop: 6 }}>
-                View letters you’ve sent by entering the sender email you used on the write form.
-              </p>
+              <div className="kicker">Flight status</div>
+
+              <div className="routeHeadline">
+                {letter.origin_name} <span className="arrow">→</span> {letter.dest_name}
+              </div>
+
+              <div className="subRow">
+                {showLive ? (
+                  <>
+                    <div className="liveStack" style={{ minWidth: 230, flex: "0 0 auto" }}>
+                      <div className="liveWrap">
+                        <span className="liveDot" />
+                        <span className="liveText">LIVE</span>
+                      </div>
+                      <div className="liveSub">Last updated: {secondsSinceFetch ?? 0}s ago</div>
+                    </div>
+
+                    <div className="metaPill" style={{ flex: "1 1 auto" }}>
+                      <span className="ico">
+                        <Ico name="pin" />
+                      </span>
+                      <span>
+                        Currently over: <strong>{currentlyOver}</strong>
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="metaPill">
+                    <span className="ico">
+                      <Ico name="check" />
+                    </span>
+                    <span>
+                      <strong>Delivered</strong> — the bird has clocked out.
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <a href="/write" className="linkPill">
-              + Write a letter
-            </a>
+            <div className="etaBox">
+              <div className="kicker">ETA (UTC)</div>
+              <div className="etaTime">{etaTextUTC}</div>
+              {!delivered && <div className="etaSub">T-minus {countdown}</div>}
+            </div>
           </div>
 
-          {letters.length > 0 && (
-            <div
-              style={{
-                marginTop: 12,
-                display: "flex",
-                gap: 8,
-                flexWrap: "wrap",
-                alignItems: "center",
-              }}
-            >
-              <div className="metaPill">
-                Total: <strong>{stats.total}</strong>
-              </div>
-              <div className="metaPill">
-                In flight: <strong>{stats.inflight}</strong>
-              </div>
-              <div className="metaPill">
-                Delivered: <strong>{stats.delivered}</strong>
-              </div>
-
-              <div style={{ flex: "1 1 auto" }} />
-
-              <div className="metaPill" style={{ gap: 10 }}>
-                <span style={{ opacity: 0.7 }}>Filter</span>
-                <select
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value as Filter)}
-                  className="dashSelect"
-                >
-                  <option value="all">All</option>
-                  <option value="inflight">In flight</option>
-                  <option value="delivered">Delivered</option>
-                </select>
-              </div>
-
-              <div className="metaPill" style={{ gap: 10 }}>
-                <span style={{ opacity: 0.7 }}>Sort</span>
-                <select
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value as Sort)}
-                  className="dashSelect"
-                >
-                  <option value="newest">Newest</option>
-                  <option value="etaSoonest">ETA soonest</option>
-                  <option value="oldest">Oldest</option>
-                </select>
+          <div className="statsRow">
+            <div className="stat">
+              <span className="ico">
+                <Ico name="distance" />
+              </span>
+              <div>
+                <div className="statLabel">Distance</div>
+                <div className="statValue">{letter.distance_km.toFixed(0)} km</div>
               </div>
             </div>
-          )}
+
+            <div className="stat">
+              <span className="ico">
+                <Ico name="speed" />
+              </span>
+              <div>
+                <div className="statLabel">Speed</div>
+                <div className="statValue">{letter.speed_kmh.toFixed(0)} km/h</div>
+              </div>
+            </div>
+
+            <div className="stat">
+              <span className="ico">
+                <Ico name="timeline" />
+              </span>
+              <div>
+                <div className="statLabel">Progress</div>
+                <div className="statValue">{Math.round(progress * 100)}%</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div className="card" style={{ marginTop: 14, position: "relative" }}>
+          <ConfettiBurst show={confetti} />
+
+          <div className="cardHead" style={{ marginBottom: 8 }}>
+            <div>
+              <div className="kicker">Letter</div>
+              <div className="h2">
+                From {letter.from_name || "Sender"} to {letter.to_name || "Recipient"}
+              </div>
+            </div>
+
+            <div className="metaPill faint">
+              <span className="ico">
+                <Ico name="mail" />
+              </span>
+              <span>Sealed until delivery</span>
+            </div>
+          </div>
+
+          <div className="soft">
+            <div className="subject">{letter.subject || "(No subject)"}</div>
+
+            <div style={{ position: "relative" }}>
+              <div className={delivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: delivered ? 1 : 0 }}>
+                <div className="body">{delivered ? (letter.body ?? "") : ""}</div>
+              </div>
+
+              {!delivered || revealStage !== "open" ? (
+                <div style={{ position: delivered ? "absolute" : "relative", inset: 0 }}>
+                  <WaxSealOverlay etaText={etaTextUTC} cracking={delivered && revealStage === "crack"} />
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="token">Token: {letter.public_token}</div>
         </div>
 
-        {/* lookup */}
-        <div className="card" style={{ marginTop: 14 }}>
-          <div className="cardHead" style={{ marginBottom: 10 }}>
-            <div>
-              <div className="kicker">Lookup</div>
-              <div className="h2">Load your sent letters</div>
+        <div className="grid">
+          {/* LEFT: Map */}
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+              <div className="kicker">Map</div>
+
+              <div className="mapStyleRow" role="group" aria-label="Map style">
+                <button
+                  type="button"
+                  className={`mapStyleBtn ${mapStyle === "carto-positron" ? "on" : ""}`}
+                  onClick={() => setMapStyle("carto-positron")}
+                  aria-pressed={mapStyle === "carto-positron"}
+                >
+                  Light
+                </button>
+
+                <button
+                  type="button"
+                  className={`mapStyleBtn ${mapStyle === "carto-voyager" ? "on" : ""}`}
+                  onClick={() => setMapStyle("carto-voyager")}
+                  aria-pressed={mapStyle === "carto-voyager"}
+                >
+                  Voyager
+                </button>
+
+                <button
+                  type="button"
+                  className={`mapStyleBtn ${mapStyle === "carto-positron-nolabels" ? "on" : ""}`}
+                  onClick={() => setMapStyle("carto-positron-nolabels")}
+                  aria-pressed={mapStyle === "carto-positron-nolabels"}
+                >
+                  No Labels
+                </button>
+              </div>
             </div>
-            <div className="metaPill faint">Uses local storage</div>
+
+            <div style={{ marginTop: 12 }}>
+              <MapView
+                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+                progress={progress}
+                tooltipText={mapTooltip} // ✅ Location: ... restored
+                mapStyle={mapStyle}
+              />
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <div className="bar">
+                <div className="barFill" style={{ width: `${Math.round(progress * 100)}%` }} />
+                {[25, 50, 75].map((p) => (
+                  <span key={p} className="barTick" style={{ left: `${p}%` }} />
+                ))}
+              </div>
+
+              <div className="barMeta">
+                <div className="mutedStrong">{Math.round(progress * 100)}%</div>
+                <div className="muted">{`Current: ${currentlyOver}`}</div>
+              </div>
+
+              <div className="chips">
+                {milestones.map((m) => (
+                  <div key={m.pct} className={`chip ${m.isPast ? "on" : ""}`}>
+                    <span className="chipDot">{m.isPast ? "●" : "○"}</span>
+                    <span className="chipLabel">{m.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
+          {/* RIGHT: Timeline + Badges stack */}
           <div className="stack">
-            <label className="field">
-              <span className="fieldLabel">Sender email</span>
-              <input
-                className={`input ${email.trim() && !emailLooksValid(email) ? "invalid" : ""}`}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={onLookupKeyDown}
-                placeholder="you@email.com"
-                inputMode="email"
-                autoCapitalize="none"
-                autoCorrect="off"
-              />
-            </label>
-
-            <label className="field">
-              <span className="fieldLabel">Search</span>
-              <input
-                className="input"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                onKeyDown={onLookupKeyDown}
-                placeholder="subject, recipient, city, token…"
-              />
-            </label>
-
-            <div
-              style={{
-                display: "flex",
-                gap: 12,
-                flexWrap: "wrap",
-                alignItems: "center",
-              }}
-            >
-              <button onClick={() => load()} disabled={loading} className="btnPrimary">
-                {loading ? "Loading…" : "Load letters"}
-              </button>
-
-              <button
-                type="button"
-                className="btnSubtle"
-                onClick={() => {
-                  setQ("");
-                  void load(undefined, "");
-                }}
-                disabled={loading || !q.trim()}
-                title="Clear search"
-              >
-                Clear
-              </button>
-
-              <div className="muted">Tip: search is server-side (fast + consistent).</div>
-            </div>
-
-            {error && <div className="errorText">❌ {error}</div>}
-          </div>
-        </div>
-
-        {/* toast */}
-        {toast && (
-          <div className="dashToast" role="status" aria-live="polite">
-            {toast}
-          </div>
-        )}
-
-        {/* list */}
-        <div style={{ marginTop: 14 }} className="stack">
-          {filteredSorted.length === 0 && !loading ? (
             <div className="card">
-              <div className="muted">
-                {letters.length === 0
-                  ? "No letters loaded yet. Enter your sender email and hit “Load letters”."
-                  : "No letters match your filter/search."}
+              <div className="cardHead">
+                <div>
+                  <div className="kicker">Timeline</div>
+                  <div className="h2">Flight log</div>
+                </div>
+                <div className="pillBtn subtle" title="Auto refresh">
+                  <span className="ico">
+                    <Ico name="live" />
+                  </span>
+                  {delivered ? "Final" : "Auto"}
+                </div>
               </div>
+
+              <RailTimeline items={timelineItems} now={now} currentKey={currentTimelineKey} />
             </div>
-          ) : (
-            filteredSorted.map((l) => {
-              const pct = Math.round(clamp01(l.progress ?? 0) * 100);
 
-              const etaMs = new Date(l.eta_at).getTime() - now.getTime();
-              const countdown = formatCountdown(etaMs);
+            {/* ✅ NEW: Badges card */}
+            <div className="card">
+              <div className="cardHead" style={{ marginBottom: 10 }}>
+                <div>
+                  <div className="kicker">Badges</div>
+                  <div className="h2">Earned on this flight</div>
+                </div>
 
-              const statusLabel = l.delivered ? "Delivered" : "In Flight";
-              const statusEmoji = l.delivered ? "✅" : "🕊️";
+                <div className="metaPill faint" title="Badges earned so far">
+                  🏅 <strong>{badgesSorted.length}</strong>
+                </div>
+              </div>
 
-              const statusPath = `/l/${l.public_token}`;
-              const statusUrl =
-                typeof window !== "undefined"
-                  ? `${window.location.origin}${statusPath}`
-                  : statusPath;
-
-              const canThumb =
-                Number.isFinite(l.origin_lat) &&
-                Number.isFinite(l.origin_lon) &&
-                Number.isFinite(l.dest_lat) &&
-                Number.isFinite(l.dest_lon);
-
-              const current =
-                l.current_lat != null && l.current_lon != null
-                  ? { lat: l.current_lat, lon: l.current_lon }
-                  : null;
-
-                  const geoPoint =
-  current ??
-  (Number.isFinite(l.origin_lat) &&
-  Number.isFinite(l.origin_lon) &&
-  Number.isFinite(l.dest_lat) &&
-  Number.isFinite(l.dest_lon)
-    ? {
-        lat: l.origin_lat + (l.dest_lat - l.origin_lat) * clamp01(l.progress ?? 0),
-        lon: l.origin_lon + (l.dest_lon - l.origin_lon) * clamp01(l.progress ?? 0),
-      }
-    : null);
-
-const geoText =
-  l.delivered
-    ? "Delivered"
-    : geoPoint
-    ? checkpointGeoText(geoPoint.lat, geoPoint.lon)
-    : "somewhere over the U.S.";
-
-              const sentUtc =
-                (l.sent_utc_text && l.sent_utc_text.trim()) || formatUtcFallback(l.sent_at);
-              const etaUtc =
-                (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(l.eta_at);
-
-              return (
-                <div key={l.id} className="card">
-                  {/* Top row: title + route thumb */}
-                  <div className="dashRowTop" style={{ marginBottom: 10 }}>
-                    <div className="dashRowMain">
-                      <div className="kicker">Letter</div>
-                      <div className="h2">{l.subject?.trim() ? l.subject : "(No subject)"}</div>
-                      <div className="muted" style={{ marginTop: 6 }}>
-                        To: <strong>{l.to_name || "Recipient"}</strong>{" "}
-                        <span style={{ opacity: 0.65 }}>
-                          • {l.origin_name} → {l.dest_name}
-                        </span>
-                      </div>
-                      <div className="muted" style={{ marginTop: 6 }}>
-  📍 <strong>{geoText}</strong>
-</div>
-                    </div>
-
-                    {canThumb ? (
-                      <RouteThumb
-                        origin={{ lat: l.origin_lat, lon: l.origin_lon }}
-                        dest={{ lat: l.dest_lat, lon: l.dest_lon }}
-                        current={current}
-                        progress={l.progress ?? 0}
-                      />
-                    ) : null}
-                  </div>
-
-                  {/* Status + actions row */}
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                      justifyContent: "flex-end",
-                    }}
-                  >
-                    <div className="metaPill">
-                      {statusEmoji} <strong>{statusLabel}</strong>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="btnGhost"
-                      onClick={async () => {
-                        await copyToClipboard(statusUrl);
-                        setToast("Link copied 🕊️");
-                      }}
-                      title="Copy status link"
-                    >
-                      Copy link
-                    </button>
-                  </div>
-
-                  {/* time row */}
-                  <div className="muted" style={{ marginTop: 10 }}>
-                    Sent (UTC): {sentUtc} • <strong>ETA (UTC):</strong> {etaUtc}
-                    {!l.delivered && <> • (T-minus {countdown})</>}
-                  </div>
-
-                  {/* progress */}
-                  <div style={{ marginTop: 12 }}>
-                    <div className="bar">
-                      <div className="barFill" style={{ width: `${pct}%` }} />
-                      {[25, 50, 75].map((p) => (
-                        <span key={p} className="barTick" style={{ left: `${p}%` }} />
-                      ))}
-                    </div>
-
-                    <div className="barMeta">
-                      <div className="mutedStrong">
-                        Progress: <strong>{pct}%</strong>
-                      </div>
-                      <div className="muted">Token: {l.public_token.slice(0, 8)}…</div>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
-                    <a href={statusPath} className="link">
-                      View status
-                    </a>
-                    <a href="/write" className="link">
-                      Write another
-                    </a>
+              {badgesSorted.length === 0 ? (
+                <div className="soft">
+                  <div className="muted">
+                    None yet. The bird’s still grinding XP. 🕊️
                   </div>
                 </div>
-              );
-            })
-          )}
+              ) : (
+                <div className="stack">
+                  {badgesSorted.map((b) => (
+                    <div key={b.id} className="soft" style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                      <div
+                        className="metaPill"
+                        style={{
+                          padding: "8px 10px",
+                          background: "rgba(0,0,0,0.04)",
+                          border: "1px solid rgba(0,0,0,0.10)",
+                          flex: "0 0 auto",
+                        }}
+                        aria-label="Badge icon"
+                        title={rarityLabel(b.rarity)}
+                      >
+                        <span style={{ fontSize: 16, lineHeight: "16px" }}>{b.icon || "🏅"}</span>
+                      </div>
+
+                      <div style={{ minWidth: 0, flex: "1 1 auto" }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 900, letterSpacing: "-0.01em" }}>{b.title}</div>
+                          <div className="muted" style={{ fontSize: 11 }}>
+                            {rarityLabel(b.rarity)}
+                            {b.earned_at ? ` • ${new Date(b.earned_at).toLocaleString()}` : ""}
+                          </div>
+                        </div>
+
+                        {b.subtitle ? (
+                          <div className="muted" style={{ marginTop: 4 }}>
+                            {b.subtitle}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      </main>
     </main>
   );
 }

@@ -33,9 +33,22 @@ type Checkpoint = {
   idx: number;
   name: string;
   at: string;
-  // ✅ NEW: comes from route.ts upgrade
   geo_text?: string;
 };
+
+type LetterItem = {
+  id: string;
+  kind: "badge" | "addon";
+  code: string;
+  title: string;
+  subtitle?: string | null;
+  icon?: string | null;
+  rarity?: "common" | "rare" | "legendary";
+  earned_at?: string | null;
+  meta?: any;
+};
+
+type Badge = LetterItem & { kind: "badge" };
 
 // ✅ UPDATED: matches MapView.tsx
 type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
@@ -78,7 +91,19 @@ function formatUtcFallback(iso: string) {
 
 /** Strip redundant leading “Over …” for tooltips/labels */
 function stripOverPrefix(s: string) {
-  return s.replace(/^over\s+/i, "").trim();
+  return (s || "").replace(/^over\s+/i, "").trim();
+}
+
+function rarityLabel(r?: Badge["rarity"]) {
+  switch (r) {
+    case "legendary":
+      return "Legendary";
+    case "rare":
+      return "Rare";
+    case "common":
+    default:
+      return "Common";
+  }
 }
 
 /* ---------- tiny icon system (inline SVG) ---------- */
@@ -336,6 +361,89 @@ function RailTimeline({
   );
 }
 
+/* ---------- badges UI ---------- */
+function BadgesCard({ badges }: { badges: Badge[] }) {
+  if (!badges?.length) return null;
+
+  return (
+    <div className="card">
+      <div className="cardHead">
+        <div>
+          <div className="kicker">Collectibles</div>
+          <div className="h2">Award badges</div>
+        </div>
+        <div className="pillBtn subtle" title="Earned on this flight">
+          {badges.length} earned
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+          gap: 12,
+          marginTop: 10,
+        }}
+      >
+        {badges.map((b) => (
+          <div
+            key={b.id}
+            className="soft"
+            style={{
+              display: "flex",
+              gap: 12,
+              alignItems: "flex-start",
+              padding: 12,
+            }}
+            title={b.code}
+          >
+            <div
+              aria-hidden
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                display: "grid",
+                placeItems: "center",
+                border: "1px solid rgba(0,0,0,0.08)",
+                background: "rgba(0,0,0,0.03)",
+                flex: "0 0 auto",
+                fontSize: 20,
+              }}
+            >
+              {b.icon || "🏅"}
+            </div>
+
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, lineHeight: 1.2 }}>{b.title}</div>
+              {b.subtitle ? <div className="muted" style={{ marginTop: 4 }}>{b.subtitle}</div> : null}
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
+                  marginTop: 8,
+                  flexWrap: "wrap",
+                }}
+              >
+                <span className="chip on" style={{ padding: "4px 10px" }}>
+                  {rarityLabel(b.rarity)}
+                </span>
+                {b.earned_at ? (
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    {new Date(b.earned_at).toLocaleString()}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function LetterStatusPage() {
   const params = useParams();
   const raw = (params as any)?.token;
@@ -343,13 +451,13 @@ export default function LetterStatusPage() {
 
   const [letter, setLetter] = useState<Letter | null>(null);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
+  const [badges, setBadges] = useState<Badge[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const [now, setNow] = useState(new Date());
   const [delivered, setDelivered] = useState(false);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
-  // ✅ server-computed “current_over_text”
   const [currentOverText, setCurrentOverText] = useState<string | null>(null);
 
   const prevDelivered = useRef(false);
@@ -368,7 +476,11 @@ export default function LetterStatusPage() {
       return;
     }
 
-    if (saved === "carto-positron" || saved === "carto-voyager" || saved === "carto-positron-nolabels") {
+    if (
+      saved === "carto-positron" ||
+      saved === "carto-voyager" ||
+      saved === "carto-positron-nolabels"
+    ) {
       setMapStyle(saved);
     }
   }, []);
@@ -405,6 +517,10 @@ export default function LetterStatusPage() {
         setDelivered(!!data.delivered);
         setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
         setCurrentOverText(typeof data.current_over_text === "string" ? data.current_over_text : null);
+
+        const incomingBadges = (data?.items?.badges ?? []) as Badge[];
+        setBadges(Array.isArray(incomingBadges) ? incomingBadges : []);
+
         setLastFetchedAt(new Date());
       } catch (e: any) {
         console.error("LOAD ERROR:", e);
@@ -480,7 +596,6 @@ export default function LetterStatusPage() {
     return Math.max(0, Math.floor((now.getTime() - lastFetchedAt.getTime()) / 1000));
   }, [now, lastFetchedAt]);
 
-  // ✅ prefer server current_over_text, then cp.geo_text, then cp.name
   const currentlyOver = useMemo(() => {
     if (delivered) return "Delivered";
 
@@ -494,11 +609,10 @@ export default function LetterStatusPage() {
     return fallback;
   }, [delivered, currentOverText, currentCheckpoint]);
 
-  // ✅ map tooltip string: no “Currently over:” and strip “Over ”
   const mapTooltip = useMemo(() => {
-    if (delivered) return "Delivered";
-    const raw = currentlyOver || "somewhere over the U.S.";
-    return stripOverPrefix(raw) || "somewhere over the U.S.";
+    if (delivered) return "Location: Delivered";
+    const base = stripOverPrefix(currentlyOver || "somewhere over the U.S.");
+    return `Location: ${base || "somewhere over the U.S."}`;
   }, [delivered, currentlyOver]);
 
   const showLive = !delivered;
@@ -518,7 +632,9 @@ export default function LetterStatusPage() {
       kind: "milestone" as const,
     }));
 
-    return [...cps, ...ms].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+    return [...cps, ...ms].sort(
+      (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()
+    );
   }, [checkpoints, milestones]);
 
   const currentTimelineKey = useMemo(() => {
@@ -672,8 +788,11 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div className={delivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: delivered ? 1 : 0 }}>
-                <div className="body">{delivered ? (letter.body ?? "") : ""}</div>
+              <div
+                className={delivered && revealStage === "open" ? "bodyReveal" : ""}
+                style={{ opacity: delivered ? 1 : 0 }}
+              >
+                <div className="body">{delivered ? letter.body ?? "" : ""}</div>
               </div>
 
               {!delivered || revealStage !== "open" ? (
@@ -723,13 +842,13 @@ export default function LetterStatusPage() {
             </div>
 
             <div style={{ marginTop: 12 }}>
-<MapView
-  origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-  dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-  progress={progress}
-  tooltipText={`Location: ${currentlyOver.replace(/^Over\s+/i, "")}`}
-  mapStyle={mapStyle}
-/>
+              <MapView
+                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+                progress={progress}
+                tooltipText={mapTooltip} // ✅ "Location: ..." restored
+                mapStyle={mapStyle}
+              />
             </div>
 
             <div style={{ marginTop: 14 }}>
@@ -772,6 +891,9 @@ export default function LetterStatusPage() {
 
             <RailTimeline items={timelineItems} now={now} currentKey={currentTimelineKey} />
           </div>
+
+          {/* ✅ NEW: Badges card (only shows if there are badges) */}
+          <BadgesCard badges={badges} />
         </div>
       </main>
     </main>

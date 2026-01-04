@@ -27,8 +27,18 @@ type LetterItemInsert = {
   subtitle?: string | null;
   icon?: string | null;
   rarity?: "common" | "rare" | "legendary";
-  earned_at?: string; // optional
+  earned_at?: string; // ISO string
   meta?: any;
+};
+
+type BadgeDef = {
+  code: string;
+  title: string;
+  subtitle?: string;
+  icon?: string;
+  rarity?: "common" | "rare" | "legendary";
+  meta?: any;
+  earned_at?: string;
 };
 
 /** Turn a region sequence into "crossed_*" badges (idempotent + extendable) */
@@ -36,8 +46,10 @@ function computeBadgesFromRegions(args: {
   origin?: { name?: string; regionId?: string | null };
   dest?: { name?: string; regionId?: string | null };
   pastRegionIds: string[]; // in order
+  delivered?: boolean;
+  deliveredAtISO?: string;
 }) {
-  const { pastRegionIds } = args;
+  const { pastRegionIds, delivered, deliveredAtISO } = args;
 
   // Reduce to change-points only: [a,a,a,b,b,c] => [a,b,c]
   const seq: string[] = [];
@@ -48,59 +60,51 @@ function computeBadgesFromRegions(args: {
 
   const has = (id: string) => seq.includes(id);
 
-  const out: { code: string; title: string; subtitle?: string; icon?: string; rarity?: "common" | "rare" | "legendary"; meta?: any }[] = [];
-
-  // --- "Crossed X" style badges (award once they've been in region AND later left it) ---
-  // helper: region appears at i and later the sequence differs
+  // "Crossed X" style: award once they've been in region AND later left it
   const crossed = (regionId: string) => {
     const i = seq.indexOf(regionId);
-    return i !== -1 && i < seq.length - 1; // was in it, later left it
+    return i !== -1 && i < seq.length - 1;
   };
 
-  if (crossed("cascades")) {
+  const out: BadgeDef[] = [];
+
+  // ✅ NOTE: These region IDs MUST match your US_REGIONS ids.
+  // Your current US_REGIONS uses: "cascades-n", "rockies-n", "great-plains", etc.
+
+  if (crossed("cascades-n")) {
     out.push({
       code: "crossed_cascades",
       title: "Crossed the Cascades",
       subtitle: "Mountains approved. Wings questionable.",
       icon: "🏔️",
       rarity: "common",
-      meta: { region: "cascades" },
+      meta: { region: "cascades-n" },
     });
   }
 
-  if (crossed("rockies")) {
+  if (crossed("rockies-n")) {
     out.push({
       code: "crossed_rockies",
       title: "Crossed the Rockies",
       subtitle: "Altitude gained. Ego remained modest.",
       icon: "⛰️",
       rarity: "rare",
-      meta: { region: "rockies" },
+      meta: { region: "rockies-n" },
     });
   }
 
-  if (crossed("great_plains")) {
+  if (crossed("great-plains")) {
     out.push({
       code: "across_the_plains",
       title: "Across the Great Plains",
       subtitle: "So flat you can hear tomorrow.",
       icon: "🌾",
       rarity: "common",
-      meta: { region: "great_plains" },
+      meta: { region: "great-plains" },
     });
   }
 
-  if (crossed("mississippi")) {
-    out.push({
-      code: "crossed_mississippi",
-      title: "Crossed the Mississippi",
-      subtitle: "Big river energy.",
-      icon: "🌊",
-      rarity: "rare",
-      meta: { region: "mississippi" },
-    });
-  }
-
+  // ✅ Appalachians exists in your US_REGIONS as "appalachians"
   if (crossed("appalachians")) {
     out.push({
       code: "crossed_appalachians",
@@ -112,18 +116,33 @@ function computeBadgesFromRegions(args: {
     });
   }
 
-  // --- Fun “destination reached” style badge (only when delivered) ---
-  // You can award this elsewhere too; included here for future use.
-
-  // --- Region presence badges (optional; enable if you want more “collectibles”) ---
-  if (has("southwest_desert")) {
+  // ✅ Optional: “presence” style badges (only if region exists)
+  // Example: Snake River Plain exists as "snake-river"
+  if (has("snake-river")) {
     out.push({
-      code: "over_the_desert",
-      title: "Over the Desert",
-      subtitle: "Hydration status: imaginary.",
-      icon: "🌵",
+      code: "over_snake_river_plain",
+      title: "Over the Snake River Plain",
+      subtitle: "Wide open, tailwind energy.",
+      icon: "🌀",
       rarity: "common",
-      meta: { region: "southwest_desert" },
+      meta: { region: "snake-river" },
+    });
+  }
+
+  // ❌ Removed for now (not in your US_REGIONS yet):
+  // - mississippi
+  // - southwest_desert (you have mojave + sonoran instead)
+
+  // ✅ Delivered badge (only when delivered)
+  if (delivered) {
+    out.push({
+      code: "delivered",
+      title: "Delivered",
+      subtitle: "Wax seal retired with honor.",
+      icon: "📬",
+      rarity: "common",
+      meta: { delivered: true },
+      earned_at: deliveredAtISO,
     });
   }
 
@@ -132,10 +151,7 @@ function computeBadgesFromRegions(args: {
   return out.filter((b) => (seen.has(b.code) ? false : (seen.add(b.code), true)));
 }
 
-export async function GET(
-  _req: Request,
-  ctx: { params: Promise<{ token: string }> }
-) {
+export async function GET(_req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
 
   // First fetch: metadata ONLY (no body)
@@ -166,10 +182,7 @@ export async function GET(
     .maybeSingle();
 
   if (metaErr || !meta) {
-    return NextResponse.json(
-      { error: metaErr?.message ?? "Not found" },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: metaErr?.message ?? "Not found" }, { status: 404 });
   }
 
   // Fetch checkpoints
@@ -209,9 +222,10 @@ export async function GET(
         ? checkpointGeoText(cp.lat, cp.lon)
         : "somewhere over the U.S.";
 
-    const region = Number.isFinite(cp.lat) && Number.isFinite(cp.lon)
-      ? geoRegionForPoint(cp.lat, cp.lon) // { id, label } or null
-      : null;
+    const region =
+      Number.isFinite(cp.lat) && Number.isFinite(cp.lon)
+        ? geoRegionForPoint(cp.lat, cp.lon) // { id, label } or null
+        : null;
 
     const upgradedName = isFirst
       ? `Departed roost — ${geo}`
@@ -248,22 +262,28 @@ export async function GET(
 
   const pastRegionIds = past.map((cp: any) => cp.region_id).filter(Boolean) as string[];
 
-  const originRegion = Number.isFinite(meta.origin_lat) && Number.isFinite(meta.origin_lon)
-    ? geoRegionForPoint(meta.origin_lat, meta.origin_lon)
-    : null;
+  const originRegion =
+    Number.isFinite(meta.origin_lat) && Number.isFinite(meta.origin_lon)
+      ? geoRegionForPoint(meta.origin_lat, meta.origin_lon)
+      : null;
 
-  const destRegion = Number.isFinite(meta.dest_lat) && Number.isFinite(meta.dest_lon)
-    ? geoRegionForPoint(meta.dest_lat, meta.dest_lon)
-    : null;
+  const destRegion =
+    Number.isFinite(meta.dest_lat) && Number.isFinite(meta.dest_lon)
+      ? geoRegionForPoint(meta.dest_lat, meta.dest_lon)
+      : null;
 
   const computedBadges = computeBadgesFromRegions({
     origin: { name: meta.origin_name, regionId: originRegion?.id ?? null },
     dest: { name: meta.dest_name, regionId: destRegion?.id ?? null },
     pastRegionIds,
+    delivered,
+    deliveredAtISO: delivered ? new Date(Math.max(nowMs, etaMs || nowMs)).toISOString() : undefined,
   });
 
-  // ✅ Upsert badges (idempotent)
+  // ✅ Upsert badges (idempotent) — set earned_at so sorting works
   if (computedBadges.length) {
+    const earnedAtDefault = new Date(nowMs).toISOString();
+
     const rows: LetterItemInsert[] = computedBadges.map((b) => ({
       letter_id: meta.id,
       kind: "badge",
@@ -272,6 +292,7 @@ export async function GET(
       subtitle: b.subtitle ?? null,
       icon: b.icon ?? null,
       rarity: b.rarity ?? "common",
+      earned_at: b.earned_at ?? earnedAtDefault,
       meta: b.meta ?? {},
     }));
 
@@ -280,8 +301,6 @@ export async function GET(
       .upsert(rows, { onConflict: "letter_id,kind,code" });
 
     if (upsertErr) {
-      // don't hard-fail the whole status page for badges;
-      // but do log it so you notice during dev
       console.error("BADGE UPSERT ERROR:", upsertErr);
     }
   }

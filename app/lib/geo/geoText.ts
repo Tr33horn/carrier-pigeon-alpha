@@ -5,7 +5,10 @@ function capFirstWordOnly(s: string) {
   // But makes "yakima Valley" -> "Yakima Valley"
   const trimmed = (s || "").trim();
   if (!trimmed) return trimmed;
+
+  // normalize leading "the" to lowercase "the " while preserving rest
   if (/^the\s+/i.test(trimmed)) return trimmed.replace(/^the\s+/i, "the ");
+
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
@@ -14,16 +17,20 @@ function stripLeadingPrefix(label: string) {
   return label.replace(/^(over|crossing|along|approaching)\s+/i, "").trim();
 }
 
+function cleanLabel(label: string) {
+  // One place to clean: trim, strip "Over", then capitalization rules
+  return capFirstWordOnly(stripLeadingPrefix(label));
+}
+
 /**
  * Returns a “real-ish” phrase from coords.
- * Keep it simple now; later you can swap to reverse geocode and still return the same interface.
+ * Later you can swap in reverse-geocode and keep this same interface.
  */
 export function checkpointGeoText(lat: number, lon: number): string {
   const region = geoRegionForPoint(lat, lon);
-
   if (!region) return "somewhere over the U.S.";
 
-  const base = capFirstWordOnly(stripLeadingPrefix(region.label));
+  const base = cleanLabel(region.label);
 
   // Small grammar sugar so it reads like a flight update.
   switch (region.kind) {

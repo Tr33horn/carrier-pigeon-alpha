@@ -90,7 +90,6 @@ export async function GET(req: Request) {
       ...l,
       delivered,
       progress,
-
       current_lat: curLat,
       current_lon: curLon,
 
@@ -98,6 +97,9 @@ export async function GET(req: Request) {
       sent_utc_text: l.sent_at ? `${formatUTC(l.sent_at)} UTC` : "",
       eta_utc_text: l.eta_at ? `${formatUTC(l.eta_at)} UTC` : "",
       eta_utc_iso: l.eta_at || null,
+
+      // default until we merge counts
+      badges_count: 0,
     };
   });
 
@@ -117,6 +119,29 @@ export async function GET(req: Request) {
         .toLowerCase();
       return hay.includes(q);
     });
+  }
+
+  // ✅ Badge counts (cheap, no badge payload)
+  // Only do this if we have letters to look up.
+  const letterIds = letters.map((l: any) => l.id).filter(Boolean);
+  if (letterIds.length) {
+    const { data: badgeRows, error: badgeErr } = await supabaseServer
+      .from("letter_items")
+      .select("letter_id")
+      .in("letter_id", letterIds)
+      .eq("kind", "badge");
+
+    if (!badgeErr && badgeRows?.length) {
+      const counts = new Map<string, number>();
+      for (const r of badgeRows as any[]) {
+        counts.set(r.letter_id, (counts.get(r.letter_id) ?? 0) + 1);
+      }
+      letters = letters.map((l: any) => ({
+        ...l,
+        badges_count: counts.get(l.id) ?? 0,
+      }));
+    }
+    // If badgeErr happens, we just leave badges_count = 0 and still return letters.
   }
 
   return NextResponse.json({ letters });
