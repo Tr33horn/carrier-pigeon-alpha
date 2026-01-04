@@ -246,12 +246,7 @@ function Ico({
             strokeWidth="2.4"
             strokeLinecap="round"
           />
-          <path
-            d="M12 12h.01"
-            stroke="currentColor"
-            strokeWidth="6"
-            strokeLinecap="round"
-          />
+          <path d="M12 12h.01" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
         </svg>
       );
   }
@@ -331,13 +326,17 @@ function RailTimeline({
           return (
             <div key={it.key} className="railItem">
               <div
-                className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${shouldPop ? "pop" : ""}`}
+                className={`railNode ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${
+                  shouldPop ? "pop" : ""
+                }`}
               >
                 <span className="railDot">{isPast ? "✓" : ""}</span>
               </div>
 
               <div
-                className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${isCurrent ? "current" : ""}`}
+                className={`railCard ${isPast ? "past" : ""} ${isMilestone ? "milestone" : ""} ${
+                  isCurrent ? "current" : ""
+                }`}
               >
                 {isCurrent && (
                   <div className="pigeonTag livePulseRow">
@@ -377,11 +376,9 @@ export default function LetterStatusPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
-
-  // store raw server delivered, but DON'T trust it as sole truth
-  const [deliveredRaw, setDeliveredRaw] = useState(false);
-
+  const [delivered, setDelivered] = useState(false);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
+
   const [currentOverText, setCurrentOverText] = useState<string | null>(null);
 
   const prevDelivered = useRef(false);
@@ -433,14 +430,12 @@ export default function LetterStatusPage() {
         if (!alive) return;
 
         setLetter(data.letter as Letter);
-        setDeliveredRaw(!!data.delivered);
+        setDelivered(!!data.delivered);
         setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
         setCurrentOverText(typeof data.current_over_text === "string" ? data.current_over_text : null);
 
-        // sleep-aware flight info
         setFlight((data.flight ?? null) as Flight | null);
 
-        // items (badges/addons)
         const nextItems = (data.items ?? {}) as Partial<LetterItems>;
         setItems({
           badges: Array.isArray(nextItems.badges) ? (nextItems.badges as BadgeItem[]) : [],
@@ -464,48 +459,38 @@ export default function LetterStatusPage() {
     };
   }, [token]);
 
+  // Prefer adjusted ETA for countdown/progress (when present)
   const effectiveEtaISO = useMemo(() => {
     if (!letter) return "";
     return (letter.eta_at_adjusted && letter.eta_at_adjusted.trim()) || letter.eta_at;
   }, [letter]);
 
-  // ✅ Derive "delivered" from multiple signals so UI can't flip back to LIVE
-  const delivered = useMemo(() => {
-    if (!letter) return false;
+  const sleeping = !!flight?.sleeping;
 
-    // strongest: explicit markers from server
-    if (deliveredRaw) return true;
-    if (flight?.marker_mode === "delivered") return true;
+  /**
+   * ✅ UI safety net for "zombie letters":
+   * If the ORIGINAL eta_at is clearly in the past, treat as delivered even if server says otherwise.
+   * This prevents old letters from becoming LIVE after ETA adjustment logic changes.
+   */
+  const uiDelivered = useMemo(() => {
+    if (!letter) return delivered;
 
-    // strong: progress already at/over 1
-    if (typeof flight?.progress === "number" && Number.isFinite(flight.progress) && flight.progress >= 1) return true;
+    const etaOriginalMs = Date.parse(letter.eta_at);
+    const etaOriginalPassed =
+      Number.isFinite(etaOriginalMs) && now.getTime() > etaOriginalMs + 60_000; // 1 min grace
 
-    // fallback: ETA reached
-    const etaT = Date.parse(effectiveEtaISO);
-    if (Number.isFinite(etaT) && now.getTime() >= etaT) return true;
+    // If server says delivered, we trust it.
+    if (delivered) return true;
 
-    return false;
-  }, [letter, deliveredRaw, flight?.marker_mode, flight?.progress, effectiveEtaISO, now]);
+    // If it's sleeping, don't force-deliver purely because original ETA passed.
+    // (Sleep can legitimately delay arrival.)
+    if (sleeping) return false;
 
-  // reveal animation when delivered flips true (derived)
-  useEffect(() => {
-    if (!prevDelivered.current && delivered) {
-      setRevealStage("crack");
-      setConfetti(true);
+    // If it's not sleeping and the original ETA is passed, mark delivered for UI.
+    return etaOriginalPassed;
+  }, [letter, delivered, sleeping, now]);
 
-      const t1 = setTimeout(() => setRevealStage("open"), 520);
-      const t2 = setTimeout(() => setConfetti(false), 1400);
-
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-      };
-    }
-
-    prevDelivered.current = delivered;
-  }, [delivered]);
-
-  // ✅ sleep-aware progress (server is source of truth)
+  // progress: prefer server flight.progress; fallback local
   const progress = useMemo(() => {
     if (flight && Number.isFinite(flight.progress)) return clamp01(flight.progress);
 
@@ -523,16 +508,6 @@ export default function LetterStatusPage() {
     return formatCountdown(msLeft);
   }, [letter, effectiveEtaISO, now]);
 
-  const currentCheckpoint = useMemo(() => {
-    if (!checkpoints.length || !letter) return null;
-    const t = now.getTime();
-    let current: Checkpoint | null = null;
-    for (const cp of checkpoints) {
-      if (new Date(cp.at).getTime() <= t) current = cp;
-    }
-    return current ?? checkpoints[0];
-  }, [checkpoints, letter, now]);
-
   const milestones = useMemo(() => {
     if (!letter) return [];
     const defs = [
@@ -548,15 +523,24 @@ export default function LetterStatusPage() {
     });
   }, [letter, effectiveEtaISO, now]);
 
+  // ✅ current checkpoint: keep time-based “latest past” (fine)
+  const currentCheckpoint = useMemo(() => {
+    if (!checkpoints.length || !letter) return null;
+    const t = now.getTime();
+    let current: Checkpoint | null = null;
+    for (const cp of checkpoints) {
+      if (new Date(cp.at).getTime() <= t) current = cp;
+    }
+    return current ?? checkpoints[0];
+  }, [checkpoints, letter, now]);
+
   const secondsSinceFetch = useMemo(() => {
     if (!lastFetchedAt) return null;
     return Math.max(0, Math.floor((now.getTime() - lastFetchedAt.getTime()) / 1000));
   }, [now, lastFetchedAt]);
 
-  // prefer server current_over_text, then cp.geo_text, then cp.name
   const currentlyOver = useMemo(() => {
-    if (delivered) return "Delivered";
-
+    if (uiDelivered) return "Delivered";
     if (currentOverText && currentOverText.trim()) return currentOverText;
 
     const fallback =
@@ -565,25 +549,30 @@ export default function LetterStatusPage() {
       "somewhere over the U.S.";
 
     return fallback;
-  }, [delivered, currentOverText, currentCheckpoint]);
+  }, [uiDelivered, currentOverText, currentCheckpoint]);
 
-  // tooltip string should come from server (sleep-aware, includes "Location:")
   const mapTooltip = useMemo(() => {
     if (flight?.tooltip_text && flight.tooltip_text.trim()) return flight.tooltip_text;
-    if (delivered) return "Location: Delivered";
+    if (uiDelivered) return "Location: Delivered";
     return `Location: ${currentlyOver || "somewhere over the U.S."}`;
-  }, [flight?.tooltip_text, delivered, currentlyOver]);
+  }, [flight?.tooltip_text, uiDelivered, currentlyOver]);
 
-  const showLive = !delivered;
+  const showLive = !uiDelivered;
 
-  // ✅ Fix: stable ordering + tie-breakers to prevent “rearranged” log
+  // ✅ Stable checkpoint ordering by idx (prevents “rearranged” flight log)
+  const checkpointsOrdered = useMemo(() => {
+    const cps = [...checkpoints];
+    cps.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
+    return cps;
+  }, [checkpoints]);
+
+  // ✅ Timeline items: checkpoints in idx order, then milestones (does NOT reorder checkpoints)
   const timelineItems = useMemo(() => {
-    const cps = checkpoints.map((cp) => ({
+    const cps = checkpointsOrdered.map((cp) => ({
       key: `cp-${cp.id}`,
       name: cp.name,
       at: cp.at,
       kind: "checkpoint" as const,
-      _idx: cp.idx ?? 0,
     }));
 
     const ms = milestones.map((m) => ({
@@ -591,43 +580,30 @@ export default function LetterStatusPage() {
       name: m.label,
       at: m.atISO,
       kind: "milestone" as const,
-      _pct: m.pct,
     }));
 
-    const combined = [...cps, ...ms];
+    return [...cps, ...ms];
+  }, [checkpointsOrdered, milestones]);
 
-    combined.sort((a: any, b: any) => {
-      const ta = new Date(a.at).getTime();
-      const tb = new Date(b.at).getTime();
-      if (ta !== tb) return ta - tb;
-
-      // tie-break 1: checkpoints first
-      if (a.kind !== b.kind) return a.kind === "checkpoint" ? -1 : 1;
-
-      // tie-break 2: checkpoint idx, then milestone pct
-      if (a.kind === "checkpoint") return (a._idx ?? 0) - (b._idx ?? 0);
-      return (a._pct ?? 0) - (b._pct ?? 0);
-    });
-
-    // strip private fields
-    return combined.map(({ _idx, _pct, ...rest }: any) => rest);
-  }, [checkpoints, milestones]);
-
+  // Current key: still time-based, but doesn’t depend on sorting-by-at anymore
   const currentTimelineKey = useMemo(() => {
-    if (delivered) return null;
+    if (uiDelivered) return null;
     if (!timelineItems.length) return null;
 
     const nowT = now.getTime();
-    let idx = 0;
+    let bestKey: string | null = null;
+    let bestT = -Infinity;
 
-    for (let i = 0; i < timelineItems.length; i++) {
-      const t = new Date(timelineItems[i].at).getTime();
-      if (t <= nowT) idx = i;
-      else break;
+    for (const it of timelineItems) {
+      const t = new Date(it.at).getTime();
+      if (t <= nowT && t >= bestT) {
+        bestT = t;
+        bestKey = it.key;
+      }
     }
 
-    return timelineItems[idx]?.key ?? null;
-  }, [timelineItems, now, delivered]);
+    return bestKey;
+  }, [timelineItems, now, uiDelivered]);
 
   const etaTextUTC = useMemo(() => {
     if (!letter) return "";
@@ -643,12 +619,26 @@ export default function LetterStatusPage() {
     });
   }, [items.badges]);
 
-  // sleeping is irrelevant once delivered
-  const sleeping = !!flight?.sleeping && !delivered;
+  // ✅ markerMode uses uiDelivered (prevents re-activating completed letters)
+  const markerMode: Flight["marker_mode"] = uiDelivered ? "delivered" : sleeping ? "sleeping" : "flying";
 
-  // ✅ markerMode: trust server, but force delivered if we derived delivered
-  const markerMode: Flight["marker_mode"] =
-    delivered ? "delivered" : (flight?.marker_mode ?? (sleeping ? "sleeping" : "flying"));
+  // confetti/reveal should trigger on UI-delivery transition (not just server)
+  useEffect(() => {
+    if (!prevDelivered.current && uiDelivered) {
+      setRevealStage("crack");
+      setConfetti(true);
+
+      const t1 = setTimeout(() => setRevealStage("open"), 520);
+      const t2 = setTimeout(() => setConfetti(false), 1400);
+
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
+    }
+
+    prevDelivered.current = uiDelivered;
+  }, [uiDelivered]);
 
   if (error) {
     return (
@@ -687,16 +677,13 @@ export default function LetterStatusPage() {
               <div className="subRow">
                 {showLive ? (
                   <>
-                    {/* LIVE or SLEEPING pill */}
                     <div className="liveStack" style={{ minWidth: 230, flex: "0 0 auto" }}>
                       <div className={`liveWrap ${sleeping ? "sleep" : ""}`}>
                         <span className={`liveDot ${sleeping ? "sleep" : ""}`} />
                         <span className="liveText">{sleeping ? "SLEEPING" : "LIVE"}</span>
                       </div>
                       <div className="liveSub">
-                        {sleeping
-                          ? `Wakes at ${flight?.sleep_local_text || "soon"}`
-                          : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
+                        {sleeping ? `Wakes at ${flight?.sleep_local_text || "soon"}` : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
                       </div>
                     </div>
 
@@ -725,7 +712,7 @@ export default function LetterStatusPage() {
             <div className="etaBox">
               <div className="kicker">ETA (UTC)</div>
               <div className="etaTime">{etaTextUTC}</div>
-              {!delivered && <div className="etaSub">T-minus {countdown}</div>}
+              {!uiDelivered && <div className="etaSub">T-minus {countdown}</div>}
             </div>
           </div>
 
@@ -785,13 +772,13 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div className={delivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: delivered ? 1 : 0 }}>
-                <div className="body">{delivered ? (letter.body ?? "") : ""}</div>
+              <div className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: uiDelivered ? 1 : 0 }}>
+                <div className="body">{uiDelivered ? (letter.body ?? "") : ""}</div>
               </div>
 
-              {!delivered || revealStage !== "open" ? (
-                <div style={{ position: delivered ? "absolute" : "relative", inset: 0 }}>
-                  <WaxSealOverlay etaText={etaTextUTC} cracking={delivered && revealStage === "crack"} />
+              {!uiDelivered || revealStage !== "open" ? (
+                <div style={{ position: uiDelivered ? "absolute" : "relative", inset: 0 }}>
+                  <WaxSealOverlay etaText={etaTextUTC} cracking={uiDelivered && revealStage === "crack"} />
                 </div>
               ) : null}
             </div>
@@ -801,7 +788,6 @@ export default function LetterStatusPage() {
         </div>
 
         <div className="grid">
-          {/* LEFT: Map */}
           <div className="card">
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
               <div className="kicker">Map</div>
@@ -871,7 +857,6 @@ export default function LetterStatusPage() {
             </div>
           </div>
 
-          {/* RIGHT: Timeline + Badges stack */}
           <div className="stack">
             <div className="card">
               <div className="cardHead">
@@ -883,14 +868,13 @@ export default function LetterStatusPage() {
                   <span className="ico">
                     <Ico name="live" />
                   </span>
-                  {delivered ? "Final" : "Auto"}
+                  {uiDelivered ? "Final" : "Auto"}
                 </div>
               </div>
 
               <RailTimeline items={timelineItems} now={now} currentKey={currentTimelineKey} />
             </div>
 
-            {/* Badges */}
             <div className="card">
               <div className="cardHead" style={{ marginBottom: 10 }}>
                 <div>
@@ -934,7 +918,11 @@ export default function LetterStatusPage() {
                           </div>
                         </div>
 
-                        {b.subtitle ? <div className="muted" style={{ marginTop: 4 }}>{b.subtitle}</div> : null}
+                        {b.subtitle ? (
+                          <div className="muted" style={{ marginTop: 4 }}>
+                            {b.subtitle}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   ))}
