@@ -1,21 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  Polyline,
-  Marker,
-  Tooltip,
-  useMap,
-} from "react-leaflet";
+import { MapContainer, TileLayer, Polyline, Marker, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 
-// ✅ Match the LetterStatusPage values
-export type MapStyle =
-  | "carto-positron"
-  | "carto-voyager"
-  | "carto-positron-nolabels";
+export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
@@ -57,96 +46,22 @@ function FitBounds({ bounds }: { bounds: [number, number][] }) {
   return null;
 }
 
-/** Keep tooltips sane + always include "Location:" */
-function normalizeTooltip(text?: string) {
-  let t = (text || "").trim();
-  if (!t) return "Location: Somewhere over the U.S.";
+function normalizeGeoText(text?: string) {
+  const t = (text || "").trim();
+  if (!t) return "";
 
-  // strip accidental prefixes, but keep Location:
-  t = t.replace(/^currently over:\s*/i, "").trim();
-
-  // If it comes in like "Over X", keep it, but still ensure Location:
-  if (!/^location:\s*/i.test(t)) t = `Location: ${t}`;
-
-  return t;
-}
-
-/** Quadratic Bezier point */
-function bezier2(
-  a: { x: number; y: number },
-  c: { x: number; y: number },
-  b: { x: number; y: number },
-  t: number
-) {
-  const u = 1 - t;
-  const x = u * u * a.x + 2 * u * t * c.x + t * t * b.x;
-  const y = u * u * a.y + 2 * u * t * c.y + t * t * b.y;
-  return { x, y };
-}
-
-/**
- * Build a curved route polyline that "wobbles" by moving the control point.
- * - Origin/dest are fixed
- * - Curve shape changes over time (wind wobble)
- */
-function makeWobblyCurve(args: {
-  origin: { lat: number; lon: number };
-  dest: { lat: number; lon: number };
-  phase: number; // seconds
-  points?: number; // resolution
-}) {
-  const { origin, dest, phase } = args;
-  const steps = Math.max(16, args.points ?? 44);
-
-  // Map lat/lon into a simple XY plane (lon = x, lat = y)
-  const A = { x: origin.lon, y: origin.lat };
-  const B = { x: dest.lon, y: dest.lat };
-
-  const dx = B.x - A.x;
-  const dy = B.y - A.y;
-
-  // Distance in "degrees" (good enough for vibes)
-  const dist = Math.hypot(dx, dy);
-
-  // Midpoint
-  const mx = (A.x + B.x) / 2;
-  const my = (A.y + B.y) / 2;
-
-  // Perpendicular unit vector
-  const px = -dy;
-  const py = dx;
-  const plen = Math.hypot(px, py) || 1;
-  const ux = px / plen;
-  const uy = py / plen;
-
-  // Base curve height proportional to distance, clamped
-  // (bigger trips get a nicer arc)
-  const baseArc = Math.min(2.2, Math.max(0.25, dist * 0.18));
-
-  // Wind wobble: small sinusoidal modulation
-  const wobble = Math.sin(phase * 0.9) * 0.22 + Math.sin(phase * 1.7) * 0.12;
-
-  // Control point offset amount
-  const arc = baseArc * (1 + wobble);
-
-  // Control point
-  const C = { x: mx + ux * arc, y: my + uy * arc };
-
-  const pts: [number, number][] = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const p = bezier2(A, C, B, t);
-    // back to Leaflet lat/lon
-    pts.push([p.y, p.x]);
-  }
-  return pts;
+  // Strip accidental prefixes coming from upstream
+  return t
+    .replace(/^currently over:\s*/i, "")
+    .replace(/^location:\s*/i, "")
+    .trim();
 }
 
 export default function MapView(props: {
   origin: { lat: number; lon: number };
   dest: { lat: number; lon: number };
   progress: number; // 0..1
-  tooltipText?: string; // any string; we'll normalize into "Location: ..."
+  tooltipText?: string; // e.g. "Over Yakima Valley" OR "Yakima Valley" OR "Delivered"
   mapStyle?: MapStyle;
 }) {
   const { origin, dest } = props;
@@ -154,12 +69,9 @@ export default function MapView(props: {
   const mapStyle: MapStyle = props.mapStyle ?? "carto-positron";
   const tile = useMemo(() => getCarto(mapStyle), [mapStyle]);
 
-  const [displayProgress, setDisplayProgress] = useState(() =>
-    clamp01(props.progress)
-  );
+  const [displayProgress, setDisplayProgress] = useState(() => clamp01(props.progress));
   const rafRef = useRef<number | null>(null);
 
-  // ✅ animate marker progress (unchanged)
   useEffect(() => {
     const from = displayProgress;
     const to = clamp01(props.progress);
@@ -184,27 +96,6 @@ export default function MapView(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.progress]);
 
-  // ✅ phase for route wobble
-  const [phase, setPhase] = useState(0);
-  useEffect(() => {
-    let alive = true;
-    let last = performance.now();
-
-    const loop = (now: number) => {
-      if (!alive) return;
-      const dt = (now - last) / 1000;
-      last = now;
-      // speed of wobble feel
-      setPhase((p) => p + dt);
-      requestAnimationFrame(loop);
-    };
-
-    requestAnimationFrame(loop);
-    return () => {
-      alive = false;
-    };
-  }, []);
-
   const current = {
     lat: lerp(origin.lat, dest.lat, displayProgress),
     lon: lerp(origin.lon, dest.lon, displayProgress),
@@ -212,7 +103,6 @@ export default function MapView(props: {
 
   const inFlight = useMemo(() => clamp01(props.progress) < 1, [props.progress]);
 
-  // ✅ Pulsing live marker (no pigeon emoji)
   const liveIcon = useMemo(
     () =>
       L.divIcon({
@@ -230,7 +120,6 @@ export default function MapView(props: {
     [inFlight]
   );
 
-  // ✅ Origin = small filled dot
   const originIcon = useMemo(
     () =>
       L.divIcon({
@@ -242,7 +131,6 @@ export default function MapView(props: {
     []
   );
 
-  // ✅ Destination = map pin icon
   const destIcon = useMemo(
     () =>
       L.divIcon({
@@ -265,21 +153,20 @@ export default function MapView(props: {
     []
   );
 
-  // ✅ bounds should remain stable (origin + dest only)
-  const boundsLine: [number, number][] = [
+  const line: [number, number][] = [
     [origin.lat, origin.lon],
     [dest.lat, dest.lon],
   ];
 
-  // ✅ the route polyline changes shape (wobbly curve)
-  const routePts = useMemo(() => {
-    return makeWobblyCurve({ origin, dest, phase, points: 44 });
-  }, [origin, dest, phase]);
-
   const routeColor = "#121212";
   const routeOpacity = 0.55;
 
-  const tooltip = useMemo(() => normalizeTooltip(props.tooltipText), [props.tooltipText]);
+  const geoText = useMemo(() => {
+    const t = normalizeGeoText(props.tooltipText);
+    if (!t) return "Somewhere over the U.S.";
+    if (!inFlight) return "Delivered";
+    return t;
+  }, [props.tooltipText, inFlight]);
 
   return (
     <div
@@ -299,10 +186,10 @@ export default function MapView(props: {
       >
         <TileLayer attribution={tile.attribution} url={tile.url} />
 
-        <FitBounds bounds={boundsLine} />
+        <FitBounds bounds={line} />
 
         <Polyline
-          positions={routePts}
+          positions={line}
           pathOptions={{
             color: routeColor,
             weight: 3,
@@ -324,7 +211,7 @@ export default function MapView(props: {
           >
             <span className="pigeonTooltipRow">
               {inFlight && <span className="pigeonLiveDot" />}
-              <span className="pigeonTooltipText">{tooltip}</span>
+              <span className="pigeonTooltipText">{geoText}</span>
             </span>
           </Tooltip>
         </Marker>
