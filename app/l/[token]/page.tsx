@@ -33,12 +33,13 @@ type Checkpoint = {
   idx: number;
   name: string;
   at: string;
+  // ✅ NEW: comes from route.ts upgrade
   geo_text?: string;
 };
 
-type LetterItem = {
+type BadgeItem = {
   id: string;
-  kind: "badge" | "addon";
+  kind: "badge";
   code: string;
   title: string;
   subtitle?: string | null;
@@ -48,7 +49,22 @@ type LetterItem = {
   meta?: any;
 };
 
-type Badge = LetterItem & { kind: "badge" };
+type AddonItem = {
+  id: string;
+  kind: "addon";
+  code: string;
+  title: string;
+  subtitle?: string | null;
+  icon?: string | null;
+  rarity?: "common" | "rare" | "legendary";
+  earned_at?: string | null;
+  meta?: any;
+};
+
+type LetterItems = {
+  badges: BadgeItem[];
+  addons: AddonItem[];
+};
 
 // ✅ UPDATED: matches MapView.tsx
 type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
@@ -92,18 +108,6 @@ function formatUtcFallback(iso: string) {
 /** Strip redundant leading “Over …” for tooltips/labels */
 function stripOverPrefix(s: string) {
   return (s || "").replace(/^over\s+/i, "").trim();
-}
-
-function rarityLabel(r?: Badge["rarity"]) {
-  switch (r) {
-    case "legendary":
-      return "Legendary";
-    case "rare":
-      return "Rare";
-    case "common":
-    default:
-      return "Common";
-  }
 }
 
 /* ---------- tiny icon system (inline SVG) ---------- */
@@ -361,87 +365,10 @@ function RailTimeline({
   );
 }
 
-/* ---------- badges UI ---------- */
-function BadgesCard({ badges }: { badges: Badge[] }) {
-  if (!badges?.length) return null;
-
-  return (
-    <div className="card">
-      <div className="cardHead">
-        <div>
-          <div className="kicker">Collectibles</div>
-          <div className="h2">Award badges</div>
-        </div>
-        <div className="pillBtn subtle" title="Earned on this flight">
-          {badges.length} earned
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-          gap: 12,
-          marginTop: 10,
-        }}
-      >
-        {badges.map((b) => (
-          <div
-            key={b.id}
-            className="soft"
-            style={{
-              display: "flex",
-              gap: 12,
-              alignItems: "flex-start",
-              padding: 12,
-            }}
-            title={b.code}
-          >
-            <div
-              aria-hidden
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 12,
-                display: "grid",
-                placeItems: "center",
-                border: "1px solid rgba(0,0,0,0.08)",
-                background: "rgba(0,0,0,0.03)",
-                flex: "0 0 auto",
-                fontSize: 20,
-              }}
-            >
-              {b.icon || "🏅"}
-            </div>
-
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 700, lineHeight: 1.2 }}>{b.title}</div>
-              {b.subtitle ? <div className="muted" style={{ marginTop: 4 }}>{b.subtitle}</div> : null}
-
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "center",
-                  marginTop: 8,
-                  flexWrap: "wrap",
-                }}
-              >
-                <span className="chip on" style={{ padding: "4px 10px" }}>
-                  {rarityLabel(b.rarity)}
-                </span>
-                {b.earned_at ? (
-                  <span className="muted" style={{ fontSize: 12 }}>
-                    {new Date(b.earned_at).toLocaleString()}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+function rarityLabel(r?: string) {
+  if (r === "legendary") return "Legendary";
+  if (r === "rare") return "Rare";
+  return "Common";
 }
 
 export default function LetterStatusPage() {
@@ -451,13 +378,14 @@ export default function LetterStatusPage() {
 
   const [letter, setLetter] = useState<Letter | null>(null);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
-  const [badges, setBadges] = useState<Badge[]>([]);
+  const [items, setItems] = useState<LetterItems>({ badges: [], addons: [] });
   const [error, setError] = useState<string | null>(null);
 
   const [now, setNow] = useState(new Date());
   const [delivered, setDelivered] = useState(false);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
+  // ✅ server-computed “current_over_text”
   const [currentOverText, setCurrentOverText] = useState<string | null>(null);
 
   const prevDelivered = useRef(false);
@@ -476,11 +404,7 @@ export default function LetterStatusPage() {
       return;
     }
 
-    if (
-      saved === "carto-positron" ||
-      saved === "carto-voyager" ||
-      saved === "carto-positron-nolabels"
-    ) {
+    if (saved === "carto-positron" || saved === "carto-voyager" || saved === "carto-positron-nolabels") {
       setMapStyle(saved);
     }
   }, []);
@@ -518,8 +442,12 @@ export default function LetterStatusPage() {
         setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
         setCurrentOverText(typeof data.current_over_text === "string" ? data.current_over_text : null);
 
-        const incomingBadges = (data?.items?.badges ?? []) as Badge[];
-        setBadges(Array.isArray(incomingBadges) ? incomingBadges : []);
+        // ✅ items (badges/addons)
+        const nextItems = (data.items ?? {}) as Partial<LetterItems>;
+        setItems({
+          badges: Array.isArray(nextItems.badges) ? (nextItems.badges as BadgeItem[]) : [],
+          addons: Array.isArray(nextItems.addons) ? (nextItems.addons as AddonItem[]) : [],
+        });
 
         setLastFetchedAt(new Date());
       } catch (e: any) {
@@ -596,6 +524,7 @@ export default function LetterStatusPage() {
     return Math.max(0, Math.floor((now.getTime() - lastFetchedAt.getTime()) / 1000));
   }, [now, lastFetchedAt]);
 
+  // ✅ prefer server current_over_text, then cp.geo_text, then cp.name
   const currentlyOver = useMemo(() => {
     if (delivered) return "Delivered";
 
@@ -609,6 +538,7 @@ export default function LetterStatusPage() {
     return fallback;
   }, [delivered, currentOverText, currentCheckpoint]);
 
+  // ✅ map tooltip: keep "Location:" label, but remove "Over " to avoid "Location: Over ..."
   const mapTooltip = useMemo(() => {
     if (delivered) return "Location: Delivered";
     const base = stripOverPrefix(currentlyOver || "somewhere over the U.S.");
@@ -632,9 +562,7 @@ export default function LetterStatusPage() {
       kind: "milestone" as const,
     }));
 
-    return [...cps, ...ms].sort(
-      (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()
-    );
+    return [...cps, ...ms].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
   }, [checkpoints, milestones]);
 
   const currentTimelineKey = useMemo(() => {
@@ -657,6 +585,16 @@ export default function LetterStatusPage() {
     if (!letter) return "";
     return (letter.eta_utc_text && letter.eta_utc_text.trim()) || formatUtcFallback(letter.eta_at);
   }, [letter]);
+
+  const badgesSorted = useMemo(() => {
+    const b = items.badges ?? [];
+    // earned_at may be null; keep stable order
+    return [...b].sort((a, c) => {
+      const ta = a.earned_at ? Date.parse(a.earned_at) : 0;
+      const tb = c.earned_at ? Date.parse(c.earned_at) : 0;
+      return ta - tb;
+    });
+  }, [items.badges]);
 
   if (error) {
     return (
@@ -788,11 +726,8 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div
-                className={delivered && revealStage === "open" ? "bodyReveal" : ""}
-                style={{ opacity: delivered ? 1 : 0 }}
-              >
-                <div className="body">{delivered ? letter.body ?? "" : ""}</div>
+              <div className={delivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: delivered ? 1 : 0 }}>
+                <div className="body">{delivered ? (letter.body ?? "") : ""}</div>
               </div>
 
               {!delivered || revealStage !== "open" ? (
@@ -807,6 +742,7 @@ export default function LetterStatusPage() {
         </div>
 
         <div className="grid">
+          {/* LEFT: Map */}
           <div className="card">
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
               <div className="kicker">Map</div>
@@ -846,7 +782,7 @@ export default function LetterStatusPage() {
                 origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
                 dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
                 progress={progress}
-                tooltipText={mapTooltip} // ✅ "Location: ..." restored
+                tooltipText={mapTooltip} // ✅ Location: ... restored
                 mapStyle={mapStyle}
               />
             </div>
@@ -875,25 +811,83 @@ export default function LetterStatusPage() {
             </div>
           </div>
 
-          <div className="card">
-            <div className="cardHead">
-              <div>
-                <div className="kicker">Timeline</div>
-                <div className="h2">Flight log</div>
+          {/* RIGHT: Timeline + Badges stack */}
+          <div className="stack">
+            <div className="card">
+              <div className="cardHead">
+                <div>
+                  <div className="kicker">Timeline</div>
+                  <div className="h2">Flight log</div>
+                </div>
+                <div className="pillBtn subtle" title="Auto refresh">
+                  <span className="ico">
+                    <Ico name="live" />
+                  </span>
+                  {delivered ? "Final" : "Auto"}
+                </div>
               </div>
-              <div className="pillBtn subtle" title="Auto refresh">
-                <span className="ico">
-                  <Ico name="live" />
-                </span>
-                {delivered ? "Final" : "Auto"}
-              </div>
+
+              <RailTimeline items={timelineItems} now={now} currentKey={currentTimelineKey} />
             </div>
 
-            <RailTimeline items={timelineItems} now={now} currentKey={currentTimelineKey} />
-          </div>
+            {/* ✅ NEW: Badges card */}
+            <div className="card">
+              <div className="cardHead" style={{ marginBottom: 10 }}>
+                <div>
+                  <div className="kicker">Badges</div>
+                  <div className="h2">Earned on this flight</div>
+                </div>
 
-          {/* ✅ NEW: Badges card (only shows if there are badges) */}
-          <BadgesCard badges={badges} />
+                <div className="metaPill faint" title="Badges earned so far">
+                  🏅 <strong>{badgesSorted.length}</strong>
+                </div>
+              </div>
+
+              {badgesSorted.length === 0 ? (
+                <div className="soft">
+                  <div className="muted">
+                    None yet. The bird’s still grinding XP. 🕊️
+                  </div>
+                </div>
+              ) : (
+                <div className="stack">
+                  {badgesSorted.map((b) => (
+                    <div key={b.id} className="soft" style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                      <div
+                        className="metaPill"
+                        style={{
+                          padding: "8px 10px",
+                          background: "rgba(0,0,0,0.04)",
+                          border: "1px solid rgba(0,0,0,0.10)",
+                          flex: "0 0 auto",
+                        }}
+                        aria-label="Badge icon"
+                        title={rarityLabel(b.rarity)}
+                      >
+                        <span style={{ fontSize: 16, lineHeight: "16px" }}>{b.icon || "🏅"}</span>
+                      </div>
+
+                      <div style={{ minWidth: 0, flex: "1 1 auto" }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 900, letterSpacing: "-0.01em" }}>{b.title}</div>
+                          <div className="muted" style={{ fontSize: 11 }}>
+                            {rarityLabel(b.rarity)}
+                            {b.earned_at ? ` • ${new Date(b.earned_at).toLocaleString()}` : ""}
+                          </div>
+                        </div>
+
+                        {b.subtitle ? (
+                          <div className="muted" style={{ marginTop: 4 }}>
+                            {b.subtitle}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </main>
     </main>
