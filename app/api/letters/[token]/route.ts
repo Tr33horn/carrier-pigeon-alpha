@@ -398,6 +398,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const realNowMs = Date.now();
   const nowMs = archived ? Math.min(realNowMs, archivedAtMs) : realNowMs;
 
+  // ✅ NEW: server snapshot time fields for client
   const server_now_iso = new Date(nowMs).toISOString();
   const server_now_utc_text = formatUtc(server_now_iso);
 
@@ -420,12 +421,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const requiredAwakeMs = meta.speed_kmh > 0 ? (meta.distance_km / meta.speed_kmh) * 3600_000 : 0;
 
   const etaAdjustedMs =
-    Number.isFinite(sentMs) && requiredAwakeMs > 0 ? etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin) : Date.parse(meta.eta_at);
+    Number.isFinite(sentMs) && requiredAwakeMs > 0
+      ? etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin)
+      : Date.parse(meta.eta_at);
 
   const delivered = Number.isFinite(etaAdjustedMs) ? nowMs >= etaAdjustedMs : true;
 
   const awakeSoFar =
-    Number.isFinite(sentMs) && nowMs > sentMs ? awakeMsBetween(sentMs, Math.min(nowMs, etaAdjustedMs), offsetMin) : 0;
+    Number.isFinite(sentMs) && nowMs > sentMs
+      ? awakeMsBetween(sentMs, Math.min(nowMs, etaAdjustedMs), offsetMin)
+      : 0;
 
   const progress = requiredAwakeMs > 0 ? clamp(awakeSoFar / requiredAwakeMs, 0, 1) : 1;
 
@@ -447,9 +452,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     const isFirst = i === 0;
     const isLast = i === arr.length - 1;
 
-    const geo = Number.isFinite(cp.lat) && Number.isFinite(cp.lon) ? checkpointGeoText(cp.lat, cp.lon) : "somewhere over the U.S.";
+    const geo =
+      Number.isFinite(cp.lat) && Number.isFinite(cp.lon)
+        ? checkpointGeoText(cp.lat, cp.lon)
+        : "somewhere over the U.S.";
 
-    const region = Number.isFinite(cp.lat) && Number.isFinite(cp.lon) ? geoRegionForPoint(cp.lat, cp.lon) : null;
+    const region =
+      Number.isFinite(cp.lat) && Number.isFinite(cp.lon)
+        ? geoRegionForPoint(cp.lat, cp.lon)
+        : null;
 
     const upgradedName = isFirst ? `Departed roost — ${geo}` : isLast ? `Final descent — ${geo}` : geo;
 
@@ -497,13 +508,21 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const pastRegionIds = past.map((cp: any) => cp.region_id).filter(Boolean) as string[];
 
   const originRegion =
-    Number.isFinite(meta.origin_lat) && Number.isFinite(meta.origin_lon) ? geoRegionForPoint(meta.origin_lat, meta.origin_lon) : null;
+    Number.isFinite(meta.origin_lat) && Number.isFinite(meta.origin_lon)
+      ? geoRegionForPoint(meta.origin_lat, meta.origin_lon)
+      : null;
 
   const destRegion =
-    Number.isFinite(meta.dest_lat) && Number.isFinite(meta.dest_lon) ? geoRegionForPoint(meta.dest_lat, meta.dest_lon) : null;
+    Number.isFinite(meta.dest_lat) && Number.isFinite(meta.dest_lon)
+      ? geoRegionForPoint(meta.dest_lat, meta.dest_lon)
+      : null;
 
   const deliveredAtISO =
-    delivered && Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : delivered ? new Date(nowMs).toISOString() : undefined;
+    delivered && Number.isFinite(etaAdjustedMs)
+      ? new Date(etaAdjustedMs).toISOString()
+      : delivered
+      ? new Date(nowMs).toISOString()
+      : undefined;
 
   const computedBadges = computeBadgesFromRegions({
     origin: { name: meta.origin_name, regionId: originRegion?.id ?? null },
@@ -528,7 +547,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
       meta: b.meta ?? {},
     }));
 
-    const { error: upsertErr } = await supabaseServer.from("letter_items").upsert(rows, { onConflict: "letter_id,kind,code" });
+    const { error: upsertErr } = await supabaseServer
+      .from("letter_items")
+      .upsert(rows, { onConflict: "letter_id,kind,code" });
 
     if (upsertErr) console.error("BADGE UPSERT ERROR:", upsertErr);
   }
@@ -552,7 +573,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     archived,
     archived_at: archived ? archived_at : null,
 
-    // ✅ for client-side freezing when archived
+    // ✅ NEW: client uses this to freeze "now" when archived
     server_now_iso,
     server_now_utc_text,
 
@@ -576,8 +597,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
       sleep_until_iso,
       sleep_local_text,
       tooltip_text,
-
-      // ✅ IMPORTANT: archived should reflect frozen state, not force delivered
       marker_mode: delivered ? "delivered" : sleeping ? "sleeping" : "flying",
     },
 
