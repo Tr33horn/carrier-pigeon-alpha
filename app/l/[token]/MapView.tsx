@@ -282,7 +282,7 @@ export default function MapView(props: {
 
   // Colors
   const idealColor = "#121212";
-  const flownColor = "#2563eb"; // blue-ish (Tailwind blue-600 vibe)
+  const flownColor = "#16a34a"; // blue-ish (Tailwind blue-600 vibe)
 
   return (
     <div
