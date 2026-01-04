@@ -723,14 +723,13 @@ export default function LetterStatusPage() {
             </div>
 
             <div style={{ marginTop: 12 }}>
-              <MapView
-                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-                progress={progress}
-                // ✅ No redundant “Currently over:” here
-                tooltipText={mapTooltip}
-                mapStyle={mapStyle}
-              />
+<MapView
+  origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+  dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+  progress={progress}
+  tooltipText={`Location: ${currentlyOver.replace(/^Over\s+/i, "")}`}
+  mapStyle={mapStyle}
+/>
             </div>
 
             <div style={{ marginTop: 14 }}>
