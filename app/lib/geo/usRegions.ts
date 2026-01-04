@@ -7,7 +7,12 @@ export type GeoRegion = {
   kind?: "over" | "crossing" | "along" | "approaching";
 };
 
-const R = (id: string, label: string, bbox: GeoRegion["bbox"], kind: GeoRegion["kind"] = "over"): GeoRegion => ({
+const R = (
+  id: string,
+  label: string,
+  bbox: GeoRegion["bbox"],
+  kind: GeoRegion["kind"] = "over"
+): GeoRegion => ({
   id,
   label,
   bbox,
@@ -17,6 +22,10 @@ const R = (id: string, label: string, bbox: GeoRegion["bbox"], kind: GeoRegion["
 /**
  * Lightweight, US-wide regions you can extend forever.
  * BBoxes are intentionally “loose” so it feels plausible, not legal-survey accurate.
+ *
+ * NOTE: Regions overlap on purpose. Matching uses "most specific wins"
+ * (smallest bbox area), so you can add detailed regions without worrying
+ * about ordering.
  */
 export const US_REGIONS: GeoRegion[] = [
   // --- Pacific Northwest / West ---
@@ -61,12 +70,35 @@ export const US_REGIONS: GeoRegion[] = [
   R("florida-peninsula", "the Florida Peninsula", [26.0, -83.5, 30.8, -79.3], "over"),
 ];
 
+/** bbox area heuristic: smaller = more specific */
+function bboxArea([minLat, minLon, maxLat, maxLon]: GeoRegion["bbox"]) {
+  return Math.abs((maxLat - minLat) * (maxLon - minLon));
+}
+
+/**
+ * “Most specific wins” region matcher.
+ * If multiple regions contain the point, returns the one with the smallest bbox.
+ */
 export function matchUSRegion(lat: number, lon: number): GeoRegion | null {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
 
+  const matches: GeoRegion[] = [];
+
   for (const r of US_REGIONS) {
     const [minLat, minLon, maxLat, maxLon] = r.bbox;
-    if (lat >= minLat && lat <= maxLat && lon >= minLon && lon <= maxLon) return r;
+    if (lat >= minLat && lat <= maxLat && lon >= minLon && lon <= maxLon) {
+      matches.push(r);
+    }
   }
-  return null;
+
+  if (!matches.length) return null;
+
+  // smallest bbox = most specific
+  matches.sort((a, b) => bboxArea(a.bbox) - bboxArea(b.bbox));
+  return matches[0];
+}
+
+// ✅ Alias expected by the rest of the app
+export function geoRegionForPoint(lat: number, lon: number): GeoRegion | null {
+  return matchUSRegion(lat, lon);
 }

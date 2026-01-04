@@ -76,6 +76,11 @@ function formatUtcFallback(iso: string) {
   return `${d.toISOString().replace("T", " ").replace("Z", "")} UTC`;
 }
 
+/** Strip redundant leading “Over …” for tooltips/labels */
+function stripOverPrefix(s: string) {
+  return s.replace(/^over\s+/i, "").trim();
+}
+
 /* ---------- tiny icon system (inline SVG) ---------- */
 function Ico({
   name,
@@ -344,7 +349,7 @@ export default function LetterStatusPage() {
   const [delivered, setDelivered] = useState(false);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
-  // ✅ NEW: server-computed “Currently over” text (best source of truth)
+  // ✅ server-computed “current_over_text”
   const [currentOverText, setCurrentOverText] = useState<string | null>(null);
 
   const prevDelivered = useRef(false);
@@ -399,10 +404,7 @@ export default function LetterStatusPage() {
         setLetter(data.letter as Letter);
         setDelivered(!!data.delivered);
         setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
-
-        // ✅ NEW: pull the server’s geo label
         setCurrentOverText(typeof data.current_over_text === "string" ? data.current_over_text : null);
-
         setLastFetchedAt(new Date());
       } catch (e: any) {
         console.error("LOAD ERROR:", e);
@@ -411,8 +413,8 @@ export default function LetterStatusPage() {
       }
     };
 
-    load();
-    const interval = setInterval(() => load(), 15000);
+    void load();
+    const interval = setInterval(() => void load(), 15000);
 
     return () => {
       alive = false;
@@ -478,7 +480,7 @@ export default function LetterStatusPage() {
     return Math.max(0, Math.floor((now.getTime() - lastFetchedAt.getTime()) / 1000));
   }, [now, lastFetchedAt]);
 
-  // ✅ UPDATED: prefer server “current_over_text”, then checkpoint geo_text, then name.
+  // ✅ prefer server current_over_text, then cp.geo_text, then cp.name
   const currentlyOver = useMemo(() => {
     if (delivered) return "Delivered";
 
@@ -492,12 +494,19 @@ export default function LetterStatusPage() {
     return fallback;
   }, [delivered, currentOverText, currentCheckpoint]);
 
+  // ✅ map tooltip string: no “Currently over:” and strip “Over ”
+  const mapTooltip = useMemo(() => {
+    if (delivered) return "Delivered";
+    const raw = currentlyOver || "somewhere over the U.S.";
+    return stripOverPrefix(raw) || "somewhere over the U.S.";
+  }, [delivered, currentlyOver]);
+
   const showLive = !delivered;
 
   const timelineItems = useMemo(() => {
     const cps = checkpoints.map((cp) => ({
       key: `cp-${cp.id}`,
-      name: cp.name, // ✅ route.ts already upgraded cp.name to geo text / sticky endpoints
+      name: cp.name,
       at: cp.at,
       kind: "checkpoint" as const,
     }));
@@ -714,13 +723,14 @@ export default function LetterStatusPage() {
             </div>
 
             <div style={{ marginTop: 12 }}>
-<MapView
-  origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-  dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-  progress={progress}
-  tooltipText={`Location: ${currentlyOver.replace(/^Over\s+/i, "")}`}
-  mapStyle={mapStyle}
-/>
+              <MapView
+                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+                progress={progress}
+                // ✅ No redundant “Currently over:” here
+                tooltipText={mapTooltip}
+                mapStyle={mapStyle}
+              />
             </div>
 
             <div style={{ marginTop: 14 }}>
