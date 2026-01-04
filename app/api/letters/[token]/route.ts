@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "../../../lib/supabaseServer";
 
+// ✅ geo text helper
+import { checkpointGeoText } from "../../../lib/geo";
+
 function formatUtc(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
@@ -85,14 +88,53 @@ export async function GET(
     body = bodyRow?.body ?? null;
   }
 
+  // ✅ Add geo_text + upgrade checkpoint labels (replaces “Cruising altitude” etc.)
+  const cps = (checkpoints ?? []).map((cp: any, i: number, arr: any[]) => {
+    const isFirst = i === 0;
+    const isLast = i === arr.length - 1;
+
+    const geo = Number.isFinite(cp.lat) && Number.isFinite(cp.lon)
+      ? checkpointGeoText(cp.lat, cp.lon)
+      : "somewhere over the U.S.";
+
+    // Keep endpoints flavorful, middle checkpoints become geography-driven.
+    const upgradedName = isFirst
+      ? `Departed roost — ${geo}`
+      : isLast
+      ? `Final descent — ${geo}`
+      : geo;
+
+    return {
+      ...cp,
+      geo_text: geo,     // ✅ for UI/tooltips if you want it
+      name: upgradedName // ✅ timeline uses cp.name already
+    };
+  });
+
+  // ✅ Optional: compute “currently over” server-side too (based on last past checkpoint)
+  // This is handy if you want to avoid duplicating logic in the client later.
+  let current_over_text = delivered ? "Delivered" : "somewhere over the U.S.";
+  if (!delivered && cps.length) {
+    const tNow = now;
+    let cur = cps[0];
+    for (const cp of cps) {
+      const t = Date.parse(cp.at);
+      if (Number.isFinite(t) && t <= tNow) cur = cp;
+      else break;
+    }
+    current_over_text = cur?.geo_text || cur?.name || current_over_text;
+  }
+
   return NextResponse.json({
     letter: {
       ...meta,
       body,
-      // ✅ add this so the UI can display the same UTC string consistently
+      // ✅ UI can display the same UTC string consistently
       eta_utc_text: formatUtc(meta.eta_at),
     },
-    checkpoints: checkpoints ?? [],
+    checkpoints: cps,
     delivered,
+    // ✅ bonus field (optional for client use)
+    current_over_text,
   });
 }
