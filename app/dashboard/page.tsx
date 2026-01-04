@@ -5,21 +5,44 @@ import { useEffect, useMemo, useState } from "react";
 type DashboardLetter = {
   id: string;
   public_token: string;
+
   from_name: string | null;
   from_email: string | null;
+
   to_name: string | null;
   to_email: string | null;
+
   subject: string | null;
+
   origin_name: string;
+  origin_lat: number;
+  origin_lon: number;
+
   dest_name: string;
+  dest_lat: number;
+  dest_lon: number;
+
   sent_at: string;
   eta_at: string;
+
   delivered: boolean;
   progress: number; // 0..1
+
+  // from your API
+  current_lat: number | null;
+  current_lon: number | null;
+
+  sent_utc_text: string;
+  eta_utc_text: string;
+  eta_utc_iso: string | null;
 };
 
 type Filter = "all" | "inflight" | "delivered";
 type Sort = "newest" | "etaSoonest" | "oldest";
+
+function clamp01(n: number) {
+  return Math.max(0, Math.min(1, n));
+}
 
 function formatCountdown(ms: number) {
   if (ms <= 0) return "Delivered";
@@ -35,22 +58,7 @@ function emailLooksValid(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
-function formatUtc(iso: string) {
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "";
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: "UTC",
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(d);
-}
-
 async function copyToClipboard(text: string) {
-  // Prefer modern clipboard API; fallback for older contexts
   if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
   const ta = document.createElement("textarea");
   ta.value = text;
@@ -62,8 +70,99 @@ async function copyToClipboard(text: string) {
   document.body.removeChild(ta);
 }
 
+/* ---------- Mini route thumbnail (no Leaflet) ---------- */
+function RouteThumb(props: {
+  origin: { lat: number; lon: number };
+  dest: { lat: number; lon: number };
+  current?: { lat: number; lon: number } | null;
+  progress: number; // 0..1
+}) {
+  const W = 160;
+  const H = 74;
+  const pad = 10;
+
+  const pts = useMemo(() => {
+    const o = props.origin;
+    const d = props.dest;
+    const c = props.current;
+
+    const lons = [o.lon, d.lon, c?.lon].filter((v): v is number => Number.isFinite(v));
+    const lats = [o.lat, d.lat, c?.lat].filter((v): v is number => Number.isFinite(v));
+
+    const minLon = Math.min(...lons);
+    const maxLon = Math.max(...lons);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+
+    const spanLon = Math.max(0.000001, maxLon - minLon);
+    const spanLat = Math.max(0.000001, maxLat - minLat);
+
+    const project = (lat: number, lon: number) => {
+      const x = pad + ((lon - minLon) / spanLon) * (W - pad * 2);
+      const y = pad + (1 - (lat - minLat) / spanLat) * (H - pad * 2);
+      return { x, y };
+    };
+
+    return {
+      o: project(o.lat, o.lon),
+      d: project(d.lat, d.lon),
+      c: c ? project(c.lat, c.lon) : null,
+    };
+  }, [props.origin, props.dest, props.current]);
+
+  const pct = Math.round(clamp01(props.progress ?? 0) * 100);
+
+  return (
+    <div className="routeThumb" aria-hidden>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
+        <path
+          d={`M ${pts.o.x} ${pts.o.y} L ${pts.d.x} ${pts.d.y}`}
+          stroke="currentColor"
+          strokeWidth="3"
+          opacity="0.55"
+          strokeLinecap="round"
+        />
+
+        {/* origin: filled dot */}
+        <circle cx={pts.o.x} cy={pts.o.y} r="4.5" fill="currentColor" />
+
+        {/* destination: hollow ring */}
+        <circle
+          cx={pts.d.x}
+          cy={pts.d.y}
+          r="6.2"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          opacity="0.95"
+        />
+
+        {/* current: dot + pulse ring */}
+        {pts.c && (
+          <>
+            <circle cx={pts.c.x} cy={pts.c.y} r="4.6" fill="currentColor" />
+            <circle
+              className="thumbPulse"
+              cx={pts.c.x}
+              cy={pts.c.y}
+              r="11"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              opacity="0.35"
+            />
+          </>
+        )}
+      </svg>
+
+      <div className="routeThumbPct">{pct}%</div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [email, setEmail] = useState("");
+  const [q, setQ] = useState("");
   const [letters, setLetters] = useState<DashboardLetter[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -71,7 +170,6 @@ export default function DashboardPage() {
 
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("newest");
-
   const [toast, setToast] = useState<string | null>(null);
 
   // tick so countdowns animate
@@ -86,6 +184,16 @@ export default function DashboardPage() {
     if (saved) setEmail(saved);
   }, []);
 
+  // auto-load once if saved email exists
+  useEffect(() => {
+    const saved = localStorage.getItem("cp_sender_email");
+    if (saved && emailLooksValid(saved)) {
+      // fire and forget; if it fails we’ll show error on user action
+      load(saved, q).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // toast auto-clear
   useEffect(() => {
     if (!toast) return;
@@ -93,8 +201,10 @@ export default function DashboardPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  async function load() {
-    const e = email.trim().toLowerCase();
+  async function load(emailOverride?: string, qOverride?: string) {
+    const e = (emailOverride ?? email).trim().toLowerCase();
+    const qs = (qOverride ?? q).trim();
+
     if (!emailLooksValid(e)) {
       setError("Enter a valid sender email.");
       return;
@@ -106,9 +216,10 @@ export default function DashboardPage() {
     try {
       localStorage.setItem("cp_sender_email", e);
 
-      const res = await fetch(`/api/dashboard/letters?email=${encodeURIComponent(e)}`, {
-        cache: "no-store",
-      });
+      const res = await fetch(
+        `/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(qs)}`,
+        { cache: "no-store" }
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to load");
 
@@ -141,7 +252,7 @@ export default function DashboardPage() {
 
       if (sort === "etaSoonest") return aEta - bEta;
       if (sort === "oldest") return aSent - bSent;
-      return bSent - aSent; // newest default
+      return bSent - aSent;
     });
 
     return list;
@@ -166,7 +277,6 @@ export default function DashboardPage() {
             </a>
           </div>
 
-          {/* stats row */}
           {letters.length > 0 && (
             <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <div className="metaPill">
@@ -179,15 +289,11 @@ export default function DashboardPage() {
                 Delivered: <strong>{stats.delivered}</strong>
               </div>
 
-              {/* ✅ NEW: filters + sort */}
               <div style={{ flex: "1 1 auto" }} />
+
               <div className="metaPill" style={{ gap: 10 }}>
                 <span style={{ opacity: 0.7 }}>Filter</span>
-                <select
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value as Filter)}
-                  className="dashSelect"
-                >
+                <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)} className="dashSelect">
                   <option value="all">All</option>
                   <option value="inflight">In flight</option>
                   <option value="delivered">Delivered</option>
@@ -196,11 +302,7 @@ export default function DashboardPage() {
 
               <div className="metaPill" style={{ gap: 10 }}>
                 <span style={{ opacity: 0.7 }}>Sort</span>
-                <select
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value as Sort)}
-                  className="dashSelect"
-                >
+                <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="dashSelect">
                   <option value="newest">Newest</option>
                   <option value="etaSoonest">ETA soonest</option>
                   <option value="oldest">Oldest</option>
@@ -231,14 +333,22 @@ export default function DashboardPage() {
               />
             </label>
 
+            <label className="field">
+              <span className="fieldLabel">Search</span>
+              <input
+                className="input"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="subject, recipient, city, token…"
+              />
+            </label>
+
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-              <button onClick={load} disabled={loading} className="btnPrimary">
+              <button onClick={() => load()} disabled={loading} className="btnPrimary">
                 {loading ? "Loading…" : "Load letters"}
               </button>
 
-              <div className="muted">
-                Tip: use the same sender email you entered on the Write page.
-              </div>
+              <div className="muted">Tip: search is server-side (fast + consistent).</div>
             </div>
 
             {error && <div className="errorText">❌ {error}</div>}
@@ -259,24 +369,35 @@ export default function DashboardPage() {
               <div className="muted">
                 {letters.length === 0
                   ? "No letters loaded yet. Enter your sender email and hit “Load letters”."
-                  : "No letters match your filter."}
+                  : "No letters match your filter/search."}
               </div>
             </div>
           ) : (
             filteredSorted.map((l) => {
-              const pct = Math.round((l.progress ?? 0) * 100);
+              const pct = Math.round(clamp01(l.progress ?? 0) * 100);
               const etaMs = new Date(l.eta_at).getTime() - now.getTime();
               const countdown = formatCountdown(etaMs);
 
               const statusLabel = l.delivered ? "Delivered" : "In Flight";
               const statusEmoji = l.delivered ? "✅" : "🕊️";
 
-              const statusUrl = `${window.location.origin}/l/${l.public_token}`;
+              const statusPath = `/l/${l.public_token}`;
+
+              const canThumb =
+                Number.isFinite(l.origin_lat) &&
+                Number.isFinite(l.origin_lon) &&
+                Number.isFinite(l.dest_lat) &&
+                Number.isFinite(l.dest_lon);
+
+              const statusUrl =
+                typeof window !== "undefined"
+                  ? `${window.location.origin}${statusPath}`
+                  : statusPath;
 
               return (
                 <div key={l.id} className="card">
-                  <div className="cardHead" style={{ marginBottom: 10 }}>
-                    <div>
+                  <div className="dashRowTop" style={{ marginBottom: 10 }}>
+                    <div className="dashRowMain">
                       <div className="kicker">Letter</div>
                       <div className="h2">{l.subject?.trim() ? l.subject : "(No subject)"}</div>
                       <div className="muted" style={{ marginTop: 6 }}>
@@ -287,30 +408,38 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                      <div className="metaPill">
-                        {statusEmoji} <strong>{statusLabel}</strong>
-                      </div>
-
-                      {/* ✅ NEW: copy link */}
-                      <button
-                        type="button"
-                        className="btnGhost"
-                        onClick={async () => {
-                          await copyToClipboard(statusUrl);
-                          setToast("Link copied 🕊️");
-                        }}
-                        style={{ padding: "10px 12px" }}
-                        title="Copy status link"
-                      >
-                        Copy link
-                      </button>
-                    </div>
+                    {canThumb ? (
+                      <RouteThumb
+                        origin={{ lat: l.origin_lat, lon: l.origin_lon }}
+                        dest={{ lat: l.dest_lat, lon: l.dest_lon }}
+                        current={l.current_lat != null && l.current_lon != null ? { lat: l.current_lat, lon: l.current_lon } : null}
+                        progress={l.progress ?? 0}
+                      />
+                    ) : null}
                   </div>
 
-                  <div className="muted" style={{ marginTop: 2 }}>
-                    Sent: {new Date(l.sent_at).toLocaleString()} •{" "}
-                    <strong>ETA (UTC):</strong> {formatUtc(l.eta_at)}
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <div className="metaPill">
+                      {statusEmoji} <strong>{statusLabel}</strong>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btnGhost"
+                      onClick={async () => {
+                        await copyToClipboard(statusUrl);
+                        setToast("Link copied 🕊️");
+                      }}
+                      style={{ padding: "10px 12px" }}
+                      title="Copy status link"
+                    >
+                      Copy link
+                    </button>
+                  </div>
+
+                  <div className="muted" style={{ marginTop: 10 }}>
+                    Sent (UTC): {l.sent_utc_text || `${l.sent_at} UTC`} •{" "}
+                    <strong>ETA (UTC):</strong> {l.eta_utc_text || `${l.eta_at} UTC`}
                     {!l.delivered && <> • (T-minus {countdown})</>}
                   </div>
 
@@ -327,14 +456,12 @@ export default function DashboardPage() {
                       <div className="mutedStrong">
                         Progress: <strong>{pct}%</strong>
                       </div>
-                      <div className="muted">
-                        Token: {l.public_token.slice(0, 8)}…
-                      </div>
+                      <div className="muted">Token: {l.public_token.slice(0, 8)}…</div>
                     </div>
                   </div>
 
                   <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
-                    <a href={`/l/${l.public_token}`} className="link">
+                    <a href={statusPath} className="link">
                       View status
                     </a>
                     <a href="/write" className="link">
