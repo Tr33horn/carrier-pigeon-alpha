@@ -62,9 +62,7 @@ function normalizeTooltip(text?: string) {
   let t = (text || "").trim();
   if (!t) return "Location: Somewhere over the U.S.";
 
-  // strip accidental prefixes
   t = t.replace(/^currently over:\s*/i, "").trim();
-
   if (!/^location:\s*/i.test(t)) t = `Location: ${t}`;
   return t;
 }
@@ -76,45 +74,29 @@ function seedFromCoords(o: { lat: number; lon: number }, d: { lat: number; lon: 
   return n - Math.floor(n); // 0..1
 }
 
-/** Quadratic Bezier point */
-function bezier2(
-  a: { x: number; y: number },
-  c: { x: number; y: number },
-  b: { x: number; y: number },
-  t: number
-) {
-  const u = 1 - t;
-  const x = u * u * a.x + 2 * u * t * c.x + t * t * b.x;
-  const y = u * u * a.y + 2 * u * t * c.y + t * t * b.y;
-  return { x, y };
-}
-
 /**
- * Build a static (non-animated) curve whose shape depends on progress.
- * That means it only "changes" when the pigeon advances.
+ * Build a "near-straight" path with tiny perpendicular drift.
+ * - Static at a given progress value (depends on progress, not time)
+ * - Drift grows gently with distance traveled
+ * - Designed NOT to look like the bird went wildly off course
  */
-function makeStaticWindCurve(args: {
+function makeNearStraightDriftPath(args: {
   origin: { lat: number; lon: number };
   dest: { lat: number; lon: number };
   progress: number; // 0..1
   points?: number;
-  endT?: number; // 0..1 (for partial path)
 }) {
   const { origin, dest } = args;
-  const steps = Math.max(16, args.points ?? 44);
-  const endT = clamp01(args.endT ?? 1);
+  const steps = Math.max(18, args.points ?? 56);
+  const p = clamp01(args.progress);
 
-  // XY in lon/lat
+  // Base line in lon/lat "xy"
   const A = { x: origin.lon, y: origin.lat };
   const B = { x: dest.lon, y: dest.lat };
 
   const dx = B.x - A.x;
   const dy = B.y - A.y;
   const dist = Math.hypot(dx, dy);
-
-  // midpoint
-  const mx = (A.x + B.x) / 2;
-  const my = (A.y + B.y) / 2;
 
   // perpendicular unit
   const px = -dy;
@@ -126,28 +108,51 @@ function makeStaticWindCurve(args: {
   // stable per-route seed
   const s = seedFromCoords(origin, dest);
 
-  // base arc proportional to distance, clamped (degrees-ish)
-  const baseArc = Math.min(2.2, Math.max(0.18, dist * 0.16));
+  /**
+   * DRIFT SCALE:
+   * We want "tiny fluctuations", not an arc.
+   * dist is in degrees. Typical cross-country dist ~ 35-45 degrees.
+   *
+   * base = very small % of distance, clamped.
+   * (0.004 * 40) = 0.16 degrees max BEFORE clamps (too big),
+   * so we clamp hard to keep it subtle.
+   */
+  const base = Math.min(0.06, Math.max(0.01, dist * 0.0012)); // ~0.01 .. 0.06 degrees
 
-  // "wind" varies with progress, not time (static unless progress changes)
-  // seed offsets the phase so every route is unique
-  const p = clamp01(args.progress);
-  const wind =
-    Math.sin((p * 6.0 + s * 10.0) * Math.PI * 2) * 0.18 +
-    Math.sin((p * 2.7 + s * 3.3) * Math.PI * 2) * 0.10;
+  // Drift increases a bit as the pigeon travels (so early path is straighter)
+  const travelGain = 0.35 + 0.65 * Math.sqrt(p); // 0.35..1.0
 
-  const arc = baseArc * (1 + wind);
-
-  const C = { x: mx + ux * arc, y: my + uy * arc };
-
+  // Small multi-frequency wiggle; depends on t and overall progress (static per progress)
   const pts: [number, number][] = [];
-  const N = Math.floor(steps * endT);
+  const N = Math.max(2, Math.floor(steps * p));
 
   for (let i = 0; i <= N; i++) {
-    const t = (i / Math.max(1, N)) * endT;
-    const p2 = bezier2(A, C, B, t);
-    pts.push([p2.y, p2.x]);
+    const t = (i / Math.max(1, N)) * p;
+
+    // straight interpolation point
+    const x0 = A.x + dx * t;
+    const y0 = A.y + dy * t;
+
+    // Tiny wiggle (bounded around ~[-1..1])
+    const w =
+      Math.sin((t * 8 + s * 3 + p * 1.3) * Math.PI * 2) * 0.55 +
+      Math.sin((t * 3.5 + s * 7 + p * 0.7) * Math.PI * 2) * 0.35 +
+      Math.sin((t * 13 + s * 11 + p * 2.1) * Math.PI * 2) * 0.10;
+
+    // taper near ends so it doesn't pull off origin/dest
+    const taper = Math.sin(Math.PI * (i / Math.max(1, N))); // 0..1..0
+
+    // Final offset in lon/lat degrees (small)
+    const off = base * travelGain * taper * w;
+
+    const x = x0 + ux * off;
+    const y = y0 + uy * off;
+
+    pts.push([y, x]); // [lat, lon]
   }
+
+  // Ensure at least the origin is included
+  if (pts.length === 0) pts.push([origin.lat, origin.lon]);
 
   return pts;
 }
@@ -261,20 +266,23 @@ export default function MapView(props: {
   // 1) straight ideal route (static)
   const straightLine: [number, number][] = boundsLine;
 
-  // 2) dotted "actual flown" route so far (static, depends on progress)
+  // 2) dotted "actual flown" route so far (tiny side-to-side drift)
   const flownPts = useMemo(() => {
     const p = clamp01(props.progress);
     if (p <= 0.0001) return [[origin.lat, origin.lon]] as [number, number][];
-    return makeStaticWindCurve({
+    return makeNearStraightDriftPath({
       origin,
       dest,
-      progress: p,
-      points: 52,
-      endT: p, // only up to progress
+      progress: p, // only up to progress
+      points: 60,
     });
   }, [origin, dest, props.progress]);
 
   const tooltip = useMemo(() => normalizeTooltip(props.tooltipText), [props.tooltipText]);
+
+  // Colors
+  const idealColor = "#121212";
+  const flownColor = "#2563eb"; // blue-ish (Tailwind blue-600 vibe)
 
   return (
     <div
@@ -300,20 +308,20 @@ export default function MapView(props: {
         <Polyline
           positions={straightLine}
           pathOptions={{
-            color: "#121212",
+            color: idealColor,
             weight: 3,
             opacity: 0.35,
           }}
         />
 
-        {/* Actual flown route so far (dotted + slightly "windy") */}
+        {/* Actual flown route so far (subtle drift) */}
         <Polyline
           positions={flownPts}
           pathOptions={{
-            color: "#121212",
+            color: flownColor,
             weight: 3,
-            opacity: 0.75,
-            dashArray: "6 8",
+            opacity: 0.85,
+            dashArray: "2 10",
             lineCap: "round",
             lineJoin: "round",
           }}
