@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { CITIES } from "../lib/cities";
 import { CityTypeahead } from "../components/CityTypeahead";
 
@@ -29,7 +30,30 @@ function isEmailValid(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
+type BirdType = "pigeon" | "hummingbird" | "stork";
+
+function normalizeBird(raw: string | null): BirdType {
+  const b = (raw || "").toLowerCase();
+  if (b === "hummingbird") return "hummingbird";
+  if (b === "stork") return "stork";
+  return "pigeon";
+}
+
+function birdLabel(bird: BirdType) {
+  switch (bird) {
+    case "hummingbird":
+      return "🐦 Hummingbird";
+    case "stork":
+      return "🪿 Stork";
+    default:
+      return "🕊️ Carrier Pigeon";
+  }
+}
+
 export default function WritePage() {
+  const searchParams = useSearchParams();
+  const bird: BirdType = normalizeBird(searchParams.get("bird"));
+
   // Step 1: who
   const [fromName, setFromName] = useState("You");
   const [toName, setToName] = useState("");
@@ -146,6 +170,7 @@ export default function WritePage() {
           message,
           origin,
           destination,
+          bird, // ✅ NEW: include the chosen bird (safe even if backend ignores for now)
         }),
       });
 
@@ -187,6 +212,16 @@ export default function WritePage() {
         <div style={{ marginTop: 12 }}>
           <div className="kicker">Compose</div>
           <h1 className="h1">Write a Letter</h1>
+
+          {/* ✅ NEW: minimal bird context line */}
+          <p className="muted" style={{ marginTop: 6 }}>
+            Sending with <strong>{birdLabel(bird)}</strong>.{" "}
+            <a href="/new" className="link">
+              Change bird
+            </a>
+          </p>
+
+          {/* Keep your existing flavor line, just push it down a touch */}
           <p className="muted" style={{ marginTop: 6 }}>
             It’ll unlock for the recipient when the pigeon lands.
           </p>
