@@ -299,6 +299,7 @@ export async function POST(req: Request) {
     .from("letters")
     .insert({
       public_token: publicToken,
+      bird, // ✅ NEW
       from_name,
       from_email: normalizedFromEmail,
       sender_receipt_sent_at: null,

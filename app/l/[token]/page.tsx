@@ -24,6 +24,9 @@ type Letter = {
   sent_at: string;
   eta_at: string;
 
+  // ✅ NEW (optional): if you add letters.bird later
+  bird?: "pigeon" | "snipe" | "goose" | null;
+
   // from route.ts
   eta_at_adjusted?: string;
 
@@ -90,6 +93,25 @@ type TimelineItem = {
   at: string; // ISO
   kind: TimelineKind;
 };
+
+type BirdType = "pigeon" | "snipe" | "goose";
+
+function inferBird(letter: Letter | null): BirdType {
+  const raw = String((letter as any)?.bird || "").toLowerCase();
+  if (raw === "pigeon" || raw === "snipe" || raw === "goose") return raw as BirdType;
+
+  // Fallback when DB column doesn't exist yet:
+  const sp = Number((letter as any)?.speed_kmh);
+  if (Number.isFinite(sp) && sp >= 80) return "snipe";
+  if (Number.isFinite(sp) && sp <= 60) return "goose";
+  return "pigeon";
+}
+
+function birdLabel(b: BirdType) {
+  if (b === "snipe") return "🏎️ Great Snipe";
+  if (b === "goose") return "🪿 Canada Goose";
+  return "🕊️ Homing Pigeon";
+}
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
@@ -253,7 +275,17 @@ function ConfettiBurst({ show }: { show: boolean }) {
 }
 
 /* ---------- timeline rail (grouped by day + sleep blocks) ---------- */
-function RailTimeline({ items, now, currentKey }: { items: TimelineItem[]; now: Date; currentKey: string | null }) {
+function RailTimeline({
+  items,
+  now,
+  currentKey,
+  birdName,
+}: {
+  items: TimelineItem[];
+  now: Date;
+  currentKey: string | null;
+  birdName: string;
+}) {
   const [popped, setPopped] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -336,7 +368,7 @@ function RailTimeline({ items, now, currentKey }: { items: TimelineItem[]; now: 
                 {isCurrent && (
                   <div className="pigeonTag livePulseRow" style={isSleep ? { background: "#d92d20" } : undefined}>
                     <span className="livePulseDot" aria-hidden />
-                    <span>{isSleep ? "Pigeon is sleeping" : "Pigeon is here"}</span>
+                    <span>{isSleep ? `${birdName} is sleeping` : `${birdName} is here`}</span>
                   </div>
                 )}
 
@@ -359,11 +391,12 @@ function rarityLabel(r?: string) {
   return "Common";
 }
 
+// ✅ More forgiving sleep detection (not pigeon-specific)
 function isSleepCheckpoint(cp: Checkpoint) {
   const id = (cp.id || "").toLowerCase();
   const name = (cp.name || "").toLowerCase();
   const geo = (cp.geo_text || "").toLowerCase();
-  return id.startsWith("sleep-") || geo === "sleeping" || name.includes("pigeon slept") || name.startsWith("sleeping");
+  return id.startsWith("sleep-") || geo === "sleeping" || name.includes("slept") || name.startsWith("sleeping");
 }
 
 export default function LetterStatusPage() {
@@ -379,7 +412,6 @@ export default function LetterStatusPage() {
   const [archived, setArchived] = useState(false);
   const [archivedAtISO, setArchivedAtISO] = useState<string | null>(null);
 
-  // ✅ NEW: server snapshot time (source of truth for "frozen now")
   const [serverNowISO, setServerNowISO] = useState<string | null>(null);
   const [serverNowUtcText, setServerNowUtcText] = useState<string | null>(null);
 
@@ -415,7 +447,6 @@ export default function LetterStatusPage() {
     window.localStorage.setItem("pigeon_map_style", mapStyle);
   }, [mapStyle]);
 
-  // ✅ clock: freeze when archived (use server snapshot time, NOT archived_at)
   useEffect(() => {
     if (archived && serverNowISO) {
       setNow(new Date(serverNowISO));
@@ -444,7 +475,6 @@ export default function LetterStatusPage() {
         }
         if (!alive) return;
 
-        // ✅ snapshot time returned by server
         setServerNowISO(typeof data.server_now_iso === "string" ? data.server_now_iso : null);
         setServerNowUtcText(typeof data.server_now_utc_text === "string" ? data.server_now_utc_text : null);
 
@@ -476,7 +506,6 @@ export default function LetterStatusPage() {
 
     void load();
 
-    // ✅ stop polling when archived (snapshot)
     if (archived) {
       return () => {
         alive = false;
@@ -491,7 +520,6 @@ export default function LetterStatusPage() {
     };
   }, [token, archived]);
 
-  // Prefer adjusted ETA for countdown/progress (when present)
   const effectiveEtaISO = useMemo(() => {
     if (!letter) return "";
     return (letter.eta_at_adjusted && letter.eta_at_adjusted.trim()) || letter.eta_at;
@@ -499,9 +527,6 @@ export default function LetterStatusPage() {
 
   const sleeping = !!flight?.sleeping;
 
-  /**
-   * UI safety net for "zombie letters"
-   */
   const uiDelivered = useMemo(() => {
     if (!letter) return delivered;
 
@@ -509,15 +534,11 @@ export default function LetterStatusPage() {
     const etaOriginalPassed = Number.isFinite(etaOriginalMs) && now.getTime() > etaOriginalMs + 60_000;
 
     if (delivered) return true;
-
-    // Archived snapshots should not “force delivered” based on original ETA.
     if (archived) return false;
-
     if (sleeping) return false;
     return etaOriginalPassed;
   }, [letter, delivered, sleeping, now, archived]);
 
-  // progress: prefer server flight.progress; fallback local
   const progress = useMemo(() => {
     if (flight && Number.isFinite(flight.progress)) return clamp01(flight.progress);
 
@@ -535,7 +556,6 @@ export default function LetterStatusPage() {
     return formatCountdown(msLeft);
   }, [letter, effectiveEtaISO, now]);
 
-  // milestones stay for BAR + CHIPS ONLY (NOT the right rail)
   const milestones = useMemo(() => {
     if (!letter) return [];
     const defs = [
@@ -551,14 +571,12 @@ export default function LetterStatusPage() {
     });
   }, [letter, effectiveEtaISO, now]);
 
-  // ✅ sort by time for “what happened when” (fixes sleep blocks landing in wrong day)
   const checkpointsByTime = useMemo(() => {
     const cps = [...checkpoints];
     cps.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
     return cps;
   }, [checkpoints]);
 
-  // current checkpoint (time-based “latest past”)
   const currentCheckpoint = useMemo(() => {
     if (!checkpointsByTime.length || !letter) return null;
     const t = now.getTime();
@@ -592,15 +610,8 @@ export default function LetterStatusPage() {
     return `Location: ${currentlyOver || "somewhere over the U.S."}`;
   }, [flight?.tooltip_text, uiDelivered, currentlyOver]);
 
-  // ✅ status banner: archived is a third state
   const showLive = !uiDelivered && !archived;
 
-  /**
-   * ✅ RIGHT RAIL TIMELINE:
-   * - checkpoints only (no % milestones)
-   * - sleep blocks come from server-injected sleep checkpoints
-   * - grouped by day with header rows
-   */
   const timelineItems = useMemo(() => {
     const base: TimelineItem[] = checkpointsByTime.map((cp) => ({
       key: `cp-${cp.id}`,
@@ -629,7 +640,6 @@ export default function LetterStatusPage() {
     return grouped;
   }, [checkpointsByTime]);
 
-  // Current key (ignore day headers)
   const currentTimelineKey = useMemo(() => {
     if (uiDelivered) return null;
 
@@ -706,6 +716,9 @@ export default function LetterStatusPage() {
     );
   }
 
+  const bird = inferBird(letter);
+  const birdName = birdLabel(bird);
+
   const archivedLabel = archivedAtISO ? `Archived • ${new Date(archivedAtISO).toLocaleString()}` : "Archived";
 
   return (
@@ -772,7 +785,6 @@ export default function LetterStatusPage() {
 
               {!uiDelivered && !archived && <div className="etaSub">T-minus {countdown}</div>}
 
-              {/* ✅ Archived snapshot shows the frozen time used by the server */}
               {archived && (
                 <div className="etaSub">
                   Snapshot: <span style={{ fontVariantNumeric: "tabular-nums" }}>{serverNowUtcText ?? "frozen"}</span>
@@ -937,7 +949,7 @@ export default function LetterStatusPage() {
                 </div>
               </div>
 
-              <RailTimeline items={timelineItems} now={now} currentKey={currentTimelineKey} />
+              <RailTimeline items={timelineItems} now={now} currentKey={currentTimelineKey} birdName={birdName} />
             </div>
 
             <div className="card">

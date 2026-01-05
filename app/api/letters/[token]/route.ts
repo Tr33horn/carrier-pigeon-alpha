@@ -195,7 +195,7 @@ function buildSleepEvents(args: { sentMs: number; nowMs: number; offsetMin: numb
         events.push({
           id: `sleep-${y}-${m + 1}-${d}`,
           idx: 10_000 + events.length,
-          kind: "sleep", // ✅ explicit for UI
+          kind: "sleep",
           at: new Date(started).toISOString(),
           lat: null,
           lon: null,
@@ -239,6 +239,30 @@ function formatUtc(iso: string) {
     timeZoneName: "short",
   }).format(d);
 }
+
+/* -------------------------------------------------
+   Bird detection (snipe ignores sleep)
+------------------------------------------------- */
+
+type BirdType = "pigeon" | "snipe" | "goose";
+
+function normalizeBird(raw: any): BirdType | null {
+  const b = String(raw || "").toLowerCase();
+  if (b === "snipe" || b === "pigeon" || b === "goose") return b;
+  return null;
+}
+
+function inferBirdFromSpeed(speedKmh: any): BirdType {
+  const sp = Number(speedKmh);
+  // You can tune these thresholds any time
+  if (Number.isFinite(sp) && sp >= 80) return "snipe";
+  if (Number.isFinite(sp) && sp <= 60) return "goose";
+  return "pigeon";
+}
+
+/* -------------------------------------------------
+   Badges
+------------------------------------------------- */
 
 type LetterItemInsert = {
   letter_id: string;
@@ -356,6 +380,10 @@ function computeBadgesFromRegions(args: {
   return out.filter((b) => (seen.has(b.code) ? false : (seen.add(b.code), true)));
 }
 
+/* -------------------------------------------------
+   Handler
+------------------------------------------------- */
+
 export async function GET(_req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
 
@@ -378,7 +406,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
       speed_kmh,
       sent_at,
       eta_at,
-      archived_at
+      archived_at,
+      bird
     `
     )
     .eq("public_token", token)
@@ -415,28 +444,46 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
 
   const sentMs = Date.parse(meta.sent_at);
 
-  // ✅ Sleep-aware flight math
+  // ✅ Determine bird
+  const bird: BirdType = normalizeBird((meta as any).bird) ?? inferBirdFromSpeed(meta.speed_kmh);
+  const ignoresSleep = bird === "snipe"; // ✅ Great Snipe: no sleep ever
+
+  // ✅ Sleep-aware flight math (unless Snipe)
   const offsetMin = offsetMinutesFromLon(meta.origin_lon);
 
-  const requiredAwakeMs = meta.speed_kmh > 0 ? (meta.distance_km / meta.speed_kmh) * 3600_000 : 0;
+  const requiredAwakeMs =
+    meta.speed_kmh > 0 ? (meta.distance_km / meta.speed_kmh) * 3600_000 : 0;
 
+  // ETA adjusted:
+  // - Snipe: sent + requiredAwakeMs (pure 24/7)
+  // - Others: use sleep-aware ETA
   const etaAdjustedMs =
     Number.isFinite(sentMs) && requiredAwakeMs > 0
-      ? etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin)
+      ? ignoresSleep
+        ? sentMs + requiredAwakeMs
+        : etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin)
       : Date.parse(meta.eta_at);
 
   const delivered = Number.isFinite(etaAdjustedMs) ? nowMs >= etaAdjustedMs : true;
 
+  // Progress:
+  // - Snipe: linear by real time
+  // - Others: awake time only
   const awakeSoFar =
     Number.isFinite(sentMs) && nowMs > sentMs
-      ? awakeMsBetween(sentMs, Math.min(nowMs, etaAdjustedMs), offsetMin)
+      ? ignoresSleep
+        ? Math.max(0, Math.min(nowMs - sentMs, requiredAwakeMs))
+        : awakeMsBetween(sentMs, Math.min(nowMs, etaAdjustedMs), offsetMin)
       : 0;
 
   const progress = requiredAwakeMs > 0 ? clamp(awakeSoFar / requiredAwakeMs, 0, 1) : 1;
 
-  // ✅ If archived, we don't want “currently sleeping/live” to wiggle
-  const sleeping = archived ? false : isSleepingAt(nowMs, offsetMin);
-  const wakeMs = archived ? null : nextWakeUtcMs(nowMs, offsetMin);
+  // Sleeping state:
+  // - Snipe: never sleeping
+  // - Archived: stable snapshot, no sleeping animation
+  // - Others: normal
+  const sleeping = archived ? false : ignoresSleep ? false : isSleepingAt(nowMs, offsetMin);
+  const wakeMs = archived ? null : sleeping ? nextWakeUtcMs(nowMs, offsetMin) : null;
   const sleep_until_iso = wakeMs ? new Date(wakeMs).toISOString() : null;
   const sleep_local_text = wakeMs ? sleepUntilLocalText(wakeMs, offsetMin) : "";
 
@@ -474,8 +521,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     };
   });
 
-  // ✅ Inject sleep events (not for archived — timeline should be stable)
-  const sleepEvents = !archived && Number.isFinite(sentMs) ? buildSleepEvents({ sentMs, nowMs, offsetMin }) : [];
+  // ✅ Inject sleep events:
+  // - never for archived (timeline should be stable)
+  // - never for Snipe (it ignores sleep)
+  const sleepEvents =
+    !archived && !ignoresSleep && Number.isFinite(sentMs)
+      ? buildSleepEvents({ sentMs, nowMs, offsetMin })
+      : [];
 
   const cps = [...cpsBase, ...sleepEvents].sort((a: any, b: any) => Date.parse(a.at) - Date.parse(b.at));
 
@@ -573,13 +625,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     archived,
     archived_at: archived ? archived_at : null,
 
-    // ✅ NEW: client uses this to freeze "now" when archived
     server_now_iso,
     server_now_utc_text,
 
     letter: {
       ...meta,
       body,
+
+      // ✅ keep sending bird back if present
+      bird: (meta as any).bird ?? null,
 
       eta_at_adjusted: etaAdjustedISO,
       eta_utc_text: formatUtc(etaAdjustedISO),
