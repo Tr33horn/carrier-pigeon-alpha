@@ -24,16 +24,11 @@ type Letter = {
   sent_at: string;
   eta_at: string;
 
-  // ✅ NEW (optional): if you add letters.bird later
   bird?: "pigeon" | "snipe" | "goose" | null;
 
-  // from route.ts
   eta_at_adjusted?: string;
-
-  // from /api/letters/[token]
   eta_utc_text?: string;
 
-  // optional convenience (you included this in your latest API)
   archived_at?: string | null;
 };
 
@@ -100,7 +95,6 @@ function inferBird(letter: Letter | null): BirdType {
   const raw = String((letter as any)?.bird || "").toLowerCase();
   if (raw === "pigeon" || raw === "snipe" || raw === "goose") return raw as BirdType;
 
-  // Fallback when DB column doesn't exist yet:
   const sp = Number((letter as any)?.speed_kmh);
   if (Number.isFinite(sp) && sp >= 80) return "snipe";
   if (Number.isFinite(sp) && sp <= 60) return "goose";
@@ -310,7 +304,6 @@ function RailTimeline({
       <div className="railLine" />
       <div className="railList">
         {items.map((it) => {
-          // Day header row (no node)
           if (it.kind === "day") {
             return (
               <div key={it.key} style={{ margin: "10px 0 2px 0" }}>
@@ -391,7 +384,6 @@ function rarityLabel(r?: string) {
   return "Common";
 }
 
-// ✅ More forgiving sleep detection (not pigeon-specific)
 function isSleepCheckpoint(cp: Checkpoint) {
   const id = (cp.id || "").toLowerCase();
   const name = (cp.name || "").toLowerCase();
@@ -555,6 +547,24 @@ export default function LetterStatusPage() {
     const msLeft = new Date(effectiveEtaISO).getTime() - now.getTime();
     return formatCountdown(msLeft);
   }, [letter, effectiveEtaISO, now]);
+
+  // ✅ FIX: current speed should be 0 when sleeping (and when delivered)
+  const currentSpeedKmh = useMemo(() => {
+    if (!letter) return 0;
+
+    // Delivered = bird is done moving
+    if (uiDelivered) return 0;
+
+    // Archived = snapshot vibe; don’t pretend it’s moving live
+    if (archived) return 0;
+
+    // Sleeping = no movement
+    if (sleeping) return 0;
+
+    // Otherwise show cruise speed
+    const sp = Number(letter.speed_kmh);
+    return Number.isFinite(sp) ? sp : 0;
+  }, [letter, uiDelivered, archived, sleeping]);
 
   const milestones = useMemo(() => {
     if (!letter) return [];
@@ -810,7 +820,7 @@ export default function LetterStatusPage() {
               </span>
               <div>
                 <div className="statLabel">Speed</div>
-                <div className="statValue">{letter.speed_kmh.toFixed(0)} km/h</div>
+                <div className="statValue">{currentSpeedKmh.toFixed(0)} km/h</div>
               </div>
             </div>
 
@@ -849,7 +859,10 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: uiDelivered ? 1 : 0 }}>
+              <div
+                className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""}
+                style={{ opacity: uiDelivered ? 1 : 0 }}
+              >
                 <div className="body">{uiDelivered ? (letter.body ?? "") : ""}</div>
               </div>
 

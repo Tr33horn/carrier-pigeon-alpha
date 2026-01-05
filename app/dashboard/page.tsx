@@ -32,9 +32,14 @@ type DashboardLetter = {
   current_lat: number | null;
   current_lon: number | null;
 
-  // ✅ NEW from API
+  // ✅ from API (recommended)
   current_over_text?: string | null;
+
+  // ✅ NEW (recommended)
   bird?: "pigeon" | "snipe" | "goose";
+
+  // ✅ NEW (recommended) - allows “Sleeping” in dashboard
+  sleeping?: boolean;
 
   sent_utc_text: string;
   eta_utc_text: string;
@@ -86,7 +91,6 @@ function formatUtcFallback(iso: string) {
 async function copyToClipboard(text: string) {
   if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
 
-  // fallback
   const ta = document.createElement("textarea");
   ta.value = text;
   ta.style.position = "fixed";
@@ -151,12 +155,29 @@ function RouteThumb(props: {
         />
 
         <circle cx={pts.o.x} cy={pts.o.y} r="4.5" fill="currentColor" />
-        <circle cx={pts.d.x} cy={pts.d.y} r="6.2" fill="none" stroke="currentColor" strokeWidth="2.2" opacity="0.95" />
+        <circle
+          cx={pts.d.x}
+          cy={pts.d.y}
+          r="6.2"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          opacity="0.95"
+        />
 
         {pts.c && (
           <>
             <circle cx={pts.c.x} cy={pts.c.y} r="4.6" fill="currentColor" />
-            <circle className="thumbPulse" cx={pts.c.x} cy={pts.c.y} r="11" fill="none" stroke="currentColor" strokeWidth="2.2" opacity="0.35" />
+            <circle
+              className="thumbPulse"
+              cx={pts.c.x}
+              cy={pts.c.y}
+              r="11"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              opacity="0.35"
+            />
           </>
         )}
       </svg>
@@ -220,9 +241,10 @@ export default function DashboardPage() {
     try {
       localStorage.setItem("cp_sender_email", e);
 
-      const res = await fetch(`/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(qs)}`, {
-        cache: "no-store",
-      });
+      const res = await fetch(
+        `/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(qs)}`,
+        { cache: "no-store" }
+      );
 
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to load");
@@ -240,7 +262,9 @@ export default function DashboardPage() {
     if (archivingId) return;
 
     const ok = window.confirm(
-      `Archive this letter?\n\n"${letter.subject?.trim() ? letter.subject : "(No subject)"}"\n\nThis hides it from your dashboard but keeps the public link working.`
+      `Archive this letter?\n\n"${
+        letter.subject?.trim() ? letter.subject : "(No subject)"
+      }"\n\nThis hides it from your dashboard but keeps the public link working.`
     );
     if (!ok) return;
 
@@ -278,6 +302,7 @@ export default function DashboardPage() {
   const filteredSorted = useMemo(() => {
     let list = [...letters];
 
+    // ✅ Filter “inflight” is anything not delivered (sleeping still counts)
     if (filter === "inflight") list = list.filter((l) => !l.delivered);
     if (filter === "delivered") list = list.filter((l) => l.delivered);
 
@@ -285,6 +310,7 @@ export default function DashboardPage() {
       const aSent = Date.parse(a.sent_at);
       const bSent = Date.parse(b.sent_at);
 
+      // ✅ Prefer sleep/bird-aware ETA (eta_utc_iso) when sorting
       const aEta = Date.parse(a.eta_utc_iso || a.eta_at);
       const bEta = Date.parse(b.eta_utc_iso || b.eta_at);
 
@@ -345,7 +371,11 @@ export default function DashboardPage() {
 
               <div className="metaPill" style={{ gap: 10 }}>
                 <span style={{ opacity: 0.7 }}>Filter</span>
-                <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)} className="dashSelect">
+                <select
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value as Filter)}
+                  className="dashSelect"
+                >
                   <option value="all">All</option>
                   <option value="inflight">In flight</option>
                   <option value="delivered">Delivered</option>
@@ -354,7 +384,11 @@ export default function DashboardPage() {
 
               <div className="metaPill" style={{ gap: 10 }}>
                 <span style={{ opacity: 0.7 }}>Sort</span>
-                <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="dashSelect">
+                <select
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value as Sort)}
+                  className="dashSelect"
+                >
                   <option value="newest">Newest</option>
                   <option value="etaSoonest">ETA soonest</option>
                   <option value="oldest">Oldest</option>
@@ -390,7 +424,13 @@ export default function DashboardPage() {
 
             <label className="field">
               <span className="fieldLabel">Search</span>
-              <input className="input" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onLookupKeyDown} placeholder="subject, recipient, city, token…" />
+              <input
+                className="input"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={onLookupKeyDown}
+                placeholder="subject, recipient, city, token…"
+              />
             </label>
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
@@ -428,22 +468,28 @@ export default function DashboardPage() {
           {filteredSorted.length === 0 && !loading ? (
             <div className="card">
               <div className="muted">
-                {letters.length === 0 ? "No letters loaded yet. Enter your sender email and hit “Load letters”." : "No letters match your filter/search."}
+                {letters.length === 0
+                  ? "No letters loaded yet. Enter your sender email and hit “Load letters”."
+                  : "No letters match your filter/search."}
               </div>
             </div>
           ) : (
             filteredSorted.map((l) => {
               const pct = Math.round(clamp01(l.progress ?? 0) * 100);
 
+              // ✅ Countdown uses sleep/bird-aware ETA when available
               const etaIsoForCountdown = l.eta_utc_iso || l.eta_at;
               const etaMs = new Date(etaIsoForCountdown).getTime() - now.getTime();
               const countdown = formatCountdown(etaMs);
 
-              const statusLabel = l.delivered ? "Delivered" : "In Flight";
-              const statusEmoji = l.delivered ? "✅" : "🕊️";
+              // ✅ Granular status pill: Delivered / Sleeping / In Flight
+              const isSleeping = !!l.sleeping && !l.delivered;
+              const statusLabel = l.delivered ? "Delivered" : isSleeping ? "Sleeping" : "In Flight";
+              const statusEmoji = l.delivered ? "✅" : isSleeping ? "😴" : "🕊️";
 
               const statusPath = `/l/${l.public_token}`;
-              const statusUrl = typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
+              const statusUrl =
+                typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
 
               const canThumb =
                 Number.isFinite(l.origin_lat) &&
@@ -452,7 +498,9 @@ export default function DashboardPage() {
                 Number.isFinite(l.dest_lon);
 
               const current =
-                l.current_lat != null && l.current_lon != null ? { lat: l.current_lat, lon: l.current_lon } : null;
+                l.current_lat != null && l.current_lon != null
+                  ? { lat: l.current_lat, lon: l.current_lon }
+                  : null;
 
               // ✅ Trust server label (matches status page logic)
               const geoText = l.delivered
@@ -465,18 +513,30 @@ export default function DashboardPage() {
               const badgeCount = Math.max(0, Number(l.badges_count ?? 0));
               const isArchivingThis = archivingId === l.id;
 
+              // tiny bird label (optional, subtle)
+              const birdLabel =
+                l.bird === "snipe" ? "Snipe" : l.bird === "goose" ? "Goose" : l.bird === "pigeon" ? "Pigeon" : null;
+
               return (
                 <div key={l.id} className="card">
                   <div className="dashRowTop" style={{ marginBottom: 10 }}>
                     <div className="dashRowMain">
                       <div className="kicker">Letter</div>
                       <div className="h2">{l.subject?.trim() ? l.subject : "(No subject)"}</div>
+
                       <div className="muted" style={{ marginTop: 6 }}>
                         To: <strong>{l.to_name || "Recipient"}</strong>{" "}
                         <span style={{ opacity: 0.65 }}>
                           • {l.origin_name} → {l.dest_name}
                         </span>
                       </div>
+
+                      {birdLabel && (
+                        <div className="muted" style={{ marginTop: 6, opacity: 0.75 }}>
+                          Bird: <strong>{birdLabel}</strong>
+                        </div>
+                      )}
+
                       <div className="muted" style={{ marginTop: 6 }}>
                         📍 <strong>{geoText}</strong>
                       </div>
@@ -492,7 +552,15 @@ export default function DashboardPage() {
                     ) : null}
                   </div>
 
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      justifyContent: "flex-end",
+                    }}
+                  >
                     <div className="metaPill">
                       {statusEmoji} <strong>{statusLabel}</strong>
                     </div>
