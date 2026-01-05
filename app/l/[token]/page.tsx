@@ -76,10 +76,12 @@ type Flight = {
   sleep_local_text: string; // e.g. "6:00 AM"
   tooltip_text: string; // "Location: ..."
   marker_mode: "flying" | "sleeping" | "delivered";
+
+  // server-provided so UI never has to guess
+  current_speed_kmh?: number;
 };
 
 type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
-
 type TimelineKind = "checkpoint" | "sleep" | "day";
 
 type TimelineItem = {
@@ -119,14 +121,6 @@ function formatCountdown(ms: number) {
   const s = totalSec % 60;
   const pad = (x: number) => String(x).padStart(2, "0");
   return `${h}:${pad(m)}:${pad(s)}`;
-}
-
-function milestoneTimeISO(sentISO: string, etaISO: string, fraction: number) {
-  const sent = new Date(sentISO).getTime();
-  const eta = new Date(etaISO).getTime();
-  if (!Number.isFinite(sent) || !Number.isFinite(eta) || eta <= sent) return etaISO;
-  const t = sent + (eta - sent) * fraction;
-  return new Date(t).toISOString();
 }
 
 function formatUtcFallback(iso: string) {
@@ -179,14 +173,24 @@ function Ico({
             strokeWidth="2.4"
             strokeLinejoin="round"
           />
-          <path d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z" stroke="currentColor" strokeWidth="2.4" />
+          <path
+            d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z"
+            stroke="currentColor"
+            strokeWidth="2.4"
+          />
         </svg>
       );
     case "speed":
       return (
         <svg {...common}>
           <path d="M5 13a7 7 0 0 1 14 0" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-          <path d="M12 13l4.5-4.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M12 13l4.5-4.5"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
           <path d="M4 13h2M18 13h2" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
         </svg>
       );
@@ -206,7 +210,13 @@ function Ico({
     case "check":
       return (
         <svg {...common}>
-          <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M20 6 9 17l-5-5"
+            stroke="currentColor"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       );
     case "mail":
@@ -392,8 +402,10 @@ function isSleepCheckpoint(cp: Checkpoint) {
 }
 
 export default function LetterStatusPage() {
-  const params = useParams();
-  const raw = (params as any)?.token;
+  const params = useParams() as Record<string, string | string[] | undefined>;
+
+  // ✅ robust param: supports [token], [public_token], [id] without you thinking about it again
+  const raw = params?.token ?? params?.public_token ?? params?.id;
   const token = Array.isArray(raw) ? raw[0] : raw;
 
   const [letter, setLetter] = useState<Letter | null>(null);
@@ -402,6 +414,8 @@ export default function LetterStatusPage() {
   const [flight, setFlight] = useState<Flight | null>(null);
 
   const [archived, setArchived] = useState(false);
+  const archivedRef = useRef(false);
+
   const [archivedAtISO, setArchivedAtISO] = useState<string | null>(null);
 
   const [serverNowISO, setServerNowISO] = useState<string | null>(null);
@@ -419,6 +433,10 @@ export default function LetterStatusPage() {
   const [confetti, setConfetti] = useState(false);
 
   const [mapStyle, setMapStyle] = useState<MapStyle>("carto-positron");
+
+  useEffect(() => {
+    archivedRef.current = archived;
+  }, [archived]);
 
   useEffect(() => {
     const rawSaved = window.localStorage.getItem("pigeon_map_style");
@@ -439,16 +457,20 @@ export default function LetterStatusPage() {
     window.localStorage.setItem("pigeon_map_style", mapStyle);
   }, [mapStyle]);
 
+  // ✅ clock: if archived, freeze at server snapshot
   useEffect(() => {
     if (archived && serverNowISO) {
       setNow(new Date(serverNowISO));
       return;
     }
-
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, [archived, serverNowISO]);
 
+  // ✅ shared loader via ref so polling can call it
+  const loadRef = useRef<(() => Promise<void>) | null>(null);
+
+  // ✅ effect A: define + run loader once per token
   useEffect(() => {
     if (!token) return;
 
@@ -457,8 +479,16 @@ export default function LetterStatusPage() {
     const load = async () => {
       try {
         setError(null);
+
         const res = await fetch(`/api/letters/${encodeURIComponent(token)}`, { cache: "no-store" });
-        const data = await res.json();
+
+        // ✅ tolerate non-JSON server errors (rare, but saves a blank page)
+        let data: any = null;
+        try {
+          data = await res.json();
+        } catch {
+          data = { error: "Unexpected server response" };
+        }
 
         if (!res.ok) {
           if (!alive) return;
@@ -472,7 +502,9 @@ export default function LetterStatusPage() {
 
         setLetter(data.letter as Letter);
 
-        setArchived(!!data.archived);
+        const nextArchived = !!data.archived;
+        setArchived(nextArchived);
+
         const aISO = (data.archived_at as string | null) || (data.letter?.archived_at as string | null) || null;
         setArchivedAtISO(aISO && String(aISO).trim() ? String(aISO) : null);
 
@@ -496,22 +528,29 @@ export default function LetterStatusPage() {
       }
     };
 
+    loadRef.current = load;
     void load();
-
-    if (archived) {
-      return () => {
-        alive = false;
-      };
-    }
-
-    const interval = setInterval(() => void load(), 15000);
 
     return () => {
       alive = false;
-      clearInterval(interval);
     };
+  }, [token]);
+
+  // ✅ effect B: poll ONLY when not archived (and hard-stop if it flips)
+  useEffect(() => {
+    if (!token) return;
+    if (archived) return;
+
+    const interval = setInterval(() => {
+      if (archivedRef.current) return; // hard-stop even if interval already exists
+      const fn = loadRef.current;
+      if (fn) void fn();
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, [token, archived]);
 
+  // Always use adjusted ETA for display + countdown
   const effectiveEtaISO = useMemo(() => {
     if (!letter) return "";
     return (letter.eta_at_adjusted && letter.eta_at_adjusted.trim()) || letter.eta_at;
@@ -519,18 +558,13 @@ export default function LetterStatusPage() {
 
   const sleeping = !!flight?.sleeping;
 
+  // ✅ delivered is server truth
   const uiDelivered = useMemo(() => {
-    if (!letter) return delivered;
+    if (flight?.marker_mode === "delivered") return true;
+    return !!delivered;
+  }, [flight?.marker_mode, delivered]);
 
-    const etaOriginalMs = Date.parse(letter.eta_at);
-    const etaOriginalPassed = Number.isFinite(etaOriginalMs) && now.getTime() > etaOriginalMs + 60_000;
-
-    if (delivered) return true;
-    if (archived) return false;
-    if (sleeping) return false;
-    return etaOriginalPassed;
-  }, [letter, delivered, sleeping, now, archived]);
-
+  // ✅ progress: prefer server sleep-aware progress
   const progress = useMemo(() => {
     if (flight && Number.isFinite(flight.progress)) return clamp01(flight.progress);
 
@@ -538,7 +572,7 @@ export default function LetterStatusPage() {
     const sent = new Date(letter.sent_at).getTime();
     const eta = new Date(effectiveEtaISO).getTime();
     const t = now.getTime();
-    if (eta <= sent) return 1;
+    if (!Number.isFinite(sent) || !Number.isFinite(eta) || eta <= sent) return 1;
     return clamp01((t - sent) / (eta - sent));
   }, [flight, letter, effectiveEtaISO, now]);
 
@@ -548,24 +582,20 @@ export default function LetterStatusPage() {
     return formatCountdown(msLeft);
   }, [letter, effectiveEtaISO, now]);
 
-  // ✅ FIX: current speed should be 0 when sleeping (and when delivered)
+  // ✅ server-provided speed wins
   const currentSpeedKmh = useMemo(() => {
+    if (typeof flight?.current_speed_kmh === "number" && Number.isFinite(flight.current_speed_kmh)) {
+      return Math.max(0, flight.current_speed_kmh);
+    }
+
     if (!letter) return 0;
+    if (uiDelivered || archived || sleeping) return 0;
 
-    // Delivered = bird is done moving
-    if (uiDelivered) return 0;
-
-    // Archived = snapshot vibe; don’t pretend it’s moving live
-    if (archived) return 0;
-
-    // Sleeping = no movement
-    if (sleeping) return 0;
-
-    // Otherwise show cruise speed
     const sp = Number(letter.speed_kmh);
     return Number.isFinite(sp) ? sp : 0;
-  }, [letter, uiDelivered, archived, sleeping]);
+  }, [letter, flight?.current_speed_kmh, uiDelivered, archived, sleeping]);
 
+  // milestones should be progress-based (sleep-aware)
   const milestones = useMemo(() => {
     if (!letter) return [];
     const defs = [
@@ -573,13 +603,8 @@ export default function LetterStatusPage() {
       { pct: 50, frac: 0.5, label: "50% reached" },
       { pct: 75, frac: 0.75, label: "75% reached" },
     ];
-
-    return defs.map((m) => {
-      const atISO = milestoneTimeISO(letter.sent_at, effectiveEtaISO, m.frac);
-      const isPast = now.getTime() >= new Date(atISO).getTime();
-      return { ...m, atISO, isPast };
-    });
-  }, [letter, effectiveEtaISO, now]);
+    return defs.map((m) => ({ ...m, isPast: progress >= m.frac }));
+  }, [letter, progress]);
 
   const checkpointsByTime = useMemo(() => {
     const cps = [...checkpoints];
@@ -620,7 +645,8 @@ export default function LetterStatusPage() {
     return `Location: ${currentlyOver || "somewhere over the U.S."}`;
   }, [flight?.tooltip_text, uiDelivered, currentlyOver]);
 
-  const showLive = !uiDelivered && !archived;
+  // ✅ live indicator only when not archived AND not delivered
+  const showLive = !archived && !uiDelivered;
 
   const timelineItems = useMemo(() => {
     const base: TimelineItem[] = checkpointsByTime.map((cp) => ({
@@ -685,7 +711,9 @@ export default function LetterStatusPage() {
     });
   }, [items.badges]);
 
-  const markerMode: Flight["marker_mode"] = uiDelivered ? "delivered" : sleeping ? "sleeping" : "flying";
+  // ✅ marker mode should be server truth
+  const markerMode: Flight["marker_mode"] =
+    flight?.marker_mode ?? (uiDelivered ? "delivered" : sleeping ? "sleeping" : "flying");
 
   useEffect(() => {
     if (!prevDelivered.current && uiDelivered) {
@@ -810,7 +838,7 @@ export default function LetterStatusPage() {
               </span>
               <div>
                 <div className="statLabel">Distance</div>
-                <div className="statValue">{letter.distance_km.toFixed(0)} km</div>
+                <div className="statValue">{Number(letter.distance_km).toFixed(0)} km</div>
               </div>
             </div>
 
@@ -820,7 +848,7 @@ export default function LetterStatusPage() {
               </span>
               <div>
                 <div className="statLabel">Speed</div>
-                <div className="statValue">{currentSpeedKmh.toFixed(0)} km/h</div>
+                <div className="statValue">{Number(currentSpeedKmh).toFixed(0)} km/h</div>
               </div>
             </div>
 
@@ -859,10 +887,7 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div
-                className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""}
-                style={{ opacity: uiDelivered ? 1 : 0 }}
-              >
+              <div className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: uiDelivered ? 1 : 0 }}>
                 <div className="body">{uiDelivered ? (letter.body ?? "") : ""}</div>
               </div>
 

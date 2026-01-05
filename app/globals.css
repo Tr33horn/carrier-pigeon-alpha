@@ -1213,6 +1213,7 @@ body {
   place-items: center;
 }
 
+/* MAIN DOT */
 .pigeonDot {
   width: 14px;
   height: 14px;
@@ -1221,8 +1222,10 @@ body {
   border: 2px solid #fff;
   box-shadow: 0 6px 14px rgba(0,0,0,0.18);
   z-index: 3;
+  position: relative;
 }
 
+/* FLIGHT PULSE RINGS */
 .pigeonPulseRing {
   position: absolute;
   inset: 0;
@@ -1235,13 +1238,54 @@ body {
 }
 .pigeonPulseRing.ring2 { animation-delay: 0.8s; }
 
-/* only pulse while in flight (your MapView toggles .live) */
+/* Only pulse while flying */
 .pigeonMarker:not(.live) .pigeonPulseRing { display: none; }
+
+/* SLEEP RING (added by MapView HTML) */
+.pigeonSleepRing{
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 2px solid rgba(217, 45, 32, 0.55);
+  transform: scale(0.60);
+  opacity: 0;
+  z-index: 2;         /* ✅ above flight rings, below dot */
+  display: none;      /* ✅ only on in sleep mode */
+}
+
+/* Sleeping: kill flight rings, turn on sleep ring, red dot */
+.pigeonMarker.sleep .pigeonPulseRing{
+  display: none !important;
+}
+
+.pigeonMarker.sleep .pigeonSleepRing{
+  display: block;
+  animation: sleepyHeartbeat 2.6s ease-in-out infinite;
+}
+
+.pigeonMarker.sleep .pigeonDot{
+  background: #d92d20;
+  border-color: #fff;
+}
 
 @keyframes pigeon-pulse {
   0%   { transform: scale(0.35); opacity: 0.0; }
   20%  { opacity: 0.55; }
   100% { transform: scale(1.0); opacity: 0.0; }
+}
+
+/* A calm double-beat: bump...bump...rest */
+@keyframes sleepyHeartbeat {
+  0%   { transform: scale(0.60); opacity: 0.00; }
+  12%  { opacity: 0.55; }
+  20%  { transform: scale(0.82); opacity: 0.28; }
+
+  /* tiny second beat */
+  32%  { transform: scale(0.76); opacity: 0.20; }
+  40%  { transform: scale(0.90); opacity: 0.22; }
+
+  /* fade out + rest */
+  100% { transform: scale(1.06); opacity: 0.00; }
 }
 
 /* Origin = solid dot */
@@ -1313,6 +1357,13 @@ body {
   box-shadow: 0 0 0 0 rgba(204, 239, 253, 0.85);
   animation: pulseBlue 1.4s ease-out infinite;
   display: inline-block;
+}
+
+/* Sleeping tooltip dot becomes red + stops pulsing */
+.pigeonLiveDot.sleep {
+  background: #d92d20;
+  box-shadow: none;
+  animation: none;
 }
 
 @keyframes pulseBlue {

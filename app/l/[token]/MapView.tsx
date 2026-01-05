@@ -1,22 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  Polyline,
-  Marker,
-  Tooltip,
-  useMap,
-} from "react-leaflet";
+import { MapContainer, TileLayer, Polyline, Marker, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 
 // ✅ Match the LetterStatusPage values
-export type MapStyle =
-  | "carto-positron"
-  | "carto-voyager"
-  | "carto-positron-nolabels";
-
+export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
 export type MarkerMode = "flying" | "sleeping" | "delivered";
 
 function lerp(a: number, b: number, t: number) {
@@ -48,13 +37,32 @@ function getCarto(style: MapStyle) {
   };
 }
 
-function FitBounds({ bounds }: { bounds: [number, number][] }) {
+/**
+ * ✅ Fit bounds ONLY when origin/dest change (primitive deps)
+ * No ref-reset loops, no “snap back”.
+ */
+function FitBoundsOnRouteChange({
+  origin,
+  dest,
+}: {
+  origin: { lat: number; lon: number };
+  dest: { lat: number; lon: number };
+}) {
   const map = useMap();
+  const didFitKey = useRef<string>("");
 
   useEffect(() => {
-    if (!bounds?.length) return;
+    const key = `${origin.lat.toFixed(6)},${origin.lon.toFixed(6)}|${dest.lat.toFixed(6)},${dest.lon.toFixed(6)}`;
+    if (didFitKey.current === key) return;
+
+    didFitKey.current = key;
+    const bounds: [number, number][] = [
+      [origin.lat, origin.lon],
+      [dest.lat, dest.lon],
+    ];
+
     map.fitBounds(bounds as any, { padding: [30, 30] });
-  }, [map, bounds]);
+  }, [map, origin.lat, origin.lon, dest.lat, dest.lon]);
 
   return null;
 }
@@ -71,8 +79,7 @@ function normalizeTooltip(text?: string) {
 
 /** tiny deterministic "random" from coords so each route gets its own vibe */
 function seedFromCoords(o: { lat: number; lon: number }, d: { lat: number; lon: number }) {
-  const n =
-    Math.sin(o.lat * 12.9898 + o.lon * 78.233 + d.lat * 37.719 + d.lon * 11.131) * 43758.5453;
+  const n = Math.sin(o.lat * 12.9898 + o.lon * 78.233 + d.lat * 37.719 + d.lon * 11.131) * 43758.5453;
   return n - Math.floor(n); // 0..1
 }
 
@@ -124,7 +131,7 @@ function makeNearStraightDriftPath(args: {
     const w =
       Math.sin((t * 8 + s * 3 + p * 1.3) * Math.PI * 2) * 0.55 +
       Math.sin((t * 3.5 + s * 7 + p * 0.7) * Math.PI * 2) * 0.35 +
-      Math.sin((t * 13 + s * 11 + p * 2.1) * Math.PI * 2) * 0.10;
+      Math.sin((t * 13 + s * 11 + p * 2.1) * Math.PI * 2) * 0.1;
 
     const taper = Math.sin(Math.PI * (i / Math.max(1, N)));
     const off = base * travelGain * taper * w;
@@ -146,8 +153,6 @@ export default function MapView(props: {
   progress: number; // 0..1
   tooltipText?: string;
   mapStyle?: MapStyle;
-
-  // ✅ NEW
   markerMode?: MarkerMode; // "flying" | "sleeping" | "delivered"
 }) {
   const { origin, dest } = props;
@@ -158,12 +163,14 @@ export default function MapView(props: {
   const [displayProgress, setDisplayProgress] = useState(() => clamp01(props.progress));
   const rafRef = useRef<number | null>(null);
 
-  // smooth marker progress (unchanged)
+  // ✅ smooth marker progress
   useEffect(() => {
     const from = displayProgress;
     const to = clamp01(props.progress);
 
-    const durationMs = 400;
+    if (Math.abs(to - from) < 0.00001) return;
+
+    const durationMs = 420;
     const start = performance.now();
 
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -183,37 +190,37 @@ export default function MapView(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.progress]);
 
-  const current = {
-    lat: lerp(origin.lat, dest.lat, displayProgress),
-    lon: lerp(origin.lon, dest.lon, displayProgress),
-  };
+  const current = useMemo(
+    () => ({
+      lat: lerp(origin.lat, dest.lat, displayProgress),
+      lon: lerp(origin.lon, dest.lon, displayProgress),
+    }),
+    [origin.lat, origin.lon, dest.lat, dest.lon, displayProgress]
+  );
 
   // ✅ Mode derived from prop (source of truth) + fallback to progress
-  const mode: MarkerMode =
-    props.markerMode ??
-    (clamp01(props.progress) >= 1 ? "delivered" : "flying");
+  const mode: MarkerMode = props.markerMode ?? (clamp01(props.progress) >= 1 ? "delivered" : "flying");
 
   const isFlying = mode === "flying";
   const isSleeping = mode === "sleeping";
   const isDelivered = mode === "delivered";
 
-  // icons
   const liveIcon = useMemo(
     () =>
       L.divIcon({
-className: `pigeonMarker ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} ${isDelivered ? "delivered" : ""}`,
+        className: `pigeonMarker ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} ${isDelivered ? "delivered" : ""}`,
         html: `
   <div class="pigeonPulseWrap">
     <span class="pigeonPulseRing"></span>
     <span class="pigeonPulseRing ring2"></span>
-    <span class="pigeonSleepRing"></span>   <!-- 👈 ADD THIS -->
+    <span class="pigeonSleepRing"></span>
     <div class="pigeonDot"></div>
   </div>
         `,
         iconSize: [44, 44],
         iconAnchor: [22, 22],
       }),
-    [isFlying, isSleeping]
+    [isFlying, isSleeping, isDelivered]
   );
 
   const originIcon = useMemo(
@@ -249,55 +256,46 @@ className: `pigeonMarker ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} 
     []
   );
 
-  // bounds stable (origin + dest only)
-  const boundsLine: [number, number][] = [
-    [origin.lat, origin.lon],
-    [dest.lat, dest.lon],
-  ];
+  const straightLine: [number, number][] = useMemo(
+    () => [
+      [origin.lat, origin.lon],
+      [dest.lat, dest.lon],
+    ],
+    [origin.lat, origin.lon, dest.lat, dest.lon]
+  );
 
-  // 1) straight ideal route (static)
-  const straightLine: [number, number][] = boundsLine;
-
-  // 2) dotted "actual flown" route so far (tiny side-to-side drift)
+  // ✅ flown route uses displayProgress (same thing the marker uses)
+  // ✅ IMPORTANT: deps must be primitive so we don't recompute due to parent object identity
   const flownPts = useMemo(() => {
-    const p = clamp01(props.progress);
+    const p = clamp01(displayProgress);
     if (p <= 0.0001) return [[origin.lat, origin.lon]] as [number, number][];
+
     return makeNearStraightDriftPath({
-      origin,
-      dest,
+      origin: { lat: origin.lat, lon: origin.lon },
+      dest: { lat: dest.lat, lon: dest.lon },
       progress: p,
       points: 60,
     });
-  }, [origin, dest, props.progress]);
+  }, [origin.lat, origin.lon, dest.lat, dest.lon, displayProgress]);
 
-  const tooltip = useMemo(
-    () => normalizeTooltip(props.tooltipText),
-    [props.tooltipText]
-  );
+  const tooltip = useMemo(() => normalizeTooltip(props.tooltipText), [props.tooltipText]);
 
-  // Colors
-  const idealColor = "#121212";
-  const flownColor = "#16a34a"; // ✅ status green
+  // ✅ keep defaults here; if you want theme-driven colors, we'll do it in the next step
+  const idealColor = "rgba(18,18,18,0.35)";
+  const flownColor = "rgba(22,163,74,0.85)";
 
   return (
-    <div
-      style={{
-        height: 340,
-        borderRadius: 18,
-        overflow: "hidden",
-        border: "1px solid rgba(0,0,0,0.10)",
-        boxShadow: "0 12px 24px rgba(0,0,0,0.08)",
-      }}
-    >
+    <div className="mapShell">
       <MapContainer
-        center={[current.lat, current.lon]}
+        // ✅ FIX: provide an initial center to avoid blank/odd initial render in react-leaflet v4
+        center={[origin.lat, origin.lon]}
         zoom={4}
         scrollWheelZoom={false}
         style={{ height: "100%", width: "100%" }}
       >
         <TileLayer attribution={tile.attribution} url={tile.url} />
 
-        <FitBounds bounds={boundsLine} />
+        <FitBoundsOnRouteChange origin={origin} dest={dest} />
 
         {/* Ideal straight line route */}
         <Polyline
@@ -305,7 +303,7 @@ className: `pigeonMarker ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} 
           pathOptions={{
             color: idealColor,
             weight: 3,
-            opacity: 0.35,
+            opacity: 1,
           }}
         />
 
@@ -315,7 +313,7 @@ className: `pigeonMarker ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} 
           pathOptions={{
             color: flownColor,
             weight: 3,
-            opacity: 0.85,
+            opacity: 1,
             dashArray: "2 10",
             lineCap: "round",
             lineJoin: "round",
@@ -332,12 +330,10 @@ className: `pigeonMarker ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} 
             opacity={1}
             permanent
             interactive={false}
-            className={`pigeonTooltip ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""}`}
+            className={`pigeonTooltip ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} ${isDelivered ? "delivered" : ""}`}
           >
             <span className="pigeonTooltipRow">
-              {!isDelivered && (
-                <span className={`pigeonLiveDot ${isSleeping ? "sleep" : ""}`} />
-              )}
+              {!isDelivered && <span className={`pigeonLiveDot ${isSleeping ? "sleep" : ""}`} />}
               <span className="pigeonTooltipText">{tooltip}</span>
             </span>
           </Tooltip>

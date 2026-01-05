@@ -13,7 +13,7 @@ type SleepConfig = {
   sleepEndHour: number; // local hour 0-23
 };
 
-const SLEEP: SleepConfig = { sleepStartHour: 22, sleepEndHour: 6 }; // 10pm -> 6am (8h)
+const SLEEP: SleepConfig = { sleepStartHour: 22, sleepEndHour: 6 }; // 10pm -> 6am (wraps)
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
@@ -21,12 +21,15 @@ function clamp(n: number, a: number, b: number) {
 
 /**
  * Rough “local time” offset from longitude (good vibe > perfect geography)
- * -120 => ~UTC-8, -75 => ~UTC-5
+ * 15° per hour. Rounded. Not DST-aware (intentionally).
+ *
+ * ✅ FIX: do NOT clamp to US-only offsets.
+ * Use world-ish bounds: UTC-12..UTC+14
  */
 function offsetMinutesFromLon(lon: number) {
   if (!Number.isFinite(lon)) return 0;
-  const hours = Math.round(lon / 15); // -120/15=-8
-  return clamp(hours * 60, -600, -240); // clamp to US-ish offsets
+  const hours = Math.round(lon / 15);
+  return clamp(hours * 60, -12 * 60, 14 * 60);
 }
 
 function toLocalMs(utcMs: number, offsetMin: number) {
@@ -36,49 +39,66 @@ function toUtcMs(localMs: number, offsetMin: number) {
   return localMs - offsetMin * 60_000;
 }
 
-function isSleepingAt(utcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
+function localPartsFromUtcMs(utcMs: number, offsetMin: number) {
   const localMs = toLocalMs(utcMs, offsetMin);
   const d = new Date(localMs);
-  const h = d.getUTCHours(); // localMs already shifted
+  return {
+    y: d.getUTCFullYear(),
+    m: d.getUTCMonth(),
+    day: d.getUTCDate(),
+    h: d.getUTCHours(),
+    localMs,
+  };
+}
 
+function isSleepingAt(utcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
+  const { h } = localPartsFromUtcMs(utcMs, offsetMin);
   const wraps = cfg.sleepStartHour > cfg.sleepEndHour; // 22 -> 6 wraps
+
   if (!wraps) return h >= cfg.sleepStartHour && h < cfg.sleepEndHour;
   return h >= cfg.sleepStartHour || h < cfg.sleepEndHour;
 }
 
-function nextBoundaryUtcMs(utcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
-  const localMs = toLocalMs(utcMs, offsetMin);
-  const d = new Date(localMs);
-  const y = d.getUTCFullYear();
-  const m = d.getUTCMonth();
-  const day = d.getUTCDate();
-
+/**
+ * Deterministic “next sleep transition” in UTC:
+ * - If currently sleeping -> next wake time
+ * - If currently awake -> next sleep start time
+ *
+ * ✅ FIX: Avoid “candidate soup” that can cause boundary jitter.
+ */
+function nextTransitionUtcMs(utcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
+  const { y, m, day, h } = localPartsFromUtcMs(utcMs, offsetMin);
   const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
 
-  const mkLocal = (yy: number, mm: number, dd: number, hh: number) => Date.UTC(yy, mm, dd, hh, 0, 0, 0);
+  const mkLocal = (yy: number, mm: number, dd: number, hh: number) =>
+    Date.UTC(yy, mm, dd, hh, 0, 0, 0);
 
-  const todaySleepStartLocal = mkLocal(y, m, day, cfg.sleepStartHour);
-  const todaySleepEndLocal = mkLocal(y, m, day, cfg.sleepEndHour);
-  const tomorrowStartLocal = mkLocal(y, m, day + 1, cfg.sleepStartHour);
-  const tomorrowEndLocal = mkLocal(y, m, day + 1, cfg.sleepEndHour);
+  const sleeping = isSleepingAt(utcMs, offsetMin, cfg);
 
-  const candidatesLocal: number[] = [];
-  candidatesLocal.push(Date.UTC(y, m, day + 1, 0, 0, 0, 0));
-  candidatesLocal.push(todaySleepStartLocal);
-
-  if (wraps) {
-    candidatesLocal.push(tomorrowEndLocal);
-  } else {
-    candidatesLocal.push(todaySleepEndLocal);
+  if (!wraps) {
+    if (sleeping) {
+      const todayEnd = mkLocal(y, m, day, cfg.sleepEndHour);
+      const nextLocal = h < cfg.sleepEndHour ? todayEnd : mkLocal(y, m, day + 1, cfg.sleepEndHour);
+      return toUtcMs(nextLocal, offsetMin);
+    } else {
+      const todayStart = mkLocal(y, m, day, cfg.sleepStartHour);
+      const nextLocal = h < cfg.sleepStartHour ? todayStart : mkLocal(y, m, day + 1, cfg.sleepStartHour);
+      return toUtcMs(nextLocal, offsetMin);
+    }
   }
 
-  candidatesLocal.push(tomorrowStartLocal);
-  candidatesLocal.push(tomorrowEndLocal);
-
-  const candidatesUtc = candidatesLocal.map((lm) => toUtcMs(lm, offsetMin)).filter((t) => t > utcMs + 1);
-
-  if (!candidatesUtc.length) return utcMs + 3600_000;
-  return Math.min(...candidatesUtc);
+  // Wrap case: 22 -> 6
+  if (sleeping) {
+    const nextLocal =
+      h >= cfg.sleepStartHour
+        ? mkLocal(y, m, day + 1, cfg.sleepEndHour)
+        : mkLocal(y, m, day, cfg.sleepEndHour);
+    return toUtcMs(nextLocal, offsetMin);
+  } else {
+    const todayStart = mkLocal(y, m, day, cfg.sleepStartHour);
+    const nextLocal = h < cfg.sleepStartHour ? todayStart : mkLocal(y, m, day + 1, cfg.sleepStartHour);
+    return toUtcMs(nextLocal, offsetMin);
+  }
 }
 
 function awakeMsBetween(startUtcMs: number, endUtcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
@@ -88,10 +108,14 @@ function awakeMsBetween(startUtcMs: number, endUtcMs: number, offsetMin: number,
   let awake = 0;
 
   let guard = 0;
-  while (t < endUtcMs && guard < 100000) {
+  while (t < endUtcMs && guard < 200000) {
     guard++;
+
     const sleeping = isSleepingAt(t, offsetMin, cfg);
-    const next = Math.min(nextBoundaryUtcMs(t, offsetMin, cfg), endUtcMs);
+    const next = Math.min(nextTransitionUtcMs(t, offsetMin, cfg), endUtcMs);
+
+    if (!(next > t)) break;
+
     if (!sleeping) awake += next - t;
     t = next;
   }
@@ -101,23 +125,20 @@ function awakeMsBetween(startUtcMs: number, endUtcMs: number, offsetMin: number,
 
 /**
  * Returns UTC ms when requiredAwakeMs of "awake time" has elapsed.
- * ✅ FIX: if we hit the guard and haven't finished, fall back to baseline (no-sleep ETA).
+ * ✅ Guard fallback => baseline no-sleep ETA
  */
-function etaFromRequiredAwakeMs(
-  sentUtcMs: number,
-  requiredAwakeMs: number,
-  offsetMin: number,
-  cfg: SleepConfig = SLEEP
-) {
+function etaFromRequiredAwakeMs(sentUtcMs: number, requiredAwakeMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
   let t = sentUtcMs;
   let remaining = requiredAwakeMs;
 
   let guard = 0;
-  while (remaining > 0 && guard < 100000) {
+  while (remaining > 0 && guard < 200000) {
     guard++;
 
     const sleeping = isSleepingAt(t, offsetMin, cfg);
-    const next = nextBoundaryUtcMs(t, offsetMin, cfg);
+    const next = nextTransitionUtcMs(t, offsetMin, cfg);
+
+    if (!(next > t)) break;
 
     if (sleeping) {
       t = next;
@@ -129,11 +150,7 @@ function etaFromRequiredAwakeMs(
     t += chunk;
   }
 
-  // ✅ If we somehow didn't finish, don't time travel
-  if (remaining > 0) {
-    return sentUtcMs + requiredAwakeMs;
-  }
-
+  if (remaining > 0) return sentUtcMs + requiredAwakeMs;
   return t;
 }
 
@@ -156,17 +173,12 @@ function safeAdjustedEtaMs(args: {
   }
 
   const baselineMs = sentMs + requiredAwakeMs;
+  const adjustedMs = ignoresSleep ? baselineMs : etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin);
 
-  let adjustedMs = ignoresSleep
-    ? baselineMs
-    : etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin);
-
-  // Allow up to +7 days extra for sleeping (generous)
   const maxAllowed = baselineMs + 7 * 24 * 3600_000;
   const minAllowed = sentMs;
 
   if (!Number.isFinite(adjustedMs) || adjustedMs < minAllowed || adjustedMs > maxAllowed) {
-    // Prefer DB ETA if it's sane, otherwise baseline
     if (Number.isFinite(etaDbMs) && etaDbMs >= minAllowed && etaDbMs <= maxAllowed) return etaDbMs;
     return baselineMs;
   }
@@ -176,18 +188,8 @@ function safeAdjustedEtaMs(args: {
 
 function nextWakeUtcMs(nowUtcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
   if (!isSleepingAt(nowUtcMs, offsetMin, cfg)) return null;
-
-  let t = nowUtcMs;
-  let guard = 0;
-
-  while (guard < 10000) {
-    guard++;
-    const next = nextBoundaryUtcMs(t, offsetMin, cfg);
-    t = next;
-    if (!isSleepingAt(t + 1, offsetMin, cfg)) return t;
-  }
-
-  return null;
+  const next = nextTransitionUtcMs(nowUtcMs, offsetMin, cfg);
+  return Number.isFinite(next) && next > nowUtcMs ? next : null;
 }
 
 function sleepUntilLocalText(sleepUntilUtcMs: number, offsetMin: number) {
@@ -202,13 +204,7 @@ function stripOverPrefix(s: string) {
 /**
  * Create “<Bird> slept …” events as synthetic checkpoints
  */
-function buildSleepEvents(args: {
-  sentMs: number;
-  nowMs: number;
-  offsetMin: number;
-  birdLabel?: string;
-  cfg?: SleepConfig;
-}) {
+function buildSleepEvents(args: { sentMs: number; nowMs: number; offsetMin: number; birdLabel?: string; cfg?: SleepConfig }) {
   const { sentMs, nowMs, offsetMin } = args;
   const cfg = args.cfg ?? SLEEP;
   const birdLabel = (args.birdLabel || "Pigeon").trim() || "Pigeon";
@@ -231,9 +227,7 @@ function buildSleepEvents(args: {
   const tupleLE = (a: [number, number, number], b: [number, number, number]) =>
     a[0] < b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] <= b[2])));
 
-  let y = startY,
-    m = startM,
-    d = startD;
+  let y = startY, m = startM, d = startD;
 
   while (tupleLE([y, m, d], [endY, endM, endD])) {
     const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
@@ -416,8 +410,12 @@ function computeBadgesFromRegions(args: {
   return out.filter((b) => (seen.has(b.code) ? false : (seen.add(b.code), true)));
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ token: string }> }) {
-  const { token } = await ctx.params;
+/* -------------------------------------------------
+   Route handler
+------------------------------------------------- */
+
+export async function GET(_req: Request, ctx: { params: { token: string } }) {
+  const { token } = ctx.params;
 
   const { data: meta, error: metaErr } = await supabaseServer
     .from("letters")
@@ -451,9 +449,18 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     return NextResponse.json({ error: metaErr?.message ?? "Not found" }, { status: 404 });
   }
 
+  // Normalize numerics (Supabase can return strings)
+  const speedKmh = Number((meta as any).speed_kmh);
+  const distanceKm = Number((meta as any).distance_km);
+  const originLon = Number((meta as any).origin_lon);
+  const originLat = Number((meta as any).origin_lat);
+  const destLon = Number((meta as any).dest_lon);
+  const destLat = Number((meta as any).dest_lat);
+
   // ✅ Bird behavior
   const rawBird = String((meta as any).bird || "pigeon").toLowerCase();
-  const bird: "pigeon" | "snipe" | "goose" = rawBird === "snipe" || rawBird === "goose" ? rawBird : "pigeon";
+  const bird: "pigeon" | "snipe" | "goose" =
+    rawBird === "snipe" || rawBird === "goose" ? (rawBird as any) : "pigeon";
 
   const BIRD_RULES = {
     pigeon: { ignoresSleep: false, sleepLabel: "Pigeon" },
@@ -464,7 +471,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const ignoresSleep = BIRD_RULES[bird].ignoresSleep;
 
   // ✅ archived handling (freeze time)
-  const archived_at = meta.archived_at ?? null;
+  const archived_at = (meta as any).archived_at ?? null;
   const archivedAtMs = archived_at ? Date.parse(archived_at) : NaN;
   const archived = !!archived_at && Number.isFinite(archivedAtMs);
 
@@ -479,27 +486,29 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const { data: checkpoints, error: cErr } = await supabaseServer
     .from("letter_checkpoints")
     .select("id, idx, name, at, lat, lon")
-    .eq("letter_id", meta.id)
+    .eq("letter_id", (meta as any).id)
     .order("idx", { ascending: true });
 
   if (cErr) {
     return NextResponse.json({ error: cErr.message }, { status: 500 });
   }
 
-  const sentMs = Date.parse(meta.sent_at);
+  const sentMs = Date.parse((meta as any).sent_at);
 
   // ✅ Flight math
-  const offsetMin = offsetMinutesFromLon(meta.origin_lon);
+  const offsetMin = offsetMinutesFromLon(originLon);
 
-  const requiredAwakeMs = meta.speed_kmh > 0 ? (meta.distance_km / meta.speed_kmh) * 3600_000 : 0;
+  const requiredAwakeMs =
+    Number.isFinite(speedKmh) && speedKmh > 0 && Number.isFinite(distanceKm) && distanceKm > 0
+      ? (distanceKm / speedKmh) * 3600_000
+      : 0;
 
-  // ✅ SAFE adjusted ETA (prevents year 2162)
   const etaAdjustedMs = safeAdjustedEtaMs({
     sentMs,
     requiredAwakeMs,
     offsetMin,
     ignoresSleep,
-    etaAtIso: meta.eta_at,
+    etaAtIso: (meta as any).eta_at,
   });
 
   const delivered = Number.isFinite(etaAdjustedMs) ? nowMs >= etaAdjustedMs : true;
@@ -518,10 +527,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const sleep_until_iso = wakeMs ? new Date(wakeMs).toISOString() : null;
   const sleep_local_text = wakeMs ? sleepUntilLocalText(wakeMs, offsetMin) : "";
 
+  const current_speed_kmh = delivered ? 0 : sleeping ? 0 : Number.isFinite(speedKmh) ? speedKmh : 0;
+
   // Only fetch body AFTER delivery
   let body: string | null = null;
   if (delivered) {
-    const { data: bodyRow } = await supabaseServer.from("letters").select("body").eq("id", meta.id).single();
+    const { data: bodyRow } = await supabaseServer.from("letters").select("body").eq("id", (meta as any).id).single();
     body = bodyRow?.body ?? null;
   }
 
@@ -531,10 +542,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     const isLast = i === arr.length - 1;
 
     const geo =
-      Number.isFinite(cp.lat) && Number.isFinite(cp.lon) ? checkpointGeoText(cp.lat, cp.lon) : "somewhere over the U.S.";
+      Number.isFinite(cp.lat) && Number.isFinite(cp.lon)
+        ? checkpointGeoText(cp.lat, cp.lon)
+        : "somewhere over the U.S.";
 
     const region =
-      Number.isFinite(cp.lat) && Number.isFinite(cp.lon) ? geoRegionForPoint(cp.lat, cp.lon) : null;
+      Number.isFinite(cp.lat) && Number.isFinite(cp.lon)
+        ? geoRegionForPoint(cp.lat, cp.lon)
+        : null;
 
     const upgradedName = isFirst ? `Departed roost — ${geo}` : isLast ? `Final descent — ${geo}` : geo;
 
@@ -587,14 +602,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const pastRegionIds = past.map((cp: any) => cp.region_id).filter(Boolean) as string[];
 
   const originRegion =
-    Number.isFinite(meta.origin_lat) && Number.isFinite(meta.origin_lon)
-      ? geoRegionForPoint(meta.origin_lat, meta.origin_lon)
-      : null;
+    Number.isFinite(originLat) && Number.isFinite(originLon) ? geoRegionForPoint(originLat, originLon) : null;
 
   const destRegion =
-    Number.isFinite(meta.dest_lat) && Number.isFinite(meta.dest_lon)
-      ? geoRegionForPoint(meta.dest_lat, meta.dest_lon)
-      : null;
+    Number.isFinite(destLat) && Number.isFinite(destLon) ? geoRegionForPoint(destLat, destLon) : null;
 
   const deliveredAtISO =
     delivered && Number.isFinite(etaAdjustedMs)
@@ -604,8 +615,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
       : undefined;
 
   const computedBadges = computeBadgesFromRegions({
-    origin: { name: meta.origin_name, regionId: originRegion?.id ?? null },
-    dest: { name: meta.dest_name, regionId: destRegion?.id ?? null },
+    origin: { name: (meta as any).origin_name, regionId: originRegion?.id ?? null },
+    dest: { name: (meta as any).dest_name, regionId: destRegion?.id ?? null },
     pastRegionIds,
     delivered,
     deliveredAtISO,
@@ -615,7 +626,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     const earnedAtDefault = new Date(nowMs).toISOString();
 
     const rows: LetterItemInsert[] = computedBadges.map((b) => ({
-      letter_id: meta.id,
+      letter_id: (meta as any).id,
       kind: "badge",
       code: b.code,
       title: b.title,
@@ -626,16 +637,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
       meta: b.meta ?? {},
     }));
 
-    const { error: upsertErr } = await supabaseServer
-      .from("letter_items")
-      .upsert(rows, { onConflict: "letter_id,kind,code" });
+    const { error: upsertErr } = await supabaseServer.from("letter_items").upsert(rows, { onConflict: "letter_id,kind,code" });
+
     if (upsertErr) console.error("BADGE UPSERT ERROR:", upsertErr);
   }
 
   const { data: items, error: itemsErr } = await supabaseServer
     .from("letter_items")
     .select("id, kind, code, title, subtitle, icon, rarity, earned_at, meta")
-    .eq("letter_id", meta.id)
+    .eq("letter_id", (meta as any).id)
     .order("earned_at", { ascending: true });
 
   if (itemsErr) {
@@ -645,7 +655,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const badges = (items ?? []).filter((x: any) => x.kind === "badge");
   const addons = (items ?? []).filter((x: any) => x.kind === "addon");
 
-  const etaAdjustedISO = Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : meta.eta_at;
+  const etaAdjustedISO = Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : (meta as any).eta_at;
 
   return NextResponse.json({
     archived,
@@ -658,6 +668,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
       ...meta,
       bird,
       body,
+
+      speed_kmh: Number.isFinite(speedKmh) ? speedKmh : 0,
 
       eta_at_adjusted: etaAdjustedISO,
       eta_utc_text: formatUtc(etaAdjustedISO),
@@ -676,6 +688,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
       sleep_local_text,
       tooltip_text,
       marker_mode: delivered ? "delivered" : sleeping ? "sleeping" : "flying",
+      current_speed_kmh,
     },
 
     items: { badges, addons },
