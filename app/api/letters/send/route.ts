@@ -12,9 +12,7 @@ import { geoLabelFor, type GeoRegion } from "../../../lib/geo/geoLabel";
 //   letter_checkpoints.region_kind (text)
 const STORE_REGION_META = false;
 
-const REGIONS: GeoRegion[] = [
-  ...ROUTE_TUNED_REGIONS,
-];
+const REGIONS: GeoRegion[] = [...ROUTE_TUNED_REGIONS];
 
 function toRad(deg: number) {
   return (deg * Math.PI) / 180;
@@ -62,9 +60,6 @@ function formatUtc(iso: string) {
 
 /* -------------------------------------------------
    ✅ Bird attributes (POC)
-   - speed_kmh: cruising-ish speed
-   - roost_hours: nightly downtime (0 = nonstop)
-   - inefficiency: your old REST_FACTOR lives here
 ------------------------------------------------- */
 
 type BirdType = "pigeon" | "snipe" | "goose";
@@ -73,14 +68,9 @@ const BIRDS: Record<
   BirdType,
   { label: string; emoji: string; speed_kmh: number; roost_hours: number; inefficiency: number }
 > = {
-  // Baseline: classic pigeon, rests overnight
   pigeon: { label: "Homing Pigeon", emoji: "🕊️", speed_kmh: 72, roost_hours: 8, inefficiency: 1.15 },
-
-  // Fast long-haul: no roosting for our POC "express" bird
   snipe: { label: "Great Snipe", emoji: "🏎️", speed_kmh: 88, roost_hours: 0, inefficiency: 1.05 },
-
-  // Heavy/group vibe: slower and longer nightly roost
-  goose: { label: "Canada Goose", emoji: "🪿", speed_kmh: 56, roost_hours: 10, inefficiency: 1.20 },
+  goose: { label: "Canada Goose", emoji: "🪿", speed_kmh: 56, roost_hours: 10, inefficiency: 1.2 },
 };
 
 function normalizeBird(raw: unknown): BirdType {
@@ -93,23 +83,21 @@ function normalizeBird(raw: unknown): BirdType {
 /**
  * Compute total travel hours with:
  * - base flight time = distance / speed
- * - inefficiency multiplier (wind, pauses, etc.)
- * - roosting: bird flies (24 - roost_hours) per day, then must roost roost_hours
+ * - inefficiency multiplier
+ * - roosting: bird flies (24 - roost_hours) per day, then roosts roost_hours
+ *
+ * NOTE: This is POC “vibe math”. True sleep alignment is handled in the status route.
  */
 function estimateTravelHours(distanceKm: number, bird: BirdType) {
   const cfg = BIRDS[bird];
 
-  // base flight hours + realism fudge
   const flightHours = (distanceKm / cfg.speed_kmh) * cfg.inefficiency;
 
-  // nonstop bird
   if (cfg.roost_hours <= 0) return flightHours;
 
   const awakeHours = 24 - cfg.roost_hours;
   if (awakeHours <= 0) return flightHours;
 
-  // Each full awake block implies a roost afterwards.
-  // Example: if flightHours = 33, awakeHours=16 => 2 full blocks => 2 roosts.
   const fullAwakeBlocks = Math.floor(flightHours / awakeHours);
   const roostHours = fullAwakeBlocks * cfg.roost_hours;
 
@@ -119,7 +107,6 @@ function estimateTravelHours(distanceKm: number, bird: BirdType) {
 /**
  * Sticky endpoints:
  * - Near destination: prefer a "metro" region around the destination if present.
- * - Near origin: we still keep your fun "Departed roost" label for idx=0.
  */
 function stickyGeoLabel(opts: {
   lat: number;
@@ -131,10 +118,8 @@ function stickyGeoLabel(opts: {
 }) {
   const { lat, lon, dest, progress, regions } = opts;
 
-  // Default resolver (bbox priority)
   const base = geoLabelFor(lat, lon, regions);
 
-  // "Sticky" zone near destination: last ~12% of flight
   const nearDest = progress >= 0.88;
   if (!nearDest) return base;
 
@@ -209,11 +194,7 @@ function generateCheckpoints(
     });
 
     const name =
-      i === 0
-        ? "Departed roost"
-        : i === count - 1
-        ? "Final descent"
-        : geo?.text || fallback[i] || `Checkpoint ${i + 1}`;
+      i === 0 ? "Departed roost" : i === count - 1 ? "Final descent" : geo?.text || fallback[i] || `Checkpoint ${i + 1}`;
 
     return {
       idx: i,
@@ -239,54 +220,33 @@ export async function POST(req: Request) {
     message,
     origin,
     destination,
-    bird: birdRaw, // ✅ NEW
+    bird: birdRaw,
   } = body;
 
   const bird = normalizeBird(birdRaw);
   const birdCfg = BIRDS[bird];
 
-  // --- Server-side required-field enforcement ---
-  const normalizedFromEmail =
-    typeof from_email === "string" ? from_email.trim() : "";
-  const normalizedToEmail =
-    typeof to_email === "string" ? to_email.trim() : "";
+  const normalizedFromEmail = typeof from_email === "string" ? from_email.trim() : "";
+  const normalizedToEmail = typeof to_email === "string" ? to_email.trim() : "";
 
   if (!normalizedFromEmail || !normalizedToEmail) {
-    return NextResponse.json(
-      { error: "Sender and recipient email are required." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Sender and recipient email are required." }, { status: 400 });
   }
-
   if (!isEmailValid(normalizedFromEmail)) {
-    return NextResponse.json(
-      { error: "Sender email looks invalid." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Sender email looks invalid." }, { status: 400 });
   }
-
   if (!isEmailValid(normalizedToEmail)) {
-    return NextResponse.json(
-      { error: "Recipient email looks invalid." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Recipient email looks invalid." }, { status: 400 });
   }
 
   if (!origin?.lat || !origin?.lon || !destination?.lat || !destination?.lon) {
-    return NextResponse.json(
-      { error: "Origin and destination are required." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Origin and destination are required." }, { status: 400 });
   }
-
   if (origin.name === destination.name) {
-    return NextResponse.json(
-      { error: "Origin and destination must be different." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Origin and destination must be different." }, { status: 400 });
   }
 
-  // ✅ Bird-based ETA
+  // ✅ Bird-based ETA (POC)
   const km = distanceKm(origin.lat, origin.lon, destination.lat, destination.lon);
   const hours = estimateTravelHours(km, bird);
   const ms = Math.round(hours * 60 * 60 * 1000);
@@ -299,7 +259,7 @@ export async function POST(req: Request) {
     .from("letters")
     .insert({
       public_token: publicToken,
-      bird, // ✅ NEW
+      bird, // ✅ stored in DB now
       from_name,
       from_email: normalizedFromEmail,
       sender_receipt_sent_at: null,
@@ -315,19 +275,15 @@ export async function POST(req: Request) {
       dest_lat: destination.lat,
       dest_lon: destination.lon,
       distance_km: km,
-      speed_kmh: birdCfg.speed_kmh, // ✅ store chosen speed (no schema change)
+      speed_kmh: birdCfg.speed_kmh,
       sent_at: sentAt.toISOString(),
       eta_at: etaAt.toISOString(),
-      // NOTE: Not storing `bird` yet to avoid breaking DB schema.
     })
     .select("id, public_token, eta_at")
     .single();
 
   if (letterErr || !letter) {
-    return NextResponse.json(
-      { error: letterErr?.message ?? "Insert failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: letterErr?.message ?? "Insert failed" }, { status: 500 });
   }
 
   const checkpoints = generateCheckpoints(
@@ -365,7 +321,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: cpErr.message }, { status: 500 });
   }
 
-  // Send "Bird launched" email immediately
+  // Send “Bird launched” email immediately
   try {
     const key = process.env.RESEND_API_KEY;
     if (!key) throw new Error("Missing RESEND_API_KEY");
@@ -393,9 +349,7 @@ export async function POST(req: Request) {
               Track flight status
             </a>
           </p>
-          <p style="opacity: 0.7; margin: 0">
-            (No peeking. The bird is watching.)
-          </p>
+          <p style="opacity: 0.7; margin: 0">(No peeking. The bird is watching.)</p>
         </div>
       `,
     });
