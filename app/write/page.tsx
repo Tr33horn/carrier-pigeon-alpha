@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CITIES } from "../lib/cities";
 import { CityTypeahead } from "../components/CityTypeahead";
@@ -50,7 +50,35 @@ function birdLabel(bird: BirdType) {
   }
 }
 
+/**
+ * ✅ Suspense wrapper required by Next for useSearchParams()
+ */
 export default function WritePage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="pageBg">
+          <div className="wrap">
+            <a href="/dashboard" className="linkPill">
+              ← Dashboard
+            </a>
+            <div style={{ marginTop: 12 }}>
+              <div className="kicker">Compose</div>
+              <h1 className="h1">Write a Letter</h1>
+              <p className="muted" style={{ marginTop: 6 }}>
+                Loading…
+              </p>
+            </div>
+          </div>
+        </main>
+      }
+    >
+      <WritePageInner />
+    </Suspense>
+  );
+}
+
+function WritePageInner() {
   const searchParams = useSearchParams();
   const bird: BirdType = normalizeBird(searchParams.get("bird"));
 
@@ -170,7 +198,7 @@ export default function WritePage() {
           message,
           origin,
           destination,
-          bird, // ✅ NEW: include the chosen bird (safe even if backend ignores for now)
+          bird, // ✅ chosen bird
         }),
       });
 
@@ -213,7 +241,6 @@ export default function WritePage() {
           <div className="kicker">Compose</div>
           <h1 className="h1">Write a Letter</h1>
 
-          {/* ✅ NEW: minimal bird context line */}
           <p className="muted" style={{ marginTop: 6 }}>
             Sending with <strong>{birdLabel(bird)}</strong>.{" "}
             <a href="/new" className="link">
@@ -221,7 +248,6 @@ export default function WritePage() {
             </a>
           </p>
 
-          {/* Keep your existing flavor line, just push it down a touch */}
           <p className="muted" style={{ marginTop: 6 }}>
             It’ll unlock for the recipient when the pigeon lands.
           </p>
@@ -241,7 +267,6 @@ export default function WritePage() {
               </div>
             </div>
 
-            {/* Names stay where they are; emails directly under each */}
             <div className="twoCol">
               {/* FROM column */}
               <div className="stack" style={{ gap: 10 }}>
@@ -425,9 +450,7 @@ export default function WritePage() {
               </button>
 
               <div className="muted" style={{ alignSelf: "center" }}>
-                {disableSend
-                  ? "Fill everything in and the pigeon will clock in."
-                  : "Ready for liftoff."}
+                {disableSend ? "Fill everything in and the pigeon will clock in." : "Ready for liftoff."}
               </div>
             </div>
 
@@ -453,6 +476,3 @@ export default function WritePage() {
     </main>
   );
 }
-
-
-
