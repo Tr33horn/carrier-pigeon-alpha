@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { checkpointGeoText } from "@/app/lib/geo";
 
 type DashboardLetter = {
   id: string;
@@ -29,15 +28,20 @@ type DashboardLetter = {
   delivered: boolean;
   progress: number; // 0..1
 
-  // from API (optional but expected)
+  // from API
   current_lat: number | null;
   current_lon: number | null;
 
+  // ✅ NEW from API
+  current_over_text?: string | null;
+  bird?: "pigeon" | "snipe" | "goose";
+
   sent_utc_text: string;
   eta_utc_text: string;
+
+  // ✅ dashboard should prefer this (sleep/bird-aware eta)
   eta_utc_iso: string | null;
 
-  // ✅ NEW (from /api/dashboard/letters)
   badges_count?: number;
 };
 
@@ -146,34 +150,13 @@ function RouteThumb(props: {
           strokeLinecap="round"
         />
 
-        {/* origin: filled dot */}
         <circle cx={pts.o.x} cy={pts.o.y} r="4.5" fill="currentColor" />
+        <circle cx={pts.d.x} cy={pts.d.y} r="6.2" fill="none" stroke="currentColor" strokeWidth="2.2" opacity="0.95" />
 
-        {/* destination: hollow ring */}
-        <circle
-          cx={pts.d.x}
-          cy={pts.d.y}
-          r="6.2"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          opacity="0.95"
-        />
-
-        {/* current: dot + pulse ring */}
         {pts.c && (
           <>
             <circle cx={pts.c.x} cy={pts.c.y} r="4.6" fill="currentColor" />
-            <circle
-              className="thumbPulse"
-              cx={pts.c.x}
-              cy={pts.c.y}
-              r="11"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              opacity="0.35"
-            />
+            <circle className="thumbPulse" cx={pts.c.x} cy={pts.c.y} r="11" fill="none" stroke="currentColor" strokeWidth="2.2" opacity="0.35" />
           </>
         )}
       </svg>
@@ -196,23 +179,18 @@ export default function DashboardPage() {
   const [sort, setSort] = useState<Sort>("newest");
 
   const [toast, setToast] = useState<string | null>(null);
-
-  // ✅ archive UX state
   const [archivingId, setArchivingId] = useState<string | null>(null);
 
-  // tick so countdowns animate
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // load saved email (once)
   useEffect(() => {
     const saved = localStorage.getItem("cp_sender_email");
     if (saved) setEmail(saved);
   }, []);
 
-  // auto-load once if saved email is valid
   useEffect(() => {
     const saved = localStorage.getItem("cp_sender_email");
     if (saved && emailLooksValid(saved)) {
@@ -221,7 +199,6 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // toast auto-clear
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 1400);
@@ -243,10 +220,9 @@ export default function DashboardPage() {
     try {
       localStorage.setItem("cp_sender_email", e);
 
-      const res = await fetch(
-        `/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(qs)}`,
-        { cache: "no-store" }
-      );
+      const res = await fetch(`/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(qs)}`, {
+        cache: "no-store",
+      });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to load");
@@ -260,9 +236,8 @@ export default function DashboardPage() {
     }
   }
 
-  // ✅ Archive (soft delete)
   async function archiveLetter(letter: DashboardLetter) {
-    if (archivingId) return; // prevent double-clicks / overlapping archives
+    if (archivingId) return;
 
     const ok = window.confirm(
       `Archive this letter?\n\n"${letter.subject?.trim() ? letter.subject : "(No subject)"}"\n\nThis hides it from your dashboard but keeps the public link working.`
@@ -271,10 +246,7 @@ export default function DashboardPage() {
 
     setArchivingId(letter.id);
 
-    // snapshot for rollback
     const prevSnapshot = letters;
-
-    // optimistic remove
     setLetters((cur) => cur.filter((x) => x.id !== letter.id));
 
     try {
@@ -287,9 +259,8 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error(data?.error ?? "Archive failed");
 
       setToast("Archived ✅");
-      void load(); // refresh so counts/stats stay honest
+      void load();
     } catch (err: any) {
-      // rollback
       setLetters(prevSnapshot);
       setToast("Archive failed ❌");
       console.error("ARCHIVE ERROR:", err);
@@ -313,12 +284,13 @@ export default function DashboardPage() {
     list.sort((a, b) => {
       const aSent = Date.parse(a.sent_at);
       const bSent = Date.parse(b.sent_at);
-      const aEta = Date.parse(a.eta_at);
-      const bEta = Date.parse(b.eta_at);
+
+      const aEta = Date.parse(a.eta_utc_iso || a.eta_at);
+      const bEta = Date.parse(b.eta_utc_iso || b.eta_at);
 
       if (sort === "etaSoonest") return aEta - bEta;
       if (sort === "oldest") return aSent - bSent;
-      return bSent - aSent; // newest
+      return bSent - aSent;
     });
 
     return list;
@@ -334,7 +306,6 @@ export default function DashboardPage() {
   return (
     <main className="pageBg">
       <div className="wrap">
-        {/* header */}
         <div className="card">
           <div className="cardHead">
             <div>
@@ -393,7 +364,6 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* lookup */}
         <div className="card" style={{ marginTop: 14 }}>
           <div className="cardHead" style={{ marginBottom: 10 }}>
             <div>
@@ -420,13 +390,7 @@ export default function DashboardPage() {
 
             <label className="field">
               <span className="fieldLabel">Search</span>
-              <input
-                className="input"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                onKeyDown={onLookupKeyDown}
-                placeholder="subject, recipient, city, token…"
-              />
+              <input className="input" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onLookupKeyDown} placeholder="subject, recipient, city, token…" />
             </label>
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
@@ -454,36 +418,32 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* toast */}
         {toast && (
           <div className="dashToast" role="status" aria-live="polite">
             {toast}
           </div>
         )}
 
-        {/* list */}
         <div style={{ marginTop: 14 }} className="stack">
           {filteredSorted.length === 0 && !loading ? (
             <div className="card">
               <div className="muted">
-                {letters.length === 0
-                  ? "No letters loaded yet. Enter your sender email and hit “Load letters”."
-                  : "No letters match your filter/search."}
+                {letters.length === 0 ? "No letters loaded yet. Enter your sender email and hit “Load letters”." : "No letters match your filter/search."}
               </div>
             </div>
           ) : (
             filteredSorted.map((l) => {
               const pct = Math.round(clamp01(l.progress ?? 0) * 100);
 
-              const etaMs = new Date(l.eta_at).getTime() - now.getTime();
+              const etaIsoForCountdown = l.eta_utc_iso || l.eta_at;
+              const etaMs = new Date(etaIsoForCountdown).getTime() - now.getTime();
               const countdown = formatCountdown(etaMs);
 
               const statusLabel = l.delivered ? "Delivered" : "In Flight";
               const statusEmoji = l.delivered ? "✅" : "🕊️";
 
               const statusPath = `/l/${l.public_token}`;
-              const statusUrl =
-                typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
+              const statusUrl = typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
 
               const canThumb =
                 Number.isFinite(l.origin_lat) &&
@@ -494,33 +454,19 @@ export default function DashboardPage() {
               const current =
                 l.current_lat != null && l.current_lon != null ? { lat: l.current_lat, lon: l.current_lon } : null;
 
-              const geoPoint =
-                current ??
-                (Number.isFinite(l.origin_lat) &&
-                Number.isFinite(l.origin_lon) &&
-                Number.isFinite(l.dest_lat) &&
-                Number.isFinite(l.dest_lon)
-                  ? {
-                      lat: l.origin_lat + (l.dest_lat - l.origin_lat) * clamp01(l.progress ?? 0),
-                      lon: l.origin_lon + (l.dest_lon - l.origin_lon) * clamp01(l.progress ?? 0),
-                    }
-                  : null);
-
+              // ✅ Trust server label (matches status page logic)
               const geoText = l.delivered
                 ? "Delivered"
-                : geoPoint
-                ? checkpointGeoText(geoPoint.lat, geoPoint.lon)
-                : "somewhere over the U.S.";
+                : (l.current_over_text && l.current_over_text.trim()) || "somewhere over the U.S.";
 
               const sentUtc = (l.sent_utc_text && l.sent_utc_text.trim()) || formatUtcFallback(l.sent_at);
-              const etaUtc = (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(l.eta_at);
+              const etaUtc = (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(etaIsoForCountdown);
 
               const badgeCount = Math.max(0, Number(l.badges_count ?? 0));
               const isArchivingThis = archivingId === l.id;
 
               return (
                 <div key={l.id} className="card">
-                  {/* Top row: title + route thumb */}
                   <div className="dashRowTop" style={{ marginBottom: 10 }}>
                     <div className="dashRowMain">
                       <div className="kicker">Letter</div>
@@ -546,16 +492,7 @@ export default function DashboardPage() {
                     ) : null}
                   </div>
 
-                  {/* Status + actions row */}
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                      justifyContent: "flex-end",
-                    }}
-                  >
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                     <div className="metaPill">
                       {statusEmoji} <strong>{statusLabel}</strong>
                     </div>
@@ -577,7 +514,6 @@ export default function DashboardPage() {
                       Copy link
                     </button>
 
-                    {/* ✅ ARCHIVE */}
                     <button
                       type="button"
                       className="btnGhost"
@@ -589,13 +525,11 @@ export default function DashboardPage() {
                     </button>
                   </div>
 
-                  {/* time row */}
                   <div className="muted" style={{ marginTop: 10 }}>
                     Sent (UTC): {sentUtc} • <strong>ETA (UTC):</strong> {etaUtc}
                     {!l.delivered && <> • (T-minus {countdown})</>}
                   </div>
 
-                  {/* progress */}
                   <div style={{ marginTop: 12 }}>
                     <div className="bar">
                       <div className="barFill" style={{ width: `${pct}%` }} />
