@@ -240,30 +240,6 @@ function formatUtc(iso: string) {
   }).format(d);
 }
 
-/* -------------------------------------------------
-   Bird detection (snipe ignores sleep)
-------------------------------------------------- */
-
-type BirdType = "pigeon" | "snipe" | "goose";
-
-function normalizeBird(raw: any): BirdType | null {
-  const b = String(raw || "").toLowerCase();
-  if (b === "snipe" || b === "pigeon" || b === "goose") return b;
-  return null;
-}
-
-function inferBirdFromSpeed(speedKmh: any): BirdType {
-  const sp = Number(speedKmh);
-  // You can tune these thresholds any time
-  if (Number.isFinite(sp) && sp >= 80) return "snipe";
-  if (Number.isFinite(sp) && sp <= 60) return "goose";
-  return "pigeon";
-}
-
-/* -------------------------------------------------
-   Badges
-------------------------------------------------- */
-
 type LetterItemInsert = {
   letter_id: string;
   kind: "badge" | "addon";
@@ -380,10 +356,6 @@ function computeBadgesFromRegions(args: {
   return out.filter((b) => (seen.has(b.code) ? false : (seen.add(b.code), true)));
 }
 
-/* -------------------------------------------------
-   Handler
-------------------------------------------------- */
-
 export async function GET(_req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
 
@@ -419,6 +391,19 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     return NextResponse.json({ error: metaErr?.message ?? "Not found" }, { status: 404 });
   }
 
+  // ✅ Bird behavior (simple + future-proof)
+  const rawBird = String((meta as any).bird || "pigeon").toLowerCase();
+  const bird: "pigeon" | "snipe" | "goose" =
+    rawBird === "snipe" || rawBird === "goose" ? rawBird : "pigeon";
+
+  const BIRD_RULES = {
+    pigeon: { ignoresSleep: false },
+    goose: { ignoresSleep: false },
+    snipe: { ignoresSleep: true }, // ✅ the whole point
+  } as const;
+
+  const ignoresSleep = BIRD_RULES[bird].ignoresSleep;
+
   // ✅ archived handling (freeze time)
   const archived_at = meta.archived_at ?? null;
   const archivedAtMs = archived_at ? Date.parse(archived_at) : NaN;
@@ -444,19 +429,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
 
   const sentMs = Date.parse(meta.sent_at);
 
-  // ✅ Determine bird
-  const bird: BirdType = normalizeBird((meta as any).bird) ?? inferBirdFromSpeed(meta.speed_kmh);
-  const ignoresSleep = bird === "snipe"; // ✅ Great Snipe: no sleep ever
-
-  // ✅ Sleep-aware flight math (unless Snipe)
+  // ✅ Flight math
   const offsetMin = offsetMinutesFromLon(meta.origin_lon);
 
   const requiredAwakeMs =
     meta.speed_kmh > 0 ? (meta.distance_km / meta.speed_kmh) * 3600_000 : 0;
 
-  // ETA adjusted:
-  // - Snipe: sent + requiredAwakeMs (pure 24/7)
-  // - Others: use sleep-aware ETA
+  // ✅ ETA adjusted:
+  // - if ignoresSleep => straight line
+  // - else => sleep-aware
   const etaAdjustedMs =
     Number.isFinite(sentMs) && requiredAwakeMs > 0
       ? ignoresSleep
@@ -466,31 +447,34 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
 
   const delivered = Number.isFinite(etaAdjustedMs) ? nowMs >= etaAdjustedMs : true;
 
-  // Progress:
-  // - Snipe: linear by real time
-  // - Others: awake time only
+  // ✅ Progress:
+  // - snipe => elapsed time / requiredAwake
+  // - others => awake time / requiredAwake
   const awakeSoFar =
     Number.isFinite(sentMs) && nowMs > sentMs
       ? ignoresSleep
-        ? Math.max(0, Math.min(nowMs - sentMs, requiredAwakeMs))
+        ? Math.min(nowMs, etaAdjustedMs) - sentMs
         : awakeMsBetween(sentMs, Math.min(nowMs, etaAdjustedMs), offsetMin)
       : 0;
 
   const progress = requiredAwakeMs > 0 ? clamp(awakeSoFar / requiredAwakeMs, 0, 1) : 1;
 
-  // Sleeping state:
-  // - Snipe: never sleeping
-  // - Archived: stable snapshot, no sleeping animation
-  // - Others: normal
+  // ✅ Sleeping state:
+  // - archived => false (already your rule)
+  // - ignoresSleep => false
   const sleeping = archived ? false : ignoresSleep ? false : isSleepingAt(nowMs, offsetMin);
-  const wakeMs = archived ? null : sleeping ? nextWakeUtcMs(nowMs, offsetMin) : null;
+  const wakeMs = archived ? null : ignoresSleep ? null : nextWakeUtcMs(nowMs, offsetMin);
   const sleep_until_iso = wakeMs ? new Date(wakeMs).toISOString() : null;
   const sleep_local_text = wakeMs ? sleepUntilLocalText(wakeMs, offsetMin) : "";
 
   // Only fetch body AFTER delivery
   let body: string | null = null;
   if (delivered) {
-    const { data: bodyRow } = await supabaseServer.from("letters").select("body").eq("id", meta.id).single();
+    const { data: bodyRow } = await supabaseServer
+      .from("letters")
+      .select("body")
+      .eq("id", meta.id)
+      .single();
     body = bodyRow?.body ?? null;
   }
 
@@ -509,7 +493,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
         ? geoRegionForPoint(cp.lat, cp.lon)
         : null;
 
-    const upgradedName = isFirst ? `Departed roost — ${geo}` : isLast ? `Final descent — ${geo}` : geo;
+    const upgradedName = isFirst
+      ? `Departed roost — ${geo}`
+      : isLast
+      ? `Final descent — ${geo}`
+      : geo;
 
     return {
       ...cp,
@@ -522,14 +510,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   });
 
   // ✅ Inject sleep events:
-  // - never for archived (timeline should be stable)
-  // - never for Snipe (it ignores sleep)
+  // - never for archived
+  // - never for birds that ignore sleep (snipe)
   const sleepEvents =
     !archived && !ignoresSleep && Number.isFinite(sentMs)
       ? buildSleepEvents({ sentMs, nowMs, offsetMin })
       : [];
 
-  const cps = [...cpsBase, ...sleepEvents].sort((a: any, b: any) => Date.parse(a.at) - Date.parse(b.at));
+  const cps = [...cpsBase, ...sleepEvents].sort(
+    (a: any, b: any) => Date.parse(a.at) - Date.parse(b.at)
+  );
 
   // ✅ current_over_text (geo only) for map/tooltips
   let current_over_text = delivered ? "Delivered" : "somewhere over the U.S.";
@@ -619,7 +609,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const badges = (items ?? []).filter((x: any) => x.kind === "badge");
   const addons = (items ?? []).filter((x: any) => x.kind === "addon");
 
-  const etaAdjustedISO = Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : meta.eta_at;
+  const etaAdjustedISO =
+    Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : meta.eta_at;
 
   return NextResponse.json({
     archived,
@@ -630,10 +621,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
 
     letter: {
       ...meta,
+      bird, // ✅ include bird in payload (handy for UI later)
       body,
-
-      // ✅ keep sending bird back if present
-      bird: (meta as any).bird ?? null,
 
       eta_at_adjusted: etaAdjustedISO,
       eta_utc_text: formatUtc(etaAdjustedISO),
