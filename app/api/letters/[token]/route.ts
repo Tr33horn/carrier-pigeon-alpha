@@ -99,7 +99,16 @@ function awakeMsBetween(startUtcMs: number, endUtcMs: number, offsetMin: number,
   return awake;
 }
 
-function etaFromRequiredAwakeMs(sentUtcMs: number, requiredAwakeMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
+/**
+ * Returns UTC ms when requiredAwakeMs of "awake time" has elapsed.
+ * ✅ FIX: if we hit the guard and haven't finished, fall back to baseline (no-sleep ETA).
+ */
+function etaFromRequiredAwakeMs(
+  sentUtcMs: number,
+  requiredAwakeMs: number,
+  offsetMin: number,
+  cfg: SleepConfig = SLEEP
+) {
   let t = sentUtcMs;
   let remaining = requiredAwakeMs;
 
@@ -120,7 +129,49 @@ function etaFromRequiredAwakeMs(sentUtcMs: number, requiredAwakeMs: number, offs
     t += chunk;
   }
 
+  // ✅ If we somehow didn't finish, don't time travel
+  if (remaining > 0) {
+    return sentUtcMs + requiredAwakeMs;
+  }
+
   return t;
+}
+
+/**
+ * ✅ Hard safety wrapper: clamps adjusted ETA to sane bounds
+ */
+function safeAdjustedEtaMs(args: {
+  sentMs: number;
+  requiredAwakeMs: number;
+  offsetMin: number;
+  ignoresSleep: boolean;
+  etaAtIso?: string | null;
+}) {
+  const { sentMs, requiredAwakeMs, offsetMin, ignoresSleep, etaAtIso } = args;
+
+  const etaDbMs = etaAtIso ? Date.parse(etaAtIso) : NaN;
+
+  if (!Number.isFinite(sentMs) || requiredAwakeMs <= 0) {
+    return Number.isFinite(etaDbMs) ? etaDbMs : sentMs;
+  }
+
+  const baselineMs = sentMs + requiredAwakeMs;
+
+  let adjustedMs = ignoresSleep
+    ? baselineMs
+    : etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin);
+
+  // Allow up to +7 days extra for sleeping (generous)
+  const maxAllowed = baselineMs + 7 * 24 * 3600_000;
+  const minAllowed = sentMs;
+
+  if (!Number.isFinite(adjustedMs) || adjustedMs < minAllowed || adjustedMs > maxAllowed) {
+    // Prefer DB ETA if it's sane, otherwise baseline
+    if (Number.isFinite(etaDbMs) && etaDbMs >= minAllowed && etaDbMs <= maxAllowed) return etaDbMs;
+    return baselineMs;
+  }
+
+  return adjustedMs;
 }
 
 function nextWakeUtcMs(nowUtcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
@@ -155,7 +206,7 @@ function buildSleepEvents(args: {
   sentMs: number;
   nowMs: number;
   offsetMin: number;
-  birdLabel?: string; // ✅ NEW (pigeon/goose wording)
+  birdLabel?: string;
   cfg?: SleepConfig;
 }) {
   const { sentMs, nowMs, offsetMin } = args;
@@ -442,12 +493,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
 
   const requiredAwakeMs = meta.speed_kmh > 0 ? (meta.distance_km / meta.speed_kmh) * 3600_000 : 0;
 
-  const etaAdjustedMs =
-    Number.isFinite(sentMs) && requiredAwakeMs > 0
-      ? ignoresSleep
-        ? sentMs + requiredAwakeMs
-        : etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin)
-      : Date.parse(meta.eta_at);
+  // ✅ SAFE adjusted ETA (prevents year 2162)
+  const etaAdjustedMs = safeAdjustedEtaMs({
+    sentMs,
+    requiredAwakeMs,
+    offsetMin,
+    ignoresSleep,
+    etaAtIso: meta.eta_at,
+  });
 
   const delivered = Number.isFinite(etaAdjustedMs) ? nowMs >= etaAdjustedMs : true;
 
@@ -534,10 +587,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const pastRegionIds = past.map((cp: any) => cp.region_id).filter(Boolean) as string[];
 
   const originRegion =
-    Number.isFinite(meta.origin_lat) && Number.isFinite(meta.origin_lon) ? geoRegionForPoint(meta.origin_lat, meta.origin_lon) : null;
+    Number.isFinite(meta.origin_lat) && Number.isFinite(meta.origin_lon)
+      ? geoRegionForPoint(meta.origin_lat, meta.origin_lon)
+      : null;
 
   const destRegion =
-    Number.isFinite(meta.dest_lat) && Number.isFinite(meta.dest_lon) ? geoRegionForPoint(meta.dest_lat, meta.dest_lon) : null;
+    Number.isFinite(meta.dest_lat) && Number.isFinite(meta.dest_lon)
+      ? geoRegionForPoint(meta.dest_lat, meta.dest_lon)
+      : null;
 
   const deliveredAtISO =
     delivered && Number.isFinite(etaAdjustedMs)
@@ -569,7 +626,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
       meta: b.meta ?? {},
     }));
 
-    const { error: upsertErr } = await supabaseServer.from("letter_items").upsert(rows, { onConflict: "letter_id,kind,code" });
+    const { error: upsertErr } = await supabaseServer
+      .from("letter_items")
+      .upsert(rows, { onConflict: "letter_id,kind,code" });
     if (upsertErr) console.error("BADGE UPSERT ERROR:", upsertErr);
   }
 

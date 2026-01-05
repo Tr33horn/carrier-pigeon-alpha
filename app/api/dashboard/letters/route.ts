@@ -24,6 +24,12 @@ function formatUTC(iso: string) {
   }).format(d);
 }
 
+function safeParseMs(iso: unknown): number | null {
+  if (typeof iso !== "string" || !iso.trim()) return null;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : null;
+}
+
 /* -------------------------------------------------
    Sleep / flight realism helpers (same as status API)
 ------------------------------------------------- */
@@ -126,6 +132,11 @@ function etaFromRequiredAwakeMs(sentUtcMs: number, requiredAwakeMs: number, offs
     const sleeping = isSleepingAt(t, offsetMin, cfg);
     const next = nextBoundaryUtcMs(t, offsetMin, cfg);
 
+    // Safety: if the boundary calc ever fails and doesn't advance, bail to linear ETA.
+    if (!Number.isFinite(next) || next <= t) {
+      return sentUtcMs + requiredAwakeMs;
+    }
+
     if (sleeping) {
       t = next;
       continue;
@@ -135,6 +146,9 @@ function etaFromRequiredAwakeMs(sentUtcMs: number, requiredAwakeMs: number, offs
     remaining -= chunk;
     t += chunk;
   }
+
+  // If we hit guard limit for any reason, fall back to linear ETA.
+  if (remaining > 0) return sentUtcMs + requiredAwakeMs;
 
   return t;
 }
@@ -167,7 +181,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
   }
 
-  // Pull letters (exclude archived)
   const { data, error } = await supabaseServer
     .from("letters")
     .select(
@@ -205,9 +218,8 @@ export async function GET(req: Request) {
   }
 
   const nowMs = Date.now();
-  let letters = (data ?? []);
+  let letters = data ?? [];
 
-  // Optional server-side search filter
   if (q) {
     letters = letters.filter((l: any) => {
       const hay = [l.subject, l.to_name, l.to_email, l.origin_name, l.dest_name, l.public_token]
@@ -218,12 +230,9 @@ export async function GET(req: Request) {
     });
   }
 
-  // Only query checkpoints for the filtered set
   const letterIds = letters.map((l: any) => l.id).filter(Boolean);
 
-  // Batch fetch checkpoints for these letters (single query, no N+1)
   const checkpointsByLetter = new Map<string, any[]>();
-
   if (letterIds.length) {
     const { data: cps, error: cpErr } = await supabaseServer
       .from("letter_checkpoints")
@@ -242,39 +251,54 @@ export async function GET(req: Request) {
     }
   }
 
-  // Map into dashboard payload
   let out = letters.map((l: any) => {
-    const sentMs = Date.parse(l.sent_at);
-    const originLon = Number(l.origin_lon);
-
     const bird = normalizeBird(l.bird);
     const ignoresSleep = BIRD_RULES[bird].ignoresSleep;
 
+    const sentMs = safeParseMs(l.sent_at);
+    const etaStoredMs = safeParseMs(l.eta_at);
+
+    const originLon = Number(l.origin_lon);
     const offsetMin = offsetMinutesFromLon(originLon);
 
-    const requiredAwakeMs =
-      Number(l.speed_kmh) > 0 ? (Number(l.distance_km) / Number(l.speed_kmh)) * 3600_000 : 0;
+    const distanceKm = Number(l.distance_km);
+    const speedKmh = Number(l.speed_kmh);
 
-    const etaAdjustedMs =
-      Number.isFinite(sentMs) && requiredAwakeMs > 0
-        ? ignoresSleep
-          ? sentMs + requiredAwakeMs
-          : etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin)
-        : Date.parse(l.eta_at);
+    const hasFlightInputs =
+      sentMs != null &&
+      Number.isFinite(distanceKm) &&
+      distanceKm > 0 &&
+      Number.isFinite(speedKmh) &&
+      speedKmh > 0;
 
-    const delivered = Number.isFinite(etaAdjustedMs) ? nowMs >= etaAdjustedMs : true;
+    const requiredAwakeMs = hasFlightInputs ? (distanceKm / speedKmh) * 3600_000 : 0;
 
-    // progress should match status page logic
-    const traveledMs =
-      Number.isFinite(sentMs) && nowMs > sentMs
-        ? ignoresSleep
-          ? Math.min(nowMs, etaAdjustedMs) - sentMs
-          : awakeMsBetween(sentMs, Math.min(nowMs, etaAdjustedMs), offsetMin)
-        : 0;
+    // ✅ Compute adjusted ETA if we safely can; otherwise fall back to stored eta_at.
+    let etaAdjustedMs: number | null = null;
+    if (sentMs != null && requiredAwakeMs > 0) {
+      etaAdjustedMs = ignoresSleep ? sentMs + requiredAwakeMs : etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin);
+    } else if (etaStoredMs != null) {
+      etaAdjustedMs = etaStoredMs;
+    }
 
-    const progress = requiredAwakeMs > 0 ? clamp(traveledMs / requiredAwakeMs, 0, 1) : 1;
+    // ✅ Last-resort fallback: "deliver now" if we have neither.
+    if (etaAdjustedMs == null) etaAdjustedMs = nowMs;
 
-    // Current label: last checkpoint whose time has passed (time-based, not progress-based)
+    const delivered = nowMs >= etaAdjustedMs;
+
+    // ✅ sleeping flag for dashboard
+    const sleeping = !delivered && !ignoresSleep ? isSleepingAt(nowMs, offsetMin) : false;
+
+    // ✅ progress (sleep-aware), with safe fallbacks
+    let traveledMs = 0;
+    if (sentMs != null && nowMs > sentMs && requiredAwakeMs > 0) {
+      traveledMs = ignoresSleep
+        ? Math.min(nowMs, etaAdjustedMs) - sentMs
+        : awakeMsBetween(sentMs, Math.min(nowMs, etaAdjustedMs), offsetMin);
+    }
+    const progress = requiredAwakeMs > 0 ? clamp(traveledMs / requiredAwakeMs, 0, 1) : delivered ? 1 : 0;
+
+    // Current label: last checkpoint whose time has passed
     const cps = checkpointsByLetter.get(l.id) ?? [];
     let current_over_text = delivered ? "Delivered" : "somewhere over the U.S.";
 
@@ -283,8 +307,8 @@ export async function GET(req: Request) {
       let bestT = -Infinity;
 
       for (const cp of cps) {
-        const t = Date.parse(cp.at);
-        if (Number.isFinite(t) && t <= nowMs && t >= bestT) {
+        const t = safeParseMs(cp.at);
+        if (t != null && t <= nowMs && t >= bestT) {
           bestT = t;
           best = cp;
         }
@@ -295,7 +319,7 @@ export async function GET(req: Request) {
       }
     }
 
-    // Keep "current coords" for the thumb only (progress-based)
+    // thumb coords: progress-based
     const curLat =
       Number.isFinite(l.origin_lat) && Number.isFinite(l.dest_lat)
         ? l.origin_lat + (l.dest_lat - l.origin_lat) * progress
@@ -306,17 +330,17 @@ export async function GET(req: Request) {
         ? l.origin_lon + (l.dest_lon - l.origin_lon) * progress
         : null;
 
-    const etaAdjustedISO = Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : l.eta_at;
+    const etaAdjustedISO = new Date(etaAdjustedMs).toISOString();
 
     return {
       ...l,
       bird,
       delivered,
+      sleeping,
       progress,
       current_lat: curLat,
       current_lon: curLon,
 
-      // ✅ dashboard should trust this text instead of recomputing
       current_over_text,
 
       sent_utc_text: l.sent_at ? `${formatUTC(l.sent_at)} UTC` : "",

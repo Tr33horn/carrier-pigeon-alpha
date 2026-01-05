@@ -28,7 +28,6 @@ type DashboardLetter = {
   delivered: boolean;
   progress: number; // 0..1
 
-  // from API
   current_lat: number | null;
   current_lon: number | null;
 
@@ -57,12 +56,23 @@ function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
 }
 
-function formatCountdown(ms: number) {
+function parseMs(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : null;
+}
+
+function formatCountdown(ms: number | null) {
+  if (ms == null) return "—";
   if (ms <= 0) return "Delivered";
+
   const totalSec = Math.floor(ms / 1000);
+  if (!Number.isFinite(totalSec) || totalSec < 0) return "—";
+
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
+
   const pad = (x: number) => String(x).padStart(2, "0");
   return `${h}:${pad(m)}:${pad(s)}`;
 }
@@ -302,17 +312,16 @@ export default function DashboardPage() {
   const filteredSorted = useMemo(() => {
     let list = [...letters];
 
-    // ✅ Filter “inflight” is anything not delivered (sleeping still counts)
     if (filter === "inflight") list = list.filter((l) => !l.delivered);
     if (filter === "delivered") list = list.filter((l) => l.delivered);
 
     list.sort((a, b) => {
-      const aSent = Date.parse(a.sent_at);
-      const bSent = Date.parse(b.sent_at);
+      const aSent = parseMs(a.sent_at) ?? 0;
+      const bSent = parseMs(b.sent_at) ?? 0;
 
-      // ✅ Prefer sleep/bird-aware ETA (eta_utc_iso) when sorting
-      const aEta = Date.parse(a.eta_utc_iso || a.eta_at);
-      const bEta = Date.parse(b.eta_utc_iso || b.eta_at);
+      // ✅ Prefer sleep/bird-aware ETA when available; fall back to eta_at
+      const aEta = parseMs(a.eta_utc_iso) ?? parseMs(a.eta_at) ?? Number.MAX_SAFE_INTEGER;
+      const bEta = parseMs(b.eta_utc_iso) ?? parseMs(b.eta_at) ?? Number.MAX_SAFE_INTEGER;
 
       if (sort === "etaSoonest") return aEta - bEta;
       if (sort === "oldest") return aSent - bSent;
@@ -348,15 +357,7 @@ export default function DashboardPage() {
           </div>
 
           {letters.length > 0 && (
-            <div
-              style={{
-                marginTop: 12,
-                display: "flex",
-                gap: 8,
-                flexWrap: "wrap",
-                alignItems: "center",
-              }}
-            >
+            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <div className="metaPill">
                 Total: <strong>{stats.total}</strong>
               </div>
@@ -371,11 +372,7 @@ export default function DashboardPage() {
 
               <div className="metaPill" style={{ gap: 10 }}>
                 <span style={{ opacity: 0.7 }}>Filter</span>
-                <select
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value as Filter)}
-                  className="dashSelect"
-                >
+                <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)} className="dashSelect">
                   <option value="all">All</option>
                   <option value="inflight">In flight</option>
                   <option value="delivered">Delivered</option>
@@ -384,11 +381,7 @@ export default function DashboardPage() {
 
               <div className="metaPill" style={{ gap: 10 }}>
                 <span style={{ opacity: 0.7 }}>Sort</span>
-                <select
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value as Sort)}
-                  className="dashSelect"
-                >
+                <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="dashSelect">
                   <option value="newest">Newest</option>
                   <option value="etaSoonest">ETA soonest</option>
                   <option value="oldest">Oldest</option>
@@ -477,12 +470,11 @@ export default function DashboardPage() {
             filteredSorted.map((l) => {
               const pct = Math.round(clamp01(l.progress ?? 0) * 100);
 
-              // ✅ Countdown uses sleep/bird-aware ETA when available
-              const etaIsoForCountdown = l.eta_utc_iso || l.eta_at;
-              const etaMs = new Date(etaIsoForCountdown).getTime() - now.getTime();
-              const countdown = formatCountdown(etaMs);
+              const etaIsoResolved = l.eta_utc_iso || l.eta_at;
+              const etaAbsMs = parseMs(etaIsoResolved);
+              const msLeft = etaAbsMs == null ? null : etaAbsMs - now.getTime();
+              const countdown = formatCountdown(msLeft);
 
-              // ✅ Granular status pill: Delivered / Sleeping / In Flight
               const isSleeping = !!l.sleeping && !l.delivered;
               const statusLabel = l.delivered ? "Delivered" : isSleeping ? "Sleeping" : "In Flight";
               const statusEmoji = l.delivered ? "✅" : isSleeping ? "😴" : "🕊️";
@@ -502,18 +494,16 @@ export default function DashboardPage() {
                   ? { lat: l.current_lat, lon: l.current_lon }
                   : null;
 
-              // ✅ Trust server label (matches status page logic)
               const geoText = l.delivered
                 ? "Delivered"
                 : (l.current_over_text && l.current_over_text.trim()) || "somewhere over the U.S.";
 
               const sentUtc = (l.sent_utc_text && l.sent_utc_text.trim()) || formatUtcFallback(l.sent_at);
-              const etaUtc = (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(etaIsoForCountdown);
+              const etaUtc = (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(etaIsoResolved);
 
               const badgeCount = Math.max(0, Number(l.badges_count ?? 0));
               const isArchivingThis = archivingId === l.id;
 
-              // tiny bird label (optional, subtle)
               const birdLabel =
                 l.bird === "snipe" ? "Snipe" : l.bird === "goose" ? "Goose" : l.bird === "pigeon" ? "Pigeon" : null;
 
