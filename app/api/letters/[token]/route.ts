@@ -149,11 +149,18 @@ function stripOverPrefix(s: string) {
 }
 
 /**
- * Create “Pigeon slept …” events as synthetic checkpoints
+ * Create “<Bird> slept …” events as synthetic checkpoints
  */
-function buildSleepEvents(args: { sentMs: number; nowMs: number; offsetMin: number; cfg?: SleepConfig }) {
+function buildSleepEvents(args: {
+  sentMs: number;
+  nowMs: number;
+  offsetMin: number;
+  birdLabel?: string; // ✅ NEW (pigeon/goose wording)
+  cfg?: SleepConfig;
+}) {
   const { sentMs, nowMs, offsetMin } = args;
   const cfg = args.cfg ?? SLEEP;
+  const birdLabel = (args.birdLabel || "Pigeon").trim() || "Pigeon";
 
   if (!Number.isFinite(sentMs) || !Number.isFinite(nowMs) || nowMs <= sentMs) return [];
 
@@ -181,7 +188,9 @@ function buildSleepEvents(args: { sentMs: number; nowMs: number; offsetMin: numb
     const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
 
     const sleepStartLocal = Date.UTC(y, m, d, cfg.sleepStartHour, 0, 0, 0);
-    const sleepEndLocal = wraps ? Date.UTC(y, m, d + 1, cfg.sleepEndHour, 0, 0, 0) : Date.UTC(y, m, d, cfg.sleepEndHour, 0, 0, 0);
+    const sleepEndLocal = wraps
+      ? Date.UTC(y, m, d + 1, cfg.sleepEndHour, 0, 0, 0)
+      : Date.UTC(y, m, d, cfg.sleepEndHour, 0, 0, 0);
 
     const sleepStartUtc = toUtcMs(sleepStartLocal, offsetMin);
     const sleepEndUtc = toUtcMs(sleepEndLocal, offsetMin);
@@ -202,7 +211,7 @@ function buildSleepEvents(args: { sentMs: number; nowMs: number; offsetMin: numb
           geo_text: "Sleeping",
           region_id: null,
           region_label: null,
-          name: `Pigeon slept — wakes at ${wakeText}`,
+          name: `${birdLabel} slept — wakes at ${wakeText}`,
           _sleep_meta: {
             sleep_start_utc: new Date(sleepStartUtc).toISOString(),
             sleep_end_utc: new Date(sleepEndUtc).toISOString(),
@@ -391,15 +400,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     return NextResponse.json({ error: metaErr?.message ?? "Not found" }, { status: 404 });
   }
 
-  // ✅ Bird behavior (simple + future-proof)
+  // ✅ Bird behavior
   const rawBird = String((meta as any).bird || "pigeon").toLowerCase();
-  const bird: "pigeon" | "snipe" | "goose" =
-    rawBird === "snipe" || rawBird === "goose" ? rawBird : "pigeon";
+  const bird: "pigeon" | "snipe" | "goose" = rawBird === "snipe" || rawBird === "goose" ? rawBird : "pigeon";
 
   const BIRD_RULES = {
-    pigeon: { ignoresSleep: false },
-    goose: { ignoresSleep: false },
-    snipe: { ignoresSleep: true }, // ✅ the whole point
+    pigeon: { ignoresSleep: false, sleepLabel: "Pigeon" },
+    goose: { ignoresSleep: false, sleepLabel: "Goose" },
+    snipe: { ignoresSleep: true, sleepLabel: "Snipe" },
   } as const;
 
   const ignoresSleep = BIRD_RULES[bird].ignoresSleep;
@@ -412,7 +420,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const realNowMs = Date.now();
   const nowMs = archived ? Math.min(realNowMs, archivedAtMs) : realNowMs;
 
-  // ✅ NEW: server snapshot time fields for client
+  // ✅ server snapshot time fields for client
   const server_now_iso = new Date(nowMs).toISOString();
   const server_now_utc_text = formatUtc(server_now_iso);
 
@@ -432,12 +440,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   // ✅ Flight math
   const offsetMin = offsetMinutesFromLon(meta.origin_lon);
 
-  const requiredAwakeMs =
-    meta.speed_kmh > 0 ? (meta.distance_km / meta.speed_kmh) * 3600_000 : 0;
+  const requiredAwakeMs = meta.speed_kmh > 0 ? (meta.distance_km / meta.speed_kmh) * 3600_000 : 0;
 
-  // ✅ ETA adjusted:
-  // - if ignoresSleep => straight line
-  // - else => sleep-aware
   const etaAdjustedMs =
     Number.isFinite(sentMs) && requiredAwakeMs > 0
       ? ignoresSleep
@@ -447,9 +451,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
 
   const delivered = Number.isFinite(etaAdjustedMs) ? nowMs >= etaAdjustedMs : true;
 
-  // ✅ Progress:
-  // - snipe => elapsed time / requiredAwake
-  // - others => awake time / requiredAwake
   const awakeSoFar =
     Number.isFinite(sentMs) && nowMs > sentMs
       ? ignoresSleep
@@ -459,9 +460,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
 
   const progress = requiredAwakeMs > 0 ? clamp(awakeSoFar / requiredAwakeMs, 0, 1) : 1;
 
-  // ✅ Sleeping state:
-  // - archived => false (already your rule)
-  // - ignoresSleep => false
   const sleeping = archived ? false : ignoresSleep ? false : isSleepingAt(nowMs, offsetMin);
   const wakeMs = archived ? null : ignoresSleep ? null : nextWakeUtcMs(nowMs, offsetMin);
   const sleep_until_iso = wakeMs ? new Date(wakeMs).toISOString() : null;
@@ -470,11 +468,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   // Only fetch body AFTER delivery
   let body: string | null = null;
   if (delivered) {
-    const { data: bodyRow } = await supabaseServer
-      .from("letters")
-      .select("body")
-      .eq("id", meta.id)
-      .single();
+    const { data: bodyRow } = await supabaseServer.from("letters").select("body").eq("id", meta.id).single();
     body = bodyRow?.body ?? null;
   }
 
@@ -484,20 +478,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     const isLast = i === arr.length - 1;
 
     const geo =
-      Number.isFinite(cp.lat) && Number.isFinite(cp.lon)
-        ? checkpointGeoText(cp.lat, cp.lon)
-        : "somewhere over the U.S.";
+      Number.isFinite(cp.lat) && Number.isFinite(cp.lon) ? checkpointGeoText(cp.lat, cp.lon) : "somewhere over the U.S.";
 
     const region =
-      Number.isFinite(cp.lat) && Number.isFinite(cp.lon)
-        ? geoRegionForPoint(cp.lat, cp.lon)
-        : null;
+      Number.isFinite(cp.lat) && Number.isFinite(cp.lon) ? geoRegionForPoint(cp.lat, cp.lon) : null;
 
-    const upgradedName = isFirst
-      ? `Departed roost — ${geo}`
-      : isLast
-      ? `Final descent — ${geo}`
-      : geo;
+    const upgradedName = isFirst ? `Departed roost — ${geo}` : isLast ? `Final descent — ${geo}` : geo;
 
     return {
       ...cp,
@@ -509,19 +495,18 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     };
   });
 
-  // ✅ Inject sleep events:
-  // - never for archived
-  // - never for birds that ignore sleep (snipe)
   const sleepEvents =
     !archived && !ignoresSleep && Number.isFinite(sentMs)
-      ? buildSleepEvents({ sentMs, nowMs, offsetMin })
+      ? buildSleepEvents({
+          sentMs,
+          nowMs,
+          offsetMin,
+          birdLabel: BIRD_RULES[bird].sleepLabel,
+        })
       : [];
 
-  const cps = [...cpsBase, ...sleepEvents].sort(
-    (a: any, b: any) => Date.parse(a.at) - Date.parse(b.at)
-  );
+  const cps = [...cpsBase, ...sleepEvents].sort((a: any, b: any) => Date.parse(a.at) - Date.parse(b.at));
 
-  // ✅ current_over_text (geo only) for map/tooltips
   let current_over_text = delivered ? "Delivered" : "somewhere over the U.S.";
   if (!delivered && cpsBase.length) {
     let cur = cpsBase[0];
@@ -533,7 +518,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
     current_over_text = cur?.geo_text || current_over_text;
   }
 
-  // ✅ Tooltip copy
   const geoBase = delivered ? "Delivered" : stripOverPrefix(current_over_text);
   const tooltip_text = delivered
     ? `Location: Delivered`
@@ -550,14 +534,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const pastRegionIds = past.map((cp: any) => cp.region_id).filter(Boolean) as string[];
 
   const originRegion =
-    Number.isFinite(meta.origin_lat) && Number.isFinite(meta.origin_lon)
-      ? geoRegionForPoint(meta.origin_lat, meta.origin_lon)
-      : null;
+    Number.isFinite(meta.origin_lat) && Number.isFinite(meta.origin_lon) ? geoRegionForPoint(meta.origin_lat, meta.origin_lon) : null;
 
   const destRegion =
-    Number.isFinite(meta.dest_lat) && Number.isFinite(meta.dest_lon)
-      ? geoRegionForPoint(meta.dest_lat, meta.dest_lon)
-      : null;
+    Number.isFinite(meta.dest_lat) && Number.isFinite(meta.dest_lon) ? geoRegionForPoint(meta.dest_lat, meta.dest_lon) : null;
 
   const deliveredAtISO =
     delivered && Number.isFinite(etaAdjustedMs)
@@ -589,10 +569,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
       meta: b.meta ?? {},
     }));
 
-    const { error: upsertErr } = await supabaseServer
-      .from("letter_items")
-      .upsert(rows, { onConflict: "letter_id,kind,code" });
-
+    const { error: upsertErr } = await supabaseServer.from("letter_items").upsert(rows, { onConflict: "letter_id,kind,code" });
     if (upsertErr) console.error("BADGE UPSERT ERROR:", upsertErr);
   }
 
@@ -609,8 +586,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const badges = (items ?? []).filter((x: any) => x.kind === "badge");
   const addons = (items ?? []).filter((x: any) => x.kind === "addon");
 
-  const etaAdjustedISO =
-    Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : meta.eta_at;
+  const etaAdjustedISO = Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : meta.eta_at;
 
   return NextResponse.json({
     archived,
@@ -621,7 +597,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
 
     letter: {
       ...meta,
-      bird, // ✅ include bird in payload (handy for UI later)
+      bird,
       body,
 
       eta_at_adjusted: etaAdjustedISO,
