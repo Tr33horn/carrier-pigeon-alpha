@@ -4,13 +4,20 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-type BirdType = "pigeon" | "hummingbird" | "stork";
+type BirdType = "pigeon" | "snipe" | "goose";
 
 export default function NewPage() {
   const router = useRouter();
   const [bird, setBird] = useState<BirdType>("pigeon");
 
   const go = (b: BirdType) => router.push(`/write?bird=${b}`);
+
+  const labelStyle: React.CSSProperties = {
+    display: "flex",
+    gap: 10,
+    alignItems: "flex-start",
+    cursor: "pointer",
+  };
 
   return (
     <main className="pageBg">
@@ -32,7 +39,21 @@ export default function NewPage() {
 
         <div className="card" style={{ marginTop: 14 }}>
           <div className="stack" style={{ gap: 12 }}>
-            <label style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <label style={labelStyle}>
+              <input
+                type="radio"
+                name="bird"
+                checked={bird === "snipe"}
+                onChange={() => setBird("snipe")}
+                style={{ marginTop: 4 }}
+              />
+              <div>
+                <div style={{ fontWeight: 600 }}>🏎️ Great Snipe</div>
+                <div className="muted">Fast long-haul. No roosting.</div>
+              </div>
+            </label>
+
+            <label style={labelStyle}>
               <input
                 type="radio"
                 name="bird"
@@ -41,36 +62,22 @@ export default function NewPage() {
                 style={{ marginTop: 4 }}
               />
               <div>
-                <div style={{ fontWeight: 600 }}>🕊️ Carrier Pigeon</div>
-                <div className="muted">The classic delivery.</div>
+                <div style={{ fontWeight: 600 }}>🕊️ Homing Pigeon</div>
+                <div className="muted">Classic delivery.</div>
               </div>
             </label>
 
-            <label style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <label style={labelStyle}>
               <input
                 type="radio"
                 name="bird"
-                checked={bird === "hummingbird"}
-                onChange={() => setBird("hummingbird")}
+                checked={bird === "goose"}
+                onChange={() => setBird("goose")}
                 style={{ marginTop: 4 }}
               />
               <div>
-                <div style={{ fontWeight: 600 }}>🐦 Hummingbird</div>
-                <div className="muted">Faster delivery.</div>
-              </div>
-            </label>
-
-            <label style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-              <input
-                type="radio"
-                name="bird"
-                checked={bird === "stork"}
-                onChange={() => setBird("stork")}
-                style={{ marginTop: 4 }}
-              />
-              <div>
-                <div style={{ fontWeight: 600 }}>🪿 Stork</div>
-                <div className="muted">Carries more.</div>
+                <div style={{ fontWeight: 600 }}>🪿 Canada Goose</div>
+                <div className="muted">Carries more. Slower.</div>
               </div>
             </label>
           </div>

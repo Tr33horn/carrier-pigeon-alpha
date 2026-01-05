@@ -30,23 +30,23 @@ function isEmailValid(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
-type BirdType = "pigeon" | "hummingbird" | "stork";
+type BirdType = "pigeon" | "snipe" | "goose";
 
 function normalizeBird(raw: string | null): BirdType {
   const b = (raw || "").toLowerCase();
-  if (b === "hummingbird") return "hummingbird";
-  if (b === "stork") return "stork";
+  if (b === "snipe") return "snipe";
+  if (b === "goose") return "goose";
   return "pigeon";
 }
 
 function birdLabel(bird: BirdType) {
   switch (bird) {
-    case "hummingbird":
-      return "🐦 Hummingbird";
-    case "stork":
-      return "🪿 Stork";
+    case "snipe":
+      return "🏎️ Great Snipe";
+    case "goose":
+      return "🪿 Canada Goose";
     default:
-      return "🕊️ Carrier Pigeon";
+      return "🕊️ Homing Pigeon";
   }
 }
 
@@ -155,7 +155,7 @@ function WritePageInner() {
     setResult(null);
 
     if (!routeOk) {
-      setError("Origin and destination must be different (even pigeons get bored).");
+      setError("Origin and destination must be different (even birds get bored).");
       setSending(false);
       return;
     }
@@ -180,7 +180,7 @@ function WritePageInner() {
       return;
     }
     if (!messageOk) {
-      setError("Please write a message (pigeons can’t carry novels).");
+      setError("Please write a message (birds can’t carry novels).");
       setSending(false);
       return;
     }
@@ -249,7 +249,7 @@ function WritePageInner() {
           </p>
 
           <p className="muted" style={{ marginTop: 6 }}>
-            It’ll unlock for the recipient when the pigeon lands.
+            It’ll unlock for the recipient when the bird lands.
           </p>
         </div>
 
@@ -450,7 +450,7 @@ function WritePageInner() {
               </button>
 
               <div className="muted" style={{ alignSelf: "center" }}>
-                {disableSend ? "Fill everything in and the pigeon will clock in." : "Ready for liftoff."}
+                {disableSend ? "Fill everything in and the bird will clock in." : "Ready for liftoff."}
               </div>
             </div>
 

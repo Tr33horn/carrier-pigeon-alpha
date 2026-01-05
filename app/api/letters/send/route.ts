@@ -7,9 +7,6 @@ import { Resend } from "resend";
 import { ROUTE_TUNED_REGIONS } from "../../../lib/geo/geoRegions.routes";
 import { geoLabelFor, type GeoRegion } from "../../../lib/geo/geoLabel";
 
-// If you later add a bigger map:
-// import { US_GEO_REGIONS } from "../../../lib/geo/geoRegions.us";
-
 // ✅ Toggle this ON only after you add DB columns:
 //   letter_checkpoints.region_id (text)
 //   letter_checkpoints.region_kind (text)
@@ -17,7 +14,6 @@ const STORE_REGION_META = false;
 
 const REGIONS: GeoRegion[] = [
   ...ROUTE_TUNED_REGIONS,
-  // ...US_GEO_REGIONS,
 ];
 
 function toRad(deg: number) {
@@ -64,6 +60,62 @@ function formatUtc(iso: string) {
   }).format(d);
 }
 
+/* -------------------------------------------------
+   ✅ Bird attributes (POC)
+   - speed_kmh: cruising-ish speed
+   - roost_hours: nightly downtime (0 = nonstop)
+   - inefficiency: your old REST_FACTOR lives here
+------------------------------------------------- */
+
+type BirdType = "pigeon" | "snipe" | "goose";
+
+const BIRDS: Record<
+  BirdType,
+  { label: string; emoji: string; speed_kmh: number; roost_hours: number; inefficiency: number }
+> = {
+  // Baseline: classic pigeon, rests overnight
+  pigeon: { label: "Homing Pigeon", emoji: "🕊️", speed_kmh: 72, roost_hours: 8, inefficiency: 1.15 },
+
+  // Fast long-haul: no roosting for our POC "express" bird
+  snipe: { label: "Great Snipe", emoji: "🏎️", speed_kmh: 88, roost_hours: 0, inefficiency: 1.05 },
+
+  // Heavy/group vibe: slower and longer nightly roost
+  goose: { label: "Canada Goose", emoji: "🪿", speed_kmh: 56, roost_hours: 10, inefficiency: 1.20 },
+};
+
+function normalizeBird(raw: unknown): BirdType {
+  const b = String(raw || "").toLowerCase();
+  if (b === "snipe") return "snipe";
+  if (b === "goose") return "goose";
+  return "pigeon";
+}
+
+/**
+ * Compute total travel hours with:
+ * - base flight time = distance / speed
+ * - inefficiency multiplier (wind, pauses, etc.)
+ * - roosting: bird flies (24 - roost_hours) per day, then must roost roost_hours
+ */
+function estimateTravelHours(distanceKm: number, bird: BirdType) {
+  const cfg = BIRDS[bird];
+
+  // base flight hours + realism fudge
+  const flightHours = (distanceKm / cfg.speed_kmh) * cfg.inefficiency;
+
+  // nonstop bird
+  if (cfg.roost_hours <= 0) return flightHours;
+
+  const awakeHours = 24 - cfg.roost_hours;
+  if (awakeHours <= 0) return flightHours;
+
+  // Each full awake block implies a roost afterwards.
+  // Example: if flightHours = 33, awakeHours=16 => 2 full blocks => 2 roosts.
+  const fullAwakeBlocks = Math.floor(flightHours / awakeHours);
+  const roostHours = fullAwakeBlocks * cfg.roost_hours;
+
+  return flightHours + roostHours;
+}
+
 /**
  * Sticky endpoints:
  * - Near destination: prefer a "metro" region around the destination if present.
@@ -83,25 +135,18 @@ function stickyGeoLabel(opts: {
   const base = geoLabelFor(lat, lon, regions);
 
   // "Sticky" zone near destination: last ~12% of flight
-  // (tweak this if you want it to grab sooner/later)
   const nearDest = progress >= 0.88;
-
   if (!nearDest) return base;
 
-  // Try to find a destination metro region the point also falls inside
-  // If your tuned list includes "Denver metro", "New York metro", etc. with kind:"metro",
-  // this will make the label snap to that near the end.
   let bestMetro: GeoRegion | null = null;
 
   for (const r of regions) {
     if (r.kind !== "metro") continue;
 
-    // Quick bbox check against the CURRENT point
     const b = r.bbox;
     const inBbox = lat >= b.minLat && lat <= b.maxLat && lon >= b.minLon && lon <= b.maxLon;
     if (!inBbox) continue;
 
-    // Prefer metro regions that are closer to the actual destination coordinate
     const dKm = distanceKm(dest.lat, dest.lon, lat, lon);
 
     if (!bestMetro) {
@@ -119,7 +164,6 @@ function stickyGeoLabel(opts: {
 
   if (!bestMetro) return base;
 
-  // Turn metro region into a label
   return {
     text: `Over ${bestMetro.name}`,
     regionId: bestMetro.id,
@@ -138,7 +182,6 @@ function generateCheckpoints(
   const count = 8;
   const totalMs = etaAt.getTime() - sentAt.getTime();
 
-  // Fallback labels (your existing vibe)
   const fallback = [
     "Departed roost",
     "Cruising altitude",
@@ -165,7 +208,6 @@ function generateCheckpoints(
       regions: REGIONS,
     });
 
-    // Keep endpoints intentional
     const name =
       i === 0
         ? "Departed roost"
@@ -197,7 +239,11 @@ export async function POST(req: Request) {
     message,
     origin,
     destination,
+    bird: birdRaw, // ✅ NEW
   } = body;
+
+  const bird = normalizeBird(birdRaw);
+  const birdCfg = BIRDS[bird];
 
   // --- Server-side required-field enforcement ---
   const normalizedFromEmail =
@@ -226,7 +272,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // Optional safety: route sanity
   if (!origin?.lat || !origin?.lon || !destination?.lat || !destination?.lon) {
     return NextResponse.json(
       { error: "Origin and destination are required." },
@@ -241,11 +286,9 @@ export async function POST(req: Request) {
     );
   }
 
-  const SPEED_KMH = 72;
-  const REST_FACTOR = 1.15;
-
+  // ✅ Bird-based ETA
   const km = distanceKm(origin.lat, origin.lon, destination.lat, destination.lon);
-  const hours = (km / SPEED_KMH) * REST_FACTOR;
+  const hours = estimateTravelHours(km, bird);
   const ms = Math.round(hours * 60 * 60 * 1000);
 
   const sentAt = new Date();
@@ -271,9 +314,10 @@ export async function POST(req: Request) {
       dest_lat: destination.lat,
       dest_lon: destination.lon,
       distance_km: km,
-      speed_kmh: SPEED_KMH,
+      speed_kmh: birdCfg.speed_kmh, // ✅ store chosen speed (no schema change)
       sent_at: sentAt.toISOString(),
       eta_at: etaAt.toISOString(),
+      // NOTE: Not storing `bird` yet to avoid breaking DB schema.
     })
     .select("id, public_token, eta_at")
     .single();
@@ -320,7 +364,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: cpErr.message }, { status: 500 });
   }
 
-  // Send "Pigeon launched" email immediately
+  // Send "Bird launched" email immediately
   try {
     const key = process.env.RESEND_API_KEY;
     if (!key) throw new Error("Missing RESEND_API_KEY");
@@ -329,16 +373,15 @@ export async function POST(req: Request) {
     const base = process.env.APP_BASE_URL || "http://localhost:3000";
     const statusUrl = `${base}/l/${publicToken}`;
 
-    // ✅ Consistent UTC formatting
     const etaText = formatUtc(letter.eta_at);
 
     await resend.emails.send({
-      from: process.env.MAIL_FROM || "Carrier Pigeon <no-reply@localhost>",
+      from: process.env.MAIL_FROM || "FLOK <no-reply@localhost>",
       to: normalizedToEmail,
-      subject: "🕊️ A sealed letter is on the way",
+      subject: `${birdCfg.emoji} A sealed letter is on the way`,
       html: `
         <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height: 1.5">
-          <h2 style="margin: 0 0 8px">A pigeon has departed.</h2>
+          <h2 style="margin: 0 0 8px">${birdCfg.emoji} A ${birdCfg.label} has departed.</h2>
           <p style="margin: 0 0 12px">
             You have a letter from <strong>${from_name || "Someone"}</strong>.
             It stays sealed until delivery.
