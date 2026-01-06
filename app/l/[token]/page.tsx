@@ -260,8 +260,8 @@ function Ico({
 /** ✅ Bird image based on bird + state
  *  Files:
  *  - canada-goose-fly.png / canada-goose-sleep.png / canada-goose-landed.png
- *  - great-snipe-fly.png / great-snipe-sleep.png / great-snipe-landed.png
- *  - homing-pigeon-fly.png / homing-pigeon-sleep.png / homing-pigeon-landed.png
+ *  - great-snipe-fly.gif / great-snipe-sleep.png / great-snipe-landed.png
+ *  - homing-pigeon-fly.gif / homing-pigeon-sleep.png / homing-pigeon-landed.png
  */
 function birdImageSrc(bird: BirdType, mode: "flying" | "sleeping" | "delivered" | "canceled") {
   const base =
