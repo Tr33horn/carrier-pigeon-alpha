@@ -2,22 +2,117 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 type BirdType = "pigeon" | "snipe" | "goose";
+
+type BirdOption = {
+  id: BirdType;
+  title: string;
+  subtitle: string;
+  emoji: string;
+  imgSrc: string; // placeholder for now
+};
+
+function BirdCard({
+  option,
+  selected,
+  onSelect,
+}: {
+  option: BirdOption;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="card"
+      aria-pressed={selected}
+      style={{
+        textAlign: "left",
+        width: "100%",
+        cursor: "pointer",
+        padding: 14,
+        border: selected ? "2px solid rgba(255,255,255,0.35)" : undefined, // subtle, non-invasive
+        boxShadow: selected ? "0 0 0 3px rgba(0,0,0,0.12) inset" : undefined,
+        transform: selected ? "translateY(-1px)" : undefined,
+      }}
+    >
+      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <div
+          style={{
+            width: 96,
+            height: 72,
+            borderRadius: 12,
+            background: "rgba(255,255,255,0.05)",
+            display: "grid",
+            placeItems: "center",
+            overflow: "hidden",
+            flex: "0 0 auto",
+          }}
+        >
+          {/* Placeholder image. Swap to next/image later if you want. */}
+          <img
+            src={option.imgSrc}
+            alt={option.title}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              display: "block",
+            }}
+          />
+        </div>
+
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, display: "flex", gap: 8, alignItems: "center" }}>
+            <span>{option.emoji}</span>
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {option.title}
+            </span>
+          </div>
+          <div className="muted" style={{ marginTop: 4 }}>
+            {option.subtitle}
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
 
 export default function NewPage() {
   const router = useRouter();
   const [bird, setBird] = useState<BirdType>("pigeon");
 
-  const go = (b: BirdType) => router.push(`/write?bird=${b}`);
+  const options = useMemo<BirdOption[]>(
+    () => [
+      {
+        id: "snipe",
+        title: "Great Snipe",
+        subtitle: "Fast long-haul. No roosting.",
+        emoji: "🏎️",
+        imgSrc: "/birds/great-snipe.jpg", // placeholder path
+      },
+      {
+        id: "pigeon",
+        title: "Homing Pigeon",
+        subtitle: "Classic delivery.",
+        emoji: "🕊️",
+        imgSrc: "/birds/homing-pigeon.jpg", // placeholder path
+      },
+      {
+        id: "goose",
+        title: "Canada Goose",
+        subtitle: "Carries more. Slower.",
+        emoji: "🪿",
+        imgSrc: "/birds/canada-goose.jpg", // placeholder path
+      },
+    ],
+    []
+  );
 
-  const labelStyle: React.CSSProperties = {
-    display: "flex",
-    gap: 10,
-    alignItems: "flex-start",
-    cursor: "pointer",
-  };
+  const go = (b: BirdType) => router.push(`/write?bird=${b}`);
 
   return (
     <main className="pageBg">
@@ -37,52 +132,38 @@ export default function NewPage() {
           </p>
         </div>
 
-        <div className="card" style={{ marginTop: 14 }}>
-          <div className="stack" style={{ gap: 12 }}>
-            <label style={labelStyle}>
-              <input
-                type="radio"
-                name="bird"
-                checked={bird === "snipe"}
-                onChange={() => setBird("snipe")}
-                style={{ marginTop: 4 }}
+        {/* Grid row of bird cards */}
+        <div style={{ marginTop: 14 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gap: 12,
+            }}
+          >
+            {options.map((opt) => (
+              <BirdCard
+                key={opt.id}
+                option={opt}
+                selected={bird === opt.id}
+                onSelect={() => setBird(opt.id)}
               />
-              <div>
-                <div style={{ fontWeight: 600 }}>🏎️ Great Snipe</div>
-                <div className="muted">Fast long-haul. No roosting.</div>
-              </div>
-            </label>
-
-            <label style={labelStyle}>
-              <input
-                type="radio"
-                name="bird"
-                checked={bird === "pigeon"}
-                onChange={() => setBird("pigeon")}
-                style={{ marginTop: 4 }}
-              />
-              <div>
-                <div style={{ fontWeight: 600 }}>🕊️ Homing Pigeon</div>
-                <div className="muted">Classic delivery.</div>
-              </div>
-            </label>
-
-            <label style={labelStyle}>
-              <input
-                type="radio"
-                name="bird"
-                checked={bird === "goose"}
-                onChange={() => setBird("goose")}
-                style={{ marginTop: 4 }}
-              />
-              <div>
-                <div style={{ fontWeight: 600 }}>🪿 Canada Goose</div>
-                <div className="muted">Carries more. Slower.</div>
-              </div>
-            </label>
+            ))}
           </div>
 
-          <div className="sendRow" style={{ marginTop: 16 }}>
+          {/* Mobile fallback: stack */}
+          <style jsx>{`
+            @media (max-width: 820px) {
+              div[style*="grid-template-columns: repeat(3"] {
+                grid-template-columns: 1fr;
+              }
+            }
+          `}</style>
+        </div>
+
+        {/* Bottom actions (kept as-is) */}
+        <div className="card" style={{ marginTop: 14 }}>
+          <div className="sendRow">
             <button onClick={() => go(bird)} className="btnPrimary">
               Continue to write
             </button>
