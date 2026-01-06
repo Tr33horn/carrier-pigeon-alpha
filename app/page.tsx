@@ -41,7 +41,7 @@ export default function Home() {
           <div className="card homeHero" aria-hidden="true">
             <div className="homeHeroInner">
               <div className="muted" style={{ fontSize: 12 }}>
-                <img src="/hero/floklogo.jpg" alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
+                <img src="/hero/floklogo.png" alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
               </div>
             </div>
           </div>
