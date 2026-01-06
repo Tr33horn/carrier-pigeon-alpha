@@ -11,108 +11,41 @@ type BirdOption = {
   title: string;
   subtitle: string;
   emoji: string;
-  imgSrc: string; // placeholder for now
+  imgSrc: string; // placeholder paths
 };
-
-function BirdCard({
-  option,
-  selected,
-  onSelect,
-}: {
-  option: BirdOption;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className="card"
-      aria-pressed={selected}
-      style={{
-        textAlign: "left",
-        width: "100%",
-        cursor: "pointer",
-        padding: 14,
-        border: selected ? "2px solid rgba(255,255,255,0.35)" : undefined, // subtle, non-invasive
-        boxShadow: selected ? "0 0 0 3px rgba(0,0,0,0.12) inset" : undefined,
-        transform: selected ? "translateY(-1px)" : undefined,
-      }}
-    >
-      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <div
-          style={{
-            width: 96,
-            height: 72,
-            borderRadius: 12,
-            background: "rgba(255,255,255,0.05)",
-            display: "grid",
-            placeItems: "center",
-            overflow: "hidden",
-            flex: "0 0 auto",
-          }}
-        >
-          {/* Placeholder image. Swap to next/image later if you want. */}
-          <img
-            src={option.imgSrc}
-            alt={option.title}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "contain",
-              display: "block",
-            }}
-          />
-        </div>
-
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 700, display: "flex", gap: 8, alignItems: "center" }}>
-            <span>{option.emoji}</span>
-            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {option.title}
-            </span>
-          </div>
-          <div className="muted" style={{ marginTop: 4 }}>
-            {option.subtitle}
-          </div>
-        </div>
-      </div>
-    </button>
-  );
-}
 
 export default function NewPage() {
   const router = useRouter();
   const [bird, setBird] = useState<BirdType>("pigeon");
 
+  const go = (b: BirdType) => router.push(`/write?bird=${b}`);
+
   const options = useMemo<BirdOption[]>(
     () => [
       {
         id: "snipe",
-        title: "Great Snipe",
+        title: "🏎️ Great Snipe",
         subtitle: "Fast long-haul. No roosting.",
         emoji: "🏎️",
-        imgSrc: "/birds/great-snipe.jpg", // placeholder path
+        imgSrc: "/birds/great-snipe.png",
       },
       {
         id: "pigeon",
-        title: "Homing Pigeon",
+        title: "🕊️ Homing Pigeon",
         subtitle: "Classic delivery.",
         emoji: "🕊️",
-        imgSrc: "/birds/homing-pigeon.jpg", // placeholder path
+        imgSrc: "/birds/homing-pigeon.png",
       },
       {
         id: "goose",
-        title: "Canada Goose",
+        title: "🪿 Canada Goose",
         subtitle: "Carries more. Slower.",
         emoji: "🪿",
-        imgSrc: "/birds/canada-goose.jpg", // placeholder path
+        imgSrc: "/birds/canada-goose.png",
       },
     ],
     []
   );
-
-  const go = (b: BirdType) => router.push(`/write?bird=${b}`);
 
   return (
     <main className="pageBg">
@@ -132,36 +65,31 @@ export default function NewPage() {
           </p>
         </div>
 
-        {/* Grid row of bird cards */}
-        <div style={{ marginTop: 14 }}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: 12,
-            }}
-          >
-            {options.map((opt) => (
-              <BirdCard
-                key={opt.id}
-                option={opt}
-                selected={bird === opt.id}
-                onSelect={() => setBird(opt.id)}
-              />
-            ))}
-          </div>
+        {/* Bird cards */}
+        <div className="birdGrid">
+          {options.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              className={`card birdCard ${bird === opt.id ? "on" : ""}`}
+              onClick={() => setBird(opt.id)}
+              aria-pressed={bird === opt.id}
+            >
+              <div className="birdRow">
+                <div className="birdThumb" aria-hidden="true">
+                  <img src={opt.imgSrc} alt="" />
+                </div>
 
-          {/* Mobile fallback: stack */}
-          <style jsx>{`
-            @media (max-width: 820px) {
-              div[style*="grid-template-columns: repeat(3"] {
-                grid-template-columns: 1fr;
-              }
-            }
-          `}</style>
+                <div style={{ minWidth: 0 }}>
+                  <div className="birdTitle">{opt.title}</div>
+                  <div className={`muted birdSub`}>{opt.subtitle}</div>
+                </div>
+              </div>
+            </button>
+          ))}
         </div>
 
-        {/* Bottom actions (kept as-is) */}
+        {/* Continue / Skip (unchanged) */}
         <div className="card" style={{ marginTop: 14 }}>
           <div className="sendRow">
             <button onClick={() => go(bird)} className="btnPrimary">

@@ -148,6 +148,77 @@ body {
   border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
+
+/* -------------------------------------------------
+   Choose Bird (New page)
+------------------------------------------------- */
+
+.birdGrid{
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 860px){
+  .birdGrid{ grid-template-columns: 1fr; }
+}
+
+.birdCard{
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  padding: 16px; /* aligns with .card padding */
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+.birdCard:hover{
+  transform: translateY(-2px);
+}
+
+.birdCard.on{
+  border-color: rgba(0,0,0,0.16);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.12);
+  /* subtle accent wash that matches your brand */
+  background:
+    linear-gradient(135deg, var(--alp-blue-18), rgba(255,255,255,0) 55%),
+    var(--card);
+}
+
+.birdRow{
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.birdThumb{
+  width: 110px;
+  height: 84px;
+  border-radius: 16px;
+  border: 1px solid rgba(0,0,0,0.08);
+  background: rgba(0,0,0,0.035);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.birdThumb img{
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.birdTitle{
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+.birdSub{
+  margin-top: 4px;
+}
+
 /* -------------------------------------------------
    Pills / links / buttons
 ------------------------------------------------- */
