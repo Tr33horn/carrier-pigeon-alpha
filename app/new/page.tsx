@@ -26,20 +26,20 @@ export default function NewPage() {
         id: "snipe",
         title: "Great Snipe",
         subtitle: "Fast long-haul. No roosting.",
-        imgSrc: "/birds/great-snipe.png",
+        imgSrc: "/birds/great-snipe.gif",
       },
       {
         id: "pigeon",
         title: "Homing Pigeon",
         subtitle: "Classic delivery.",
-        imgSrc: "/birds/homing-pigeon.png",
+        imgSrc: "/birds/homing-pigeon.gif",
         recommended: true,
       },
       {
         id: "goose",
         title: "Canada Goose",
         subtitle: "Carries more. Slower.",
-        imgSrc: "/birds/canada-goose.png",
+        imgSrc: "/birds/canada-goose.gif",
       },
     ],
     []
