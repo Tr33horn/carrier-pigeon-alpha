@@ -848,6 +848,43 @@ body {
   display: none !important;
 }
 
+/* --- Map marker: moon sleep mode --- */
+.pigeonMarker .pigeonMoon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 160ms ease, transform 160ms ease;
+  pointer-events: none;
+}
+
+/* By default you probably show the dot/pulse.
+   In sleep mode, show moon + calm halo instead. */
+.pigeonMarker.sleep .pigeonMoon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Optional: hide the live dot during sleep so the moon is the star of the show */
+.pigeonMarker.sleep .pigeonDot {
+  opacity: 0.35; /* or 0 to fully hide */
+}
+
+/* If your pulse rings look too "LIVE", calm them down in sleep mode */
+.pigeonMarker.sleep .pigeonPulseRing,
+.pigeonMarker.sleep .pigeonPulseRing.ring2 {
+  opacity: 0.15;
+}
+
+/* Make the sleep ring actually visible in sleep mode (if not already) */
+.pigeonMarker.sleep .pigeonSleepRing {
+  opacity: 1;
+}
+
 /* Sleep ring element (your MapView injects <span class="pigeonSleepRing"></span>) */
 .pigeonSleepRing {
   position: absolute;

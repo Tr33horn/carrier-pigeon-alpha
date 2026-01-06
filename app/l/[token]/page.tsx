@@ -38,6 +38,7 @@ type Checkpoint = {
   name: string;
   at: string;
   geo_text?: string;
+  kind?: string; // allow server to send kind: "sleep" | "checkpoint"
 };
 
 type BadgeItem = {
@@ -151,7 +152,7 @@ function Ico({
   name,
   size = 16,
 }: {
-  name: "live" | "pin" | "speed" | "distance" | "check" | "mail" | "timeline";
+  name: "live" | "pin" | "speed" | "distance" | "check" | "mail" | "timeline" | "moon";
   size?: number;
 }) {
   const common = {
@@ -173,27 +174,19 @@ function Ico({
             strokeWidth="2.4"
             strokeLinejoin="round"
           />
-          <path
-            d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z"
-            stroke="currentColor"
-            strokeWidth="2.4"
-          />
+          <path d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z" stroke="currentColor" strokeWidth="2.4" />
         </svg>
       );
+
     case "speed":
       return (
         <svg {...common}>
           <path d="M5 13a7 7 0 0 1 14 0" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-          <path
-            d="M12 13l4.5-4.5"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M12 13l4.5-4.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M4 13h2M18 13h2" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
         </svg>
       );
+
     case "distance":
       return (
         <svg {...common}>
@@ -207,18 +200,14 @@ function Ico({
           />
         </svg>
       );
+
     case "check":
       return (
         <svg {...common}>
-          <path
-            d="M20 6 9 17l-5-5"
-            stroke="currentColor"
-            strokeWidth="2.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
+
     case "mail":
       return (
         <svg {...common}>
@@ -226,6 +215,7 @@ function Ico({
           <path d="m4 8 8 6 8-6" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round" />
         </svg>
       );
+
     case "timeline":
       return (
         <svg {...common}>
@@ -233,6 +223,20 @@ function Ico({
           <path d="M4 6h.01M4 12h.01M4 18h.01" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
         </svg>
       );
+
+    case "moon":
+      // simple crescent
+      return (
+        <svg {...common}>
+          <path
+            d="M20 14.5a7.5 7.5 0 0 1-9.5-9.5A8.5 8.5 0 1 0 20 14.5Z"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+
     case "live":
     default:
       return (
@@ -309,6 +313,16 @@ function RailTimeline({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, now]);
 
+  // night-ish accent for sleep nodes/cards (kept inline, no CSS required)
+  const sleepAccent = {
+    dotBgPast: "rgba(88,80,236,0.95)",
+    dotBgFuture: "rgba(88,80,236,0.75)",
+    dotHalo: "rgba(88,80,236,0.16)",
+    cardBg: "rgba(88,80,236,0.08)",
+    cardBorder: "rgba(88,80,236,0.35)",
+    tagBg: "#5850ec",
+  } as const;
+
   return (
     <div className="rail">
       <div className="railLine" />
@@ -346,14 +360,17 @@ function RailTimeline({
                   style={
                     isSleep
                       ? {
-                          background: isPast ? "rgba(217,45,32,0.95)" : "rgba(217,45,32,0.75)",
-                          boxShadow: "0 0 0 7px rgba(217,45,32,0.12)",
+                          background: isPast ? sleepAccent.dotBgPast : sleepAccent.dotBgFuture,
+                          boxShadow: `0 0 0 7px ${sleepAccent.dotHalo}`,
                           color: "#fff",
+                          fontSize: 12,
                         }
                       : undefined
                   }
+                  aria-label={isSleep ? "Sleep event" : "Checkpoint"}
+                  title={isSleep ? "Sleep event" : undefined}
                 >
-                  {isPast ? "✓" : ""}
+                  {isSleep ? "🌙" : isPast ? "✓" : ""}
                 </span>
               </div>
 
@@ -362,21 +379,34 @@ function RailTimeline({
                 style={
                   isSleep
                     ? {
-                        background: "rgba(217,45,32,0.08)",
-                        borderColor: "rgba(217,45,32,0.35)",
+                        background: sleepAccent.cardBg,
+                        borderColor: sleepAccent.cardBorder,
                       }
                     : undefined
                 }
               >
                 {isCurrent && (
-                  <div className="pigeonTag livePulseRow" style={isSleep ? { background: "#d92d20" } : undefined}>
+                  <div className="pigeonTag livePulseRow" style={isSleep ? { background: sleepAccent.tagBg } : undefined}>
                     <span className="livePulseDot" aria-hidden />
                     <span>{isSleep ? `${birdName} is sleeping` : `${birdName} is here`}</span>
                   </div>
                 )}
 
                 <div className="railTitleRow">
-                  <div className="railTitle">{it.name}</div>
+                  <div className="railTitle" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {isSleep ? (
+                      <>
+                        <span className="metaPill faint" style={{ padding: "3px 8px", fontSize: 11, lineHeight: "11px" }}>
+                          🌙 Slept
+                        </span>
+                        <span className="ico" aria-hidden style={{ opacity: 0.9 }}>
+                          <Ico name="moon" size={14} />
+                        </span>
+                      </>
+                    ) : null}
+                    <span style={{ minWidth: 0 }}>{it.name}</span>
+                  </div>
+
                   <div className="railTime">{timeLabelLocal(it.at)}</div>
                 </div>
               </div>
@@ -395,9 +425,15 @@ function rarityLabel(r?: string) {
 }
 
 function isSleepCheckpoint(cp: Checkpoint) {
-  const id = (cp.id || "").toLowerCase();
-  const name = (cp.name || "").toLowerCase();
-  const geo = (cp.geo_text || "").toLowerCase();
+  const id = String(cp.id || "").toLowerCase();
+  const name = String(cp.name || "").toLowerCase();
+  const geo = String(cp.geo_text || "").toLowerCase();
+  const kind = String((cp as any).kind || "").toLowerCase();
+
+  // Prefer the explicit signal if server provides it:
+  if (kind === "sleep") return true;
+
+  // Fallbacks:
   return id.startsWith("sleep-") || geo === "sleeping" || name.includes("slept") || name.startsWith("sleeping");
 }
 
@@ -780,9 +816,7 @@ export default function LetterStatusPage() {
                         <span className="liveText">{sleeping ? "SLEEPING" : "LIVE"}</span>
                       </div>
                       <div className="liveSub">
-                        {sleeping
-                          ? `Wakes at ${flight?.sleep_local_text || "soon"}`
-                          : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
+                        {sleeping ? `Wakes at ${flight?.sleep_local_text || "soon"}` : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
                       </div>
                     </div>
 
@@ -1046,5 +1080,3 @@ export default function LetterStatusPage() {
     </main>
   );
 }
-
-

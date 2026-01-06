@@ -213,7 +213,11 @@ export default function MapView(props: {
           <div class="pigeonPulseWrap">
             <span class="pigeonPulseRing"></span>
             <span class="pigeonPulseRing ring2"></span>
+
+            <!-- 🌙 sleep halo + moon glyph (CSS toggles visibility) -->
             <span class="pigeonSleepRing"></span>
+            <span class="pigeonMoon" aria-hidden="true">🌙</span>
+
             <div class="pigeonDot"></div>
           </div>
         `,
