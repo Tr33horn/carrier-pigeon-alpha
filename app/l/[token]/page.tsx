@@ -105,9 +105,9 @@ function inferBird(letter: Letter | null): BirdType {
 }
 
 function birdLabel(b: BirdType) {
-  if (b === "snipe") return "🏎️ Great Snipe";
-  if (b === "goose") return "🪿 Canada Goose";
-  return "🕊️ Homing Pigeon";
+  if (b === "snipe") return "Great Snipe";
+  if (b === "goose") return "Canada Goose";
+  return "Homing Pigeon";
 }
 
 function clamp01(n: number) {
@@ -259,9 +259,9 @@ function Ico({
 
 function birdImageSrc(bird: BirdType) {
   // ✅ Uses your current bird-choice filenames
-  if (bird === "snipe") return "/birds/great-snipe.png";
-  if (bird === "goose") return "/birds/canada-goose.png";
-  return "/birds/homing-pigeon.png";
+  if (bird === "snipe") return "/birds/great-snipe.gif";
+  if (bird === "goose") return "/birds/canada-goose.gif";
+  return "/birds/homing-pigeon.gif";
 }
 
 function BirdStatusCard({
