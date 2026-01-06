@@ -210,12 +210,12 @@ export default function MapView(props: {
       L.divIcon({
         className: `pigeonMarker ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} ${isDelivered ? "delivered" : ""}`,
         html: `
-  <div class="pigeonPulseWrap">
-    <span class="pigeonPulseRing"></span>
-    <span class="pigeonPulseRing ring2"></span>
-    <span class="pigeonSleepRing"></span>
-    <div class="pigeonDot"></div>
-  </div>
+          <div class="pigeonPulseWrap">
+            <span class="pigeonPulseRing"></span>
+            <span class="pigeonPulseRing ring2"></span>
+            <span class="pigeonSleepRing"></span>
+            <div class="pigeonDot"></div>
+          </div>
         `,
         iconSize: [44, 44],
         iconAnchor: [22, 22],
@@ -265,34 +265,33 @@ export default function MapView(props: {
   );
 
   // ✅ flown route uses displayProgress (same thing the marker uses)
-  // ✅ IMPORTANT: deps must be primitive so we don't recompute due to parent object identity
   const flownPts = useMemo(() => {
     const p = clamp01(displayProgress);
     if (p <= 0.0001) return [[origin.lat, origin.lon]] as [number, number][];
-
     return makeNearStraightDriftPath({
-      origin: { lat: origin.lat, lon: origin.lon },
-      dest: { lat: dest.lat, lon: dest.lon },
+      origin,
+      dest,
       progress: p,
       points: 60,
     });
-  }, [origin.lat, origin.lon, dest.lat, dest.lon, displayProgress]);
+  }, [origin, dest, displayProgress]);
 
   const tooltip = useMemo(() => normalizeTooltip(props.tooltipText), [props.tooltipText]);
 
-  // ✅ keep defaults here; if you want theme-driven colors, we'll do it in the next step
-  const idealColor = "rgba(18,18,18,0.35)";
-  const flownColor = "rgba(22,163,74,0.85)";
+  /**
+   * ✅ Don’t hardcode colors in JS.
+   * Use CSS variables with fallbacks so your theme can control it.
+   *
+   * Define in CSS (recommended):
+   * --route-ideal: rgba(18,18,18,0.35);
+   * --route-flown: rgba(22,163,74,0.85);
+   */
+  const idealColor = "var(--route-ideal, rgba(18,18,18,0.35))";
+  const flownColor = "var(--route-flown, rgba(22,163,74,0.85))";
 
   return (
     <div className="mapShell">
-      <MapContainer
-        // ✅ FIX: provide an initial center to avoid blank/odd initial render in react-leaflet v4
-        center={[origin.lat, origin.lon]}
-        zoom={4}
-        scrollWheelZoom={false}
-        style={{ height: "100%", width: "100%" }}
-      >
+      <MapContainer zoom={4} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
         <TileLayer attribution={tile.attribution} url={tile.url} />
 
         <FitBoundsOnRouteChange origin={origin} dest={dest} />
