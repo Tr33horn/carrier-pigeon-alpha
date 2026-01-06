@@ -198,8 +198,8 @@ body {
 }
 
 .birdThumb{
-  width: 96px;
-  height: 72px;
+  width: 100px;
+  height: 100px;
   border-radius: 14px;
   border: 1px solid rgba(0,0,0,0.08);
   background: rgba(0,0,0,0.035);
