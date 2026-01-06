@@ -30,10 +30,10 @@ export default function Home() {
           <div style={{ textAlign: "center" }}>
             <div className="kicker">FLOK</div>
             <h1 className="h1" style={{ marginTop: 8 }}>
-              Messages delivered with patience.
+              The long way home.
             </h1>
             <p className="muted" style={{ marginTop: 10, fontSize: 14, opacity: 0.8 }}>
-              Send a letter. Track the flight. Let time do its thing.
+              Brought to you by Polaroid & Maruchan Instant noodles
             </p>
           </div>
 
