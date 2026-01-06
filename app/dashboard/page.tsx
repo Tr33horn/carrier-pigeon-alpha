@@ -383,7 +383,7 @@ export default function DashboardPage() {
               </p>
             </div>
 
-            <a href="/write" className="linkPill">
+            <a href="/new" className="linkPill">
               + Write a letter
             </a>
           </div>
