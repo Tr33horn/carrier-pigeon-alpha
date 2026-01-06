@@ -259,9 +259,9 @@ function Ico({
 
 /** ✅ Bird image based on bird + state
  *  Files:
- *  - canada-goose-fly.png / canada-goose-sleep.png / canada-goose-landed.png
- *  - great-snipe-fly.gif / great-snipe-sleep.png / great-snipe-landed.png
- *  - homing-pigeon-fly.gif / homing-pigeon-sleep.png / homing-pigeon-landed.png
+ *  - canada-goose-fly.gif / canada-goose-sleep.gif / canada-goose-landed.gif
+ *  - great-snipe-fly.gif / great-snipe-sleep.gif / great-snipe-landed.gif
+ *  - homing-pigeon-fly.gif / homing-pigeon-sleep.gif / homing-pigeon-landed.gif
  */
 function birdImageSrc(bird: BirdType, mode: "flying" | "sleeping" | "delivered" | "canceled") {
   const base =
@@ -270,7 +270,7 @@ function birdImageSrc(bird: BirdType, mode: "flying" | "sleeping" | "delivered" 
   const state =
     mode === "sleeping" ? "sleep" : mode === "delivered" ? "landed" : mode === "canceled" ? "landed" : "fly";
 
-  return `/birds/${base}-${state}.png`;
+  return `/birds/${base}-${state}.gif`;
 }
 
 function BirdStatusCard({
