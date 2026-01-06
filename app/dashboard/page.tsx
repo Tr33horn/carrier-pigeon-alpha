@@ -47,6 +47,10 @@ type DashboardLetter = {
   eta_utc_iso: string | null;
 
   badges_count?: number;
+
+  // ✅ Cancel support
+  canceled_at?: string | null;
+  canceled?: boolean; // optional server-provided convenience
 };
 
 type Filter = "all" | "inflight" | "delivered";
@@ -156,38 +160,14 @@ function RouteThumb(props: {
   return (
     <div className="routeThumb" aria-hidden>
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
-        <path
-          d={`M ${pts.o.x} ${pts.o.y} L ${pts.d.x} ${pts.d.y}`}
-          stroke="currentColor"
-          strokeWidth="3"
-          opacity="0.55"
-          strokeLinecap="round"
-        />
-
+        <path d={`M ${pts.o.x} ${pts.o.y} L ${pts.d.x} ${pts.d.y}`} stroke="currentColor" strokeWidth="3" opacity="0.55" strokeLinecap="round" />
         <circle cx={pts.o.x} cy={pts.o.y} r="4.5" fill="currentColor" />
-        <circle
-          cx={pts.d.x}
-          cy={pts.d.y}
-          r="6.2"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          opacity="0.95"
-        />
+        <circle cx={pts.d.x} cy={pts.d.y} r="6.2" fill="none" stroke="currentColor" strokeWidth="2.2" opacity="0.95" />
 
         {pts.c && (
           <>
             <circle cx={pts.c.x} cy={pts.c.y} r="4.6" fill="currentColor" />
-            <circle
-              className="thumbPulse"
-              cx={pts.c.x}
-              cy={pts.c.y}
-              r="11"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              opacity="0.35"
-            />
+            <circle className="thumbPulse" cx={pts.c.x} cy={pts.c.y} r="11" fill="none" stroke="currentColor" strokeWidth="2.2" opacity="0.35" />
           </>
         )}
       </svg>
@@ -211,6 +191,7 @@ export default function DashboardPage() {
 
   const [toast, setToast] = useState<string | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -251,10 +232,7 @@ export default function DashboardPage() {
     try {
       localStorage.setItem("cp_sender_email", e);
 
-      const res = await fetch(
-        `/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(qs)}`,
-        { cache: "no-store" }
-      );
+      const res = await fetch(`/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(qs)}`, { cache: "no-store" });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to load");
@@ -269,12 +247,10 @@ export default function DashboardPage() {
   }
 
   async function archiveLetter(letter: DashboardLetter) {
-    if (archivingId) return;
+    if (archivingId || cancelingId) return;
 
     const ok = window.confirm(
-      `Archive this letter?\n\n"${
-        letter.subject?.trim() ? letter.subject : "(No subject)"
-      }"\n\nThis hides it from your dashboard but keeps the public link working.`
+      `Archive this letter?\n\n"${letter.subject?.trim() ? letter.subject : "(No subject)"}"\n\nThis hides it from your dashboard but keeps the public link working.`
     );
     if (!ok) return;
 
@@ -303,6 +279,63 @@ export default function DashboardPage() {
     }
   }
 
+  async function cancelLetter(letter: DashboardLetter) {
+    if (archivingId || cancelingId) return;
+
+    const alreadyCanceled = !!(letter.canceled || (letter.canceled_at && String(letter.canceled_at).trim()));
+    if (alreadyCanceled) return;
+
+    if (letter.delivered) {
+      window.alert("This letter is already delivered — it can’t be canceled.");
+      return;
+    }
+
+    const ok = window.confirm(
+      `Cancel this letter?\n\n"${letter.subject?.trim() ? letter.subject : "(No subject)"}"\n\nThis recalls the bird and permanently seals the message. The public link will show “Canceled.”`
+    );
+    if (!ok) return;
+
+    setCancelingId(letter.id);
+
+    // optimistic update (briefly shows “Canceled” before it disappears after reload because canceled => archived)
+    const prevSnapshot = letters;
+    const nowIso = new Date().toISOString();
+
+    setLetters((cur) =>
+      cur.map((x) =>
+        x.id === letter.id
+          ? {
+              ...x,
+              canceled: true,
+              canceled_at: x.canceled_at ?? nowIso,
+              delivered: false,
+              sleeping: false,
+              current_over_text: "Canceled",
+            }
+          : x
+      )
+    );
+
+    try {
+      const res = await fetch(`/api/letters/cancel/${encodeURIComponent(letter.public_token)}`, {
+        method: "POST",
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Cancel failed");
+
+      setToast("Canceled 🛑");
+      void load();
+    } catch (err: any) {
+      setLetters(prevSnapshot);
+      setToast("Cancel failed ❌");
+      console.error("CANCEL ERROR:", err);
+    } finally {
+      setCancelingId(null);
+    }
+  }
+
   const stats = useMemo(() => {
     const delivered = letters.filter((l) => l.delivered).length;
     const inflight = letters.length - delivered;
@@ -319,7 +352,6 @@ export default function DashboardPage() {
       const aSent = parseMs(a.sent_at) ?? 0;
       const bSent = parseMs(b.sent_at) ?? 0;
 
-      // ✅ Prefer sleep/bird-aware ETA when available; fall back to eta_at
       const aEta = parseMs(a.eta_utc_iso) ?? parseMs(a.eta_at) ?? Number.MAX_SAFE_INTEGER;
       const bEta = parseMs(b.eta_utc_iso) ?? parseMs(b.eta_at) ?? Number.MAX_SAFE_INTEGER;
 
@@ -461,27 +493,26 @@ export default function DashboardPage() {
           {filteredSorted.length === 0 && !loading ? (
             <div className="card">
               <div className="muted">
-                {letters.length === 0
-                  ? "No letters loaded yet. Enter your sender email and hit “Load letters”."
-                  : "No letters match your filter/search."}
+                {letters.length === 0 ? "No letters loaded yet. Enter your sender email and hit “Load letters”." : "No letters match your filter/search."}
               </div>
             </div>
           ) : (
             filteredSorted.map((l) => {
               const pct = Math.round(clamp01(l.progress ?? 0) * 100);
 
+              const isCanceled = !!(l.canceled || (l.canceled_at && String(l.canceled_at).trim()));
               const etaIsoResolved = l.eta_utc_iso || l.eta_at;
               const etaAbsMs = parseMs(etaIsoResolved);
               const msLeft = etaAbsMs == null ? null : etaAbsMs - now.getTime();
               const countdown = formatCountdown(msLeft);
 
-              const isSleeping = !!l.sleeping && !l.delivered;
-              const statusLabel = l.delivered ? "Delivered" : isSleeping ? "Sleeping" : "In Flight";
-              const statusEmoji = l.delivered ? "✅" : isSleeping ? "😴" : "🕊️";
+              const isSleeping = !!l.sleeping && !l.delivered && !isCanceled;
+
+              const statusLabel = isCanceled ? "Canceled" : l.delivered ? "Delivered" : isSleeping ? "Sleeping" : "In Flight";
+              const statusEmoji = isCanceled ? "🛑" : l.delivered ? "✅" : isSleeping ? "😴" : "🕊️";
 
               const statusPath = `/l/${l.public_token}`;
-              const statusUrl =
-                typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
+              const statusUrl = typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
 
               const canThumb =
                 Number.isFinite(l.origin_lat) &&
@@ -489,12 +520,11 @@ export default function DashboardPage() {
                 Number.isFinite(l.dest_lat) &&
                 Number.isFinite(l.dest_lon);
 
-              const current =
-                l.current_lat != null && l.current_lon != null
-                  ? { lat: l.current_lat, lon: l.current_lon }
-                  : null;
+              const current = l.current_lat != null && l.current_lon != null ? { lat: l.current_lat, lon: l.current_lon } : null;
 
-              const geoText = l.delivered
+              const geoText = isCanceled
+                ? "Canceled"
+                : l.delivered
                 ? "Delivered"
                 : (l.current_over_text && l.current_over_text.trim()) || "somewhere over the U.S.";
 
@@ -503,9 +533,11 @@ export default function DashboardPage() {
 
               const badgeCount = Math.max(0, Number(l.badges_count ?? 0));
               const isArchivingThis = archivingId === l.id;
+              const isCancelingThis = cancelingId === l.id;
 
-              const birdLabel =
-                l.bird === "snipe" ? "Snipe" : l.bird === "goose" ? "Goose" : l.bird === "pigeon" ? "Pigeon" : null;
+              const birdLabel = l.bird === "snipe" ? "Snipe" : l.bird === "goose" ? "Goose" : l.bird === "pigeon" ? "Pigeon" : null;
+
+              const disableActions = isArchivingThis || isCancelingThis;
 
               return (
                 <div key={l.id} className="card">
@@ -530,27 +562,20 @@ export default function DashboardPage() {
                       <div className="muted" style={{ marginTop: 6 }}>
                         📍 <strong>{geoText}</strong>
                       </div>
+
+                      {isCanceled && (
+                        <div className="muted" style={{ marginTop: 6, opacity: 0.8 }}>
+                          This letter was recalled and will not be delivered.
+                        </div>
+                      )}
                     </div>
 
                     {canThumb ? (
-                      <RouteThumb
-                        origin={{ lat: l.origin_lat, lon: l.origin_lon }}
-                        dest={{ lat: l.dest_lat, lon: l.dest_lon }}
-                        current={current}
-                        progress={l.progress ?? 0}
-                      />
+                      <RouteThumb origin={{ lat: l.origin_lat, lon: l.origin_lon }} dest={{ lat: l.dest_lat, lon: l.dest_lon }} current={current} progress={l.progress ?? 0} />
                     ) : null}
                   </div>
 
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                      justifyContent: "flex-end",
-                    }}
-                  >
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                     <div className="metaPill">
                       {statusEmoji} <strong>{statusLabel}</strong>
                     </div>
@@ -567,7 +592,7 @@ export default function DashboardPage() {
                         setToast("Link copied 🕊️");
                       }}
                       title="Copy status link"
-                      disabled={isArchivingThis}
+                      disabled={disableActions}
                     >
                       Copy link
                     </button>
@@ -575,9 +600,19 @@ export default function DashboardPage() {
                     <button
                       type="button"
                       className="btnGhost"
+                      onClick={() => void cancelLetter(l)}
+                      title="Cancel (recall) letter"
+                      disabled={disableActions || l.delivered || isCanceled}
+                    >
+                      {isCancelingThis ? "Canceling…" : isCanceled ? "Canceled" : "Cancel"}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btnGhost"
                       onClick={() => void archiveLetter(l)}
                       title="Archive letter (soft delete)"
-                      disabled={isArchivingThis}
+                      disabled={disableActions || isCanceled}
                     >
                       {isArchivingThis ? "Archiving…" : "Archive"}
                     </button>
@@ -585,7 +620,7 @@ export default function DashboardPage() {
 
                   <div className="muted" style={{ marginTop: 10 }}>
                     Sent (UTC): {sentUtc} • <strong>ETA (UTC):</strong> {etaUtc}
-                    {!l.delivered && <> • (T-minus {countdown})</>}
+                    {!l.delivered && !isCanceled && <> • (T-minus {countdown})</>}
                   </div>
 
                   <div style={{ marginTop: 12 }}>

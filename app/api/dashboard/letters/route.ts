@@ -47,12 +47,13 @@ function clamp(n: number, a: number, b: number) {
 
 /**
  * Rough “local time” offset from longitude (good vibe > perfect geography)
- * -120 => ~UTC-8, -75 => ~UTC-5
+ * ✅ do NOT clamp to US-only offsets.
+ * Use world-ish bounds: UTC-12..UTC+14
  */
 function offsetMinutesFromLon(lon: number) {
   if (!Number.isFinite(lon)) return 0;
   const hours = Math.round(lon / 15);
-  return clamp(hours * 60, -600, -240); // clamp to US-ish offsets
+  return clamp(hours * 60, -12 * 60, 14 * 60);
 }
 
 function toLocalMs(utcMs: number, offsetMin: number) {
@@ -132,7 +133,6 @@ function etaFromRequiredAwakeMs(sentUtcMs: number, requiredAwakeMs: number, offs
     const sleeping = isSleepingAt(t, offsetMin, cfg);
     const next = nextBoundaryUtcMs(t, offsetMin, cfg);
 
-    // Safety: if the boundary calc ever fails and doesn't advance, bail to linear ETA.
     if (!Number.isFinite(next) || next <= t) {
       return sentUtcMs + requiredAwakeMs;
     }
@@ -147,7 +147,6 @@ function etaFromRequiredAwakeMs(sentUtcMs: number, requiredAwakeMs: number, offs
     t += chunk;
   }
 
-  // If we hit guard limit for any reason, fall back to linear ETA.
   if (remaining > 0) return sentUtcMs + requiredAwakeMs;
 
   return t;
@@ -181,6 +180,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
   }
 
+  // ✅ IMPORTANT:
+  // Include "normal inbox" letters (archived_at is null) OR canceled letters (canceled_at is not null),
+  // because the cancel endpoint typically sets archived_at too.
   const { data, error } = await supabaseServer
     .from("letters")
     .select(
@@ -205,11 +207,12 @@ export async function GET(req: Request) {
       distance_km,
       speed_kmh,
       archived_at,
+      canceled_at,
       bird
     `
     )
     .eq("from_email", email)
-    .is("archived_at", null)
+    .or("archived_at.is.null,canceled_at.not.is.null")
     .order("sent_at", { ascending: false })
     .limit(50);
 
@@ -217,7 +220,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const nowMs = Date.now();
+  const realNowMs = Date.now();
   let letters = data ?? [];
 
   if (q) {
@@ -258,6 +261,12 @@ export async function GET(req: Request) {
     const sentMs = safeParseMs(l.sent_at);
     const etaStoredMs = safeParseMs(l.eta_at);
 
+    const canceledAtMs = safeParseMs(l.canceled_at);
+    const canceled = canceledAtMs != null && Number.isFinite(canceledAtMs);
+
+    // ✅ If canceled, freeze calculations at cancel time (not "now")
+    const calcNowMs = canceled ? Math.min(realNowMs, canceledAtMs!) : realNowMs;
+
     const originLon = Number(l.origin_lon);
     const offsetMin = offsetMinutesFromLon(originLon);
 
@@ -282,19 +291,20 @@ export async function GET(req: Request) {
     }
 
     // ✅ Last-resort fallback: "deliver now" if we have neither.
-    if (etaAdjustedMs == null) etaAdjustedMs = nowMs;
+    if (etaAdjustedMs == null) etaAdjustedMs = calcNowMs;
 
-    const delivered = nowMs >= etaAdjustedMs;
+    // ✅ Delivered is false if canceled (even if time would have passed)
+    const delivered = canceled ? false : calcNowMs >= etaAdjustedMs;
 
-    // ✅ sleeping flag for dashboard
-    const sleeping = !delivered && !ignoresSleep ? isSleepingAt(nowMs, offsetMin) : false;
+    // ✅ sleeping flag for dashboard (never sleeping if canceled)
+    const sleeping = canceled ? false : !delivered && !ignoresSleep ? isSleepingAt(calcNowMs, offsetMin) : false;
 
-    // ✅ progress (sleep-aware), with safe fallbacks
+    // ✅ progress (sleep-aware), with safe fallbacks — computed up to calcNowMs
     let traveledMs = 0;
-    if (sentMs != null && nowMs > sentMs && requiredAwakeMs > 0) {
+    if (sentMs != null && calcNowMs > sentMs && requiredAwakeMs > 0) {
       traveledMs = ignoresSleep
-        ? Math.min(nowMs, etaAdjustedMs) - sentMs
-        : awakeMsBetween(sentMs, Math.min(nowMs, etaAdjustedMs), offsetMin);
+        ? Math.min(calcNowMs, etaAdjustedMs) - sentMs
+        : awakeMsBetween(sentMs, Math.min(calcNowMs, etaAdjustedMs), offsetMin);
     }
     const progress = requiredAwakeMs > 0 ? clamp(traveledMs / requiredAwakeMs, 0, 1) : delivered ? 1 : 0;
 
@@ -302,13 +312,15 @@ export async function GET(req: Request) {
     const cps = checkpointsByLetter.get(l.id) ?? [];
     let current_over_text = delivered ? "Delivered" : "somewhere over the U.S.";
 
-    if (!delivered && cps.length) {
+    if (canceled) {
+      current_over_text = "Canceled";
+    } else if (!delivered && cps.length) {
       let best = cps[0];
       let bestT = -Infinity;
 
       for (const cp of cps) {
         const t = safeParseMs(cp.at);
-        if (t != null && t <= nowMs && t >= bestT) {
+        if (t != null && t <= calcNowMs && t >= bestT) {
           bestT = t;
           best = cp;
         }
@@ -330,22 +342,40 @@ export async function GET(req: Request) {
         ? l.origin_lon + (l.dest_lon - l.origin_lon) * progress
         : null;
 
+    // ETA fields:
+    // - normal: etaAdjusted
+    // - canceled: show canceled timestamp (and no countdown in UI)
     const etaAdjustedISO = new Date(etaAdjustedMs).toISOString();
+    const canceledISO = canceledAtMs ? new Date(canceledAtMs).toISOString() : null;
+
+    const eta_utc_iso = canceled ? canceledISO : etaAdjustedISO;
+    const eta_utc_text = canceled
+      ? canceledISO
+        ? `Canceled at ${formatUTC(canceledISO)} UTC`
+        : "Canceled"
+      : etaAdjustedISO
+      ? `${formatUTC(etaAdjustedISO)} UTC`
+      : "";
 
     return {
       ...l,
       bird,
+
+      canceled,
+      canceled_at: canceledISO,
+
       delivered,
       sleeping,
       progress,
+
       current_lat: curLat,
       current_lon: curLon,
 
       current_over_text,
 
       sent_utc_text: l.sent_at ? `${formatUTC(l.sent_at)} UTC` : "",
-      eta_utc_text: etaAdjustedISO ? `${formatUTC(etaAdjustedISO)} UTC` : "",
-      eta_utc_iso: etaAdjustedISO || null,
+      eta_utc_text,
+      eta_utc_iso: eta_utc_iso || null,
 
       badges_count: 0,
     };

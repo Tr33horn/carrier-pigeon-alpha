@@ -435,6 +435,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
       sent_at,
       eta_at,
       archived_at,
+      canceled_at,
       bird
     `
     )
@@ -475,8 +476,15 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   const realNowMs = Date.now();
   const nowMs = archived ? Math.min(realNowMs, archivedAtMs) : realNowMs;
 
-  // ✅ server snapshot time fields for client
-  const server_now_iso = new Date(nowMs).toISOString();
+  // ✅ canceled handling (terminal) — freeze at cancel time
+  const canceled_at = (meta as any).canceled_at ?? null;
+  const canceledAtMs = canceled_at ? Date.parse(canceled_at) : NaN;
+  const canceled = !!canceled_at && Number.isFinite(canceledAtMs);
+
+  const nowMsFinal = canceled ? Math.min(nowMs, canceledAtMs) : nowMs;
+
+  // ✅ server snapshot time fields for client (freeze if canceled/archived)
+  const server_now_iso = new Date(nowMsFinal).toISOString();
   const server_now_utc_text = formatUtc(server_now_iso);
 
   // Fetch checkpoints
@@ -506,27 +514,29 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
     etaAtIso: (meta as any).eta_at,
   });
 
-  const delivered = Number.isFinite(etaAdjustedMs) ? nowMs >= etaAdjustedMs : true;
+  // ✅ delivered is false if canceled (even if time would have passed)
+  const delivered = canceled ? false : Number.isFinite(etaAdjustedMs) ? nowMsFinal >= etaAdjustedMs : true;
 
   const awakeSoFar =
-    Number.isFinite(sentMs) && nowMs > sentMs
+    Number.isFinite(sentMs) && nowMsFinal > sentMs
       ? ignoresSleep
-        ? Math.min(nowMs, etaAdjustedMs) - sentMs
-        : awakeMsBetween(sentMs, Math.min(nowMs, etaAdjustedMs), offsetMin)
+        ? Math.min(nowMsFinal, etaAdjustedMs) - sentMs
+        : awakeMsBetween(sentMs, Math.min(nowMsFinal, etaAdjustedMs), offsetMin)
       : 0;
 
   const progress = requiredAwakeMs > 0 ? clamp(awakeSoFar / requiredAwakeMs, 0, 1) : 1;
 
-  const sleeping = archived ? false : ignoresSleep ? false : isSleepingAt(nowMs, offsetMin);
-  const wakeMs = archived ? null : ignoresSleep ? null : nextWakeUtcMs(nowMs, offsetMin);
+  // ✅ sleeping/wake disabled if archived or canceled
+  const sleeping = archived || canceled ? false : ignoresSleep ? false : isSleepingAt(nowMsFinal, offsetMin);
+  const wakeMs = archived || canceled ? null : ignoresSleep ? null : nextWakeUtcMs(nowMsFinal, offsetMin);
   const sleep_until_iso = wakeMs ? new Date(wakeMs).toISOString() : null;
   const sleep_local_text = wakeMs ? sleepUntilLocalText(wakeMs, offsetMin) : "";
 
-  const current_speed_kmh = delivered ? 0 : sleeping ? 0 : Number.isFinite(speedKmh) ? speedKmh : 0;
+  const current_speed_kmh = canceled || delivered ? 0 : sleeping ? 0 : Number.isFinite(speedKmh) ? speedKmh : 0;
 
-  // Only fetch body AFTER delivery
+  // ✅ Only fetch body AFTER delivery (and never for canceled)
   let body: string | null = null;
-  if (delivered) {
+  if (delivered && !canceled) {
     const { data: bodyRow } = await supabaseServer.from("letters").select("body").eq("id", (meta as any).id).single();
     body = bodyRow?.body ?? null;
   }
@@ -552,11 +562,12 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
     };
   });
 
+  // ✅ No sleep events if archived or canceled or ignoresSleep
   const sleepEvents =
-    !archived && !ignoresSleep && Number.isFinite(sentMs)
+    !archived && !canceled && !ignoresSleep && Number.isFinite(sentMs)
       ? buildSleepEvents({
           sentMs,
-          nowMs,
+          nowMs: nowMsFinal,
           offsetMin,
           birdLabel: BIRD_RULES[bird].sleepLabel,
         })
@@ -564,24 +575,32 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
 
   const cps = [...cpsBase, ...sleepEvents].sort((a: any, b: any) => Date.parse(a.at) - Date.parse(b.at));
 
-  let current_over_text = delivered ? "Delivered" : "somewhere over the U.S.";
-  if (!delivered && cpsBase.length) {
+  // ✅ Current over text respects canceled
+  let current_over_text = canceled ? "Canceled" : delivered ? "Delivered" : "somewhere over the U.S.";
+  if (!delivered && !canceled && cpsBase.length) {
     let cur = cpsBase[0];
     for (const cp of cpsBase) {
       const t = Date.parse(cp.at);
-      if (Number.isFinite(t) && t <= nowMs) cur = cp;
+      if (Number.isFinite(t) && t <= nowMsFinal) cur = cp;
       else break;
     }
     current_over_text = cur?.geo_text || current_over_text;
   }
 
   const geoBase = delivered ? "Delivered" : stripOverPrefix(current_over_text);
-  const tooltip_text = delivered ? `Location: Delivered` : sleeping ? `Location: Sleeping — ${geoBase || "somewhere over the U.S."}` : `Location: ${geoBase || "somewhere over the U.S."}`;
 
-  // ✅ Award badges (past checkpoints only — NOT sleep events)
+  const tooltip_text = canceled
+    ? `Location: Canceled`
+    : delivered
+    ? `Location: Delivered`
+    : sleeping
+    ? `Location: Sleeping — ${geoBase || "somewhere over the U.S."}`
+    : `Location: ${geoBase || "somewhere over the U.S."}`;
+
+  // ✅ Award badges (past checkpoints only — NOT sleep events) — never while canceled
   const past = cpsBase.filter((cp: any) => {
     const t = Date.parse(cp.at);
-    return Number.isFinite(t) && t <= nowMs;
+    return Number.isFinite(t) && t <= nowMsFinal;
   });
 
   const pastRegionIds = past.map((cp: any) => cp.region_id).filter(Boolean) as string[];
@@ -590,7 +609,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   const destRegion = Number.isFinite(destLat) && Number.isFinite(destLon) ? geoRegionForPoint(destLat, destLon) : null;
 
   const deliveredAtISO =
-    delivered && Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : delivered ? new Date(nowMs).toISOString() : undefined;
+    delivered && Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : delivered ? new Date(nowMsFinal).toISOString() : undefined;
 
   const computedBadges = computeBadgesFromRegions({
     origin: { name: (meta as any).origin_name, regionId: originRegion?.id ?? null },
@@ -600,8 +619,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
     deliveredAtISO,
   });
 
-  if (!archived && computedBadges.length) {
-    const earnedAtDefault = new Date(nowMs).toISOString();
+  // ✅ Never upsert badges if archived OR canceled
+  if (!archived && !canceled && computedBadges.length) {
+    const earnedAtDefault = new Date(nowMsFinal).toISOString();
 
     const rows: LetterItemInsert[] = computedBadges.map((b) => ({
       letter_id: (meta as any).id,
@@ -633,11 +653,25 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   const badges = (items ?? []).filter((x: any) => x.kind === "badge");
   const addons = (items ?? []).filter((x: any) => x.kind === "addon");
 
+  // ✅ ETA fields:
+  // - Normal: adjusted ETA
+  // - Canceled: show cancel timestamp
   const etaAdjustedISO = Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : (meta as any).eta_at;
+  const canceledISO = canceled ? new Date(canceledAtMs).toISOString() : null;
+
+  const eta_at_adjusted = canceled ? canceledISO : etaAdjustedISO;
+  const eta_utc_text = canceled
+    ? canceledISO
+      ? `Canceled at ${formatUtc(canceledISO)}`
+      : "Canceled"
+    : formatUtc(etaAdjustedISO);
 
   return NextResponse.json({
     archived,
     archived_at: archived ? archived_at : null,
+
+    canceled,
+    canceled_at: canceled ? canceled_at : null,
 
     server_now_iso,
     server_now_utc_text,
@@ -649,10 +683,12 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
 
       speed_kmh: Number.isFinite(speedKmh) ? speedKmh : 0,
 
-      eta_at_adjusted: etaAdjustedISO,
-      eta_utc_text: formatUtc(etaAdjustedISO),
+      // ✅ If canceled, we set these to cancel time so the UI can display a coherent stamp.
+      eta_at_adjusted,
+      eta_utc_text,
 
       archived_at: archived ? archived_at : null,
+      canceled_at: canceled ? canceled_at : null,
     },
 
     checkpoints: cps,
@@ -665,7 +701,11 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
       sleep_until_iso,
       sleep_local_text,
       tooltip_text,
-      marker_mode: delivered ? "delivered" : sleeping ? "sleeping" : "flying",
+
+      // ✅ CRITICAL FIX:
+      // Do NOT lie and say "delivered" when canceled — that triggers body reveal.
+      marker_mode: canceled ? "canceled" : delivered ? "delivered" : sleeping ? "sleeping" : "flying",
+
       current_speed_kmh,
     },
 

@@ -30,6 +30,7 @@ type Letter = {
   eta_utc_text?: string;
 
   archived_at?: string | null;
+  canceled_at?: string | null;
 };
 
 type Checkpoint = {
@@ -151,7 +152,7 @@ function Ico({
   name,
   size = 16,
 }: {
-  name: "live" | "pin" | "speed" | "distance" | "check" | "mail" | "timeline" | "moon";
+  name: "live" | "pin" | "speed" | "distance" | "check" | "mail" | "timeline" | "moon" | "x";
   size?: number;
 }) {
   const common = {
@@ -164,6 +165,18 @@ function Ico({
   };
 
   switch (name) {
+    case "x":
+      return (
+        <svg {...common}>
+          <path
+            d="M18 6 6 18M6 6l12 12"
+            stroke="currentColor"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
     case "moon":
       return (
         <svg {...common}>
@@ -184,7 +197,11 @@ function Ico({
             strokeWidth="2.4"
             strokeLinejoin="round"
           />
-          <path d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z" stroke="currentColor" strokeWidth="2.4" />
+          <path
+            d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z"
+            stroke="currentColor"
+            strokeWidth="2.4"
+          />
         </svg>
       );
     case "speed":
@@ -235,7 +252,15 @@ function Ico({
 }
 
 /* ---------- wax seal overlay ---------- */
-function WaxSealOverlay({ etaText, cracking }: { etaText: string; cracking?: boolean }) {
+function WaxSealOverlay({
+  etaText,
+  cracking,
+  canceled,
+}: {
+  etaText: string;
+  cracking?: boolean;
+  canceled?: boolean;
+}) {
   return (
     <div className={cracking ? "seal crack" : "seal"} style={{ position: "relative" }}>
       <div className="sealCard">
@@ -245,9 +270,9 @@ function WaxSealOverlay({ etaText, cracking }: { etaText: string; cracking?: boo
             <div className="waxInner">AH</div>
           </div>
           <div>
-            <div className="sealTitle">Sealed until delivery</div>
-            <div className="sealSub">Opens at {etaText}</div>
-            <div className="sealHint">No peeking. The bird is watching.</div>
+            <div className="sealTitle">{canceled ? "Canceled" : "Sealed until delivery"}</div>
+            <div className="sealSub">{canceled ? "This letter will not be delivered." : `Opens at ${etaText}`}</div>
+            <div className="sealHint">{canceled ? "The bird was recalled to HQ." : "No peeking. The bird is watching."}</div>
           </div>
         </div>
         <div className="sealNoise" />
@@ -405,7 +430,11 @@ export default function LetterStatusPage() {
   const [archived, setArchived] = useState(false);
   const archivedRef = useRef(false);
 
+  const [canceled, setCanceled] = useState(false);
+  const canceledRef = useRef(false);
+
   const [archivedAtISO, setArchivedAtISO] = useState<string | null>(null);
+  const [canceledAtISO, setCanceledAtISO] = useState<string | null>(null);
 
   const [serverNowISO, setServerNowISO] = useState<string | null>(null);
   const [serverNowUtcText, setServerNowUtcText] = useState<string | null>(null);
@@ -428,6 +457,10 @@ export default function LetterStatusPage() {
   }, [archived]);
 
   useEffect(() => {
+    canceledRef.current = canceled;
+  }, [canceled]);
+
+  useEffect(() => {
     const rawSaved = window.localStorage.getItem("pigeon_map_style");
     const saved = (rawSaved || "").trim();
 
@@ -446,15 +479,15 @@ export default function LetterStatusPage() {
     window.localStorage.setItem("pigeon_map_style", mapStyle);
   }, [mapStyle]);
 
-  // ✅ clock: if archived, freeze at server snapshot
+  // ✅ clock: if archived or canceled, freeze at server snapshot
   useEffect(() => {
-    if (archived && serverNowISO) {
+    if ((archived || canceled) && serverNowISO) {
       setNow(new Date(serverNowISO));
       return;
     }
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
-  }, [archived, serverNowISO]);
+  }, [archived, canceled, serverNowISO]);
 
   // ✅ shared loader via ref so polling can call it
   const loadRef = useRef<(() => Promise<void>) | null>(null);
@@ -494,8 +527,14 @@ export default function LetterStatusPage() {
         const nextArchived = !!data.archived;
         setArchived(nextArchived);
 
+        const nextCanceled = !!data.canceled;
+        setCanceled(nextCanceled);
+
         const aISO = (data.archived_at as string | null) || (data.letter?.archived_at as string | null) || null;
         setArchivedAtISO(aISO && String(aISO).trim() ? String(aISO) : null);
+
+        const cISO = (data.canceled_at as string | null) || (data.letter?.canceled_at as string | null) || null;
+        setCanceledAtISO(cISO && String(cISO).trim() ? String(cISO) : null);
 
         setDelivered(!!data.delivered);
         setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
@@ -525,19 +564,21 @@ export default function LetterStatusPage() {
     };
   }, [token]);
 
-  // ✅ effect B: poll ONLY when not archived
+  // ✅ effect B: poll ONLY when not archived/canceled
   useEffect(() => {
     if (!token) return;
     if (archived) return;
+    if (canceled) return;
 
     const interval = setInterval(() => {
       if (archivedRef.current) return;
+      if (canceledRef.current) return;
       const fn = loadRef.current;
       if (fn) void fn();
     }, 15000);
 
     return () => clearInterval(interval);
-  }, [token, archived]);
+  }, [token, archived, canceled]);
 
   // Always use adjusted ETA for display + countdown
   const effectiveEtaISO = useMemo(() => {
@@ -547,13 +588,14 @@ export default function LetterStatusPage() {
 
   const sleeping = !!flight?.sleeping;
 
-  // ✅ delivered is server truth
+  // ✅ delivered is server truth, but canceled overrides
   const uiDelivered = useMemo(() => {
+    if (canceled) return false;
     if (flight?.marker_mode === "delivered") return true;
     return !!delivered;
-  }, [flight?.marker_mode, delivered]);
+  }, [canceled, flight?.marker_mode, delivered]);
 
-  // ✅ progress: prefer server sleep-aware progress
+  // ✅ progress: prefer server sleep-aware progress (fine even if canceled: it will freeze)
   const progress = useMemo(() => {
     if (flight && Number.isFinite(flight.progress)) return clamp01(flight.progress);
 
@@ -573,6 +615,8 @@ export default function LetterStatusPage() {
 
   // ✅ server-provided speed wins
   const currentSpeedKmh = useMemo(() => {
+    if (canceled) return 0;
+
     if (typeof flight?.current_speed_kmh === "number" && Number.isFinite(flight.current_speed_kmh)) {
       return Math.max(0, flight.current_speed_kmh);
     }
@@ -582,7 +626,7 @@ export default function LetterStatusPage() {
 
     const sp = Number(letter.speed_kmh);
     return Number.isFinite(sp) ? sp : 0;
-  }, [letter, flight?.current_speed_kmh, uiDelivered, archived, sleeping]);
+  }, [canceled, letter, flight?.current_speed_kmh, uiDelivered, archived, sleeping]);
 
   const milestones = useMemo(() => {
     if (!letter) return [];
@@ -616,6 +660,7 @@ export default function LetterStatusPage() {
   }, [now, lastFetchedAt]);
 
   const currentlyOver = useMemo(() => {
+    if (canceled) return "Canceled";
     if (uiDelivered) return "Delivered";
     if (currentOverText && currentOverText.trim()) return currentOverText;
 
@@ -625,15 +670,16 @@ export default function LetterStatusPage() {
       "somewhere over the U.S.";
 
     return fallback;
-  }, [uiDelivered, currentOverText, currentCheckpoint]);
+  }, [canceled, uiDelivered, currentOverText, currentCheckpoint]);
 
   const mapTooltip = useMemo(() => {
     if (flight?.tooltip_text && flight.tooltip_text.trim()) return flight.tooltip_text;
+    if (canceled) return "Location: Canceled";
     if (uiDelivered) return "Location: Delivered";
     return `Location: ${currentlyOver || "somewhere over the U.S."}`;
-  }, [flight?.tooltip_text, uiDelivered, currentlyOver]);
+  }, [flight?.tooltip_text, canceled, uiDelivered, currentlyOver]);
 
-  const showLive = !archived && !uiDelivered;
+  const showLive = !archived && !canceled && !uiDelivered;
 
   const timelineItems = useMemo(() => {
     const base: TimelineItem[] = checkpointsByTime.map((cp) => ({
@@ -664,7 +710,7 @@ export default function LetterStatusPage() {
   }, [checkpointsByTime]);
 
   const currentTimelineKey = useMemo(() => {
-    if (uiDelivered) return null;
+    if (uiDelivered || canceled) return null;
 
     const realItems = timelineItems.filter((it) => it.kind !== "day");
     if (!realItems.length) return null;
@@ -682,7 +728,7 @@ export default function LetterStatusPage() {
     }
 
     return bestKey ?? realItems[0].key;
-  }, [timelineItems, now, uiDelivered]);
+  }, [timelineItems, now, uiDelivered, canceled]);
 
   const etaTextUTC = useMemo(() => {
     if (!letter) return "";
@@ -698,9 +744,13 @@ export default function LetterStatusPage() {
     });
   }, [items.badges]);
 
-  const markerMode: Flight["marker_mode"] = flight?.marker_mode ?? (uiDelivered ? "delivered" : sleeping ? "sleeping" : "flying");
+  const markerMode: Flight["marker_mode"] =
+    flight?.marker_mode ?? (uiDelivered ? "delivered" : sleeping ? "sleeping" : "flying");
 
+  // ✅ confetti/reveal: only for real delivery (never canceled)
   useEffect(() => {
+    if (canceled) return;
+
     if (!prevDelivered.current && uiDelivered) {
       setRevealStage("crack");
       setConfetti(true);
@@ -715,7 +765,7 @@ export default function LetterStatusPage() {
     }
 
     prevDelivered.current = uiDelivered;
-  }, [uiDelivered]);
+  }, [uiDelivered, canceled]);
 
   if (error) {
     return (
@@ -743,6 +793,7 @@ export default function LetterStatusPage() {
   const birdName = birdLabel(bird);
 
   const archivedLabel = archivedAtISO ? `Archived • ${new Date(archivedAtISO).toLocaleString()}` : "Archived";
+  const canceledLabel = canceledAtISO ? `Canceled • ${new Date(canceledAtISO).toLocaleString()}` : "Canceled";
 
   return (
     <main className="pageBg">
@@ -784,6 +835,15 @@ export default function LetterStatusPage() {
                       </span>
                     </div>
                   </>
+                ) : canceled ? (
+                  <div className="metaPill" style={{ borderColor: "rgba(220,38,38,0.35)", background: "rgba(220,38,38,0.06)" }}>
+                    <span className="ico" style={{ color: "rgb(220,38,38)" }}>
+                      <Ico name="x" />
+                    </span>
+                    <span>
+                      <strong>CANCELED</strong> — recalled. <span style={{ opacity: 0.75 }}>{canceledLabel}</span>
+                    </span>
+                  </div>
                 ) : archived ? (
                   <div className="metaPill">
                     <span className="ico">
@@ -810,9 +870,9 @@ export default function LetterStatusPage() {
               <div className="kicker">ETA (UTC)</div>
               <div className="etaTime">{etaTextUTC}</div>
 
-              {!uiDelivered && !archived && <div className="etaSub">T-minus {countdown}</div>}
+              {!uiDelivered && !archived && !canceled && <div className="etaSub">T-minus {countdown}</div>}
 
-              {archived && (
+              {(archived || canceled) && (
                 <div className="etaSub">
                   Snapshot: <span style={{ fontVariantNumeric: "tabular-nums" }}>{serverNowUtcText ?? "frozen"}</span>
                 </div>
@@ -868,7 +928,7 @@ export default function LetterStatusPage() {
               <span className="ico">
                 <Ico name="mail" />
               </span>
-              <span>Sealed until delivery</span>
+              <span>{canceled ? "Canceled" : "Sealed until delivery"}</span>
             </div>
           </div>
 
@@ -876,15 +936,18 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: uiDelivered ? 1 : 0 }}>
-                <div className="body">{uiDelivered ? (letter.body ?? "") : ""}</div>
+              <div
+                className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""}
+                style={{ opacity: uiDelivered && !canceled ? 1 : 0 }}
+              >
+                <div className="body">{uiDelivered && !canceled ? (letter.body ?? "") : ""}</div>
               </div>
 
-              {!uiDelivered || revealStage !== "open" ? (
-                <div style={{ position: uiDelivered ? "absolute" : "relative", inset: 0 }}>
-                  <WaxSealOverlay etaText={etaTextUTC} cracking={uiDelivered && revealStage === "crack"} />
+              {uiDelivered && !canceled && revealStage === "open" ? null : (
+                <div style={{ position: uiDelivered && !canceled ? "absolute" : "relative", inset: 0 }}>
+                  <WaxSealOverlay etaText={etaTextUTC} cracking={uiDelivered && revealStage === "crack"} canceled={canceled} />
                 </div>
-              ) : null}
+              )}
             </div>
           </div>
 
@@ -972,7 +1035,7 @@ export default function LetterStatusPage() {
                   <span className="ico">
                     <Ico name="live" />
                   </span>
-                  {uiDelivered || archived ? "Final" : "Auto"}
+                  {uiDelivered || archived || canceled ? "Final" : "Auto"}
                 </div>
               </div>
 

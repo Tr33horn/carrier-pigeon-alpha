@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "../../../../lib/supabaseServer";
 
 function isValidToken(token: string) {
   // keep it permissive; public_token is URL-safe
-  return /^[a-zA-Z0-9_-]{6,128}$/.test(token.trim());
+  return /^[a-zA-Z0-9_-]{6,128}$/.test(String(token || "").trim());
 }
 
 async function cancelByToken(token: string) {
@@ -13,10 +13,10 @@ async function cancelByToken(token: string) {
     return NextResponse.json({ error: "Valid token required" }, { status: 400 });
   }
 
-  // Find the latest letter by this token
+  // Find latest letter by this token
   const { data: letter, error: findErr } = await supabaseServer
     .from("letters")
-    .select("id, canceled_at, archived_at")
+    .select("id, canceled_at, archived_at, sent_at")
     .eq("public_token", t)
     .order("sent_at", { ascending: false })
     .limit(1)
@@ -25,42 +25,48 @@ async function cancelByToken(token: string) {
   if (findErr) return NextResponse.json({ error: findErr.message }, { status: 500 });
   if (!letter) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Idempotent: if already canceled, return success
+  // ✅ Idempotent: already canceled => ok
   if (letter.canceled_at) {
     return NextResponse.json({
       ok: true,
       canceled: true,
+      already: true,
       canceled_at: letter.canceled_at,
-      archived: !!letter.archived_at,
       archived_at: letter.archived_at ?? null,
     });
   }
 
+  // ✅ Cancel should be allowed even if archived (archived is “visibility”, canceled is “state”)
+  // Also set archived_at so it disappears from normal dashboard list (unless dashboard includes canceled, which yours does).
+
   const nowIso = new Date().toISOString();
 
-  // Cancel it (and archive so it disappears from dashboard)
+  // If already archived, keep that timestamp; otherwise archive now.
+  const nextArchivedAt = letter.archived_at ?? nowIso;
+
   const { data: updated, error: updErr } = await supabaseServer
     .from("letters")
     .update({
       canceled_at: nowIso,
-      archived_at: letter.archived_at ?? nowIso, // keep existing archived_at if already archived
+      archived_at: nextArchivedAt,
     })
     .eq("id", letter.id)
     .select("canceled_at, archived_at")
     .single();
 
-  if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+  if (updErr) {
+    return NextResponse.json({ error: updErr.message }, { status: 500 });
+  }
 
   return NextResponse.json({
     ok: true,
     canceled: true,
     canceled_at: updated?.canceled_at ?? nowIso,
-    archived: true,
-    archived_at: updated?.archived_at ?? (letter.archived_at ?? nowIso),
+    archived_at: updated?.archived_at ?? nextArchivedAt,
   });
 }
 
-export async function POST(_req: Request, ctx: { params: Promise<{ token: string }> }) {
+export async function POST(_req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   try {
     const { token } = await ctx.params;
     return await cancelByToken(token);
@@ -70,7 +76,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ token: string
 }
 
 // Optional: allow DELETE /api/letters/cancel/:token too
-export async function DELETE(_req: Request, ctx: { params: Promise<{ token: string }> }) {
+export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   try {
     const { token } = await ctx.params;
     return await cancelByToken(token);
