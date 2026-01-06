@@ -257,11 +257,20 @@ function Ico({
   }
 }
 
-function birdImageSrc(bird: BirdType) {
-  // ✅ Uses your current bird-choice filenames
-  if (bird === "snipe") return "/birds/great-snipe.gif";
-  if (bird === "goose") return "/birds/canada-goose.gif";
-  return "/birds/homing-pigeon.gif";
+/** ✅ Bird image based on bird + state
+ *  Files:
+ *  - canada-goose-fly.png / canada-goose-sleep.png / canada-goose-landed.png
+ *  - great-snipe-fly.png / great-snipe-sleep.png / great-snipe-landed.png
+ *  - homing-pigeon-fly.png / homing-pigeon-sleep.png / homing-pigeon-landed.png
+ */
+function birdImageSrc(bird: BirdType, mode: "flying" | "sleeping" | "delivered" | "canceled") {
+  const base =
+    bird === "snipe" ? "great-snipe" : bird === "goose" ? "canada-goose" : "homing-pigeon";
+
+  const state =
+    mode === "sleeping" ? "sleep" : mode === "delivered" ? "landed" : mode === "canceled" ? "landed" : "fly";
+
+  return `/birds/${base}-${state}.png`;
 }
 
 function BirdStatusCard({
@@ -273,7 +282,7 @@ function BirdStatusCard({
   mode: "flying" | "sleeping" | "delivered" | "canceled";
   wakeText?: string;
 }) {
-  const src = birdImageSrc(bird);
+  const src = birdImageSrc(bird, mode);
 
   const label =
     mode === "canceled"
@@ -863,7 +872,6 @@ export default function LetterStatusPage() {
               </div>
 
               <div className="subRow">
-                {/* ✅ NEW: Bird image card */}
                 <BirdStatusCard bird={bird} mode={markerMode} wakeText={flight?.sleep_local_text || undefined} />
 
                 {showLive ? (
