@@ -10,8 +10,8 @@ type BirdOption = {
   id: BirdType;
   title: string;
   subtitle: string;
-  emoji: string;
-  imgSrc: string; // placeholder paths
+  imgSrc: string;
+  recommended?: boolean;
 };
 
 export default function NewPage() {
@@ -24,23 +24,21 @@ export default function NewPage() {
     () => [
       {
         id: "snipe",
-        title: "🏎️ Great Snipe",
+        title: "Great Snipe",
         subtitle: "Fast long-haul. No roosting.",
-        emoji: "🏎️",
         imgSrc: "/birds/great-snipe.png",
       },
       {
         id: "pigeon",
-        title: "🕊️ Homing Pigeon",
+        title: "Homing Pigeon",
         subtitle: "Classic delivery.",
-        emoji: "🕊️",
         imgSrc: "/birds/homing-pigeon.png",
+        recommended: true,
       },
       {
         id: "goose",
-        title: "🪿 Canada Goose",
+        title: "Canada Goose",
         subtitle: "Carries more. Slower.",
-        emoji: "🪿",
         imgSrc: "/birds/canada-goose.png",
       },
     ],
@@ -67,26 +65,41 @@ export default function NewPage() {
 
         {/* Bird cards */}
         <div className="birdGrid">
-          {options.map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              className={`card birdCard ${bird === opt.id ? "on" : ""}`}
-              onClick={() => setBird(opt.id)}
-              aria-pressed={bird === opt.id}
-            >
-              <div className="birdRow">
-                <div className="birdThumb" aria-hidden="true">
-                  <img src={opt.imgSrc} alt="" />
-                </div>
+          {options.map((opt) => {
+            const isSelected = bird === opt.id;
 
-                <div style={{ minWidth: 0 }}>
-                  <div className="birdTitle">{opt.title}</div>
-                  <div className={`muted birdSub`}>{opt.subtitle}</div>
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                className={`card birdCard ${isSelected ? "on" : ""}`}
+                onClick={() => setBird(opt.id)}
+                aria-pressed={isSelected}
+                style={{ position: "relative" }}
+              >
+                {/* Selected checkmark (top-right) */}
+                {isSelected && (
+                  <div className="birdBadge" aria-hidden="true">
+                    ✓
+                  </div>
+                )}
+
+                {/* Recommended pill (top-left) */}
+                {opt.recommended && <div className="birdRec">Recommended</div>}
+
+                <div className="birdRow">
+                  <div className="birdThumb" aria-hidden="true">
+                    <img src={opt.imgSrc} alt="" />
+                  </div>
+
+                  <div style={{ minWidth: 0 }}>
+                    <div className="birdTitle">{opt.title}</div>
+                    <div className="muted birdSub">{opt.subtitle}</div>
+                  </div>
                 </div>
-              </div>
-            </button>
-          ))}
+              </button>
+            );
+          })}
         </div>
 
         {/* Continue / Skip (unchanged) */}
