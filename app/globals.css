@@ -157,7 +157,7 @@ body {
   margin-top: 14px;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 @media (max-width: 860px){
@@ -172,14 +172,20 @@ body {
   transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
 }
 
+.birdCard:active{
+  transform: translateY(0);
+  box-shadow: var(--shadow-md);
+}
+
 .birdCard:hover{
   transform: translateY(-2px);
 }
 
 .birdCard.on{
-  border-color: rgba(0,0,0,0.16);
-  box-shadow: 0 12px 28px rgba(0,0,0,0.12);
-  /* subtle accent wash that matches your brand */
+  border-color: rgba(0,0,0,0.18);
+  box-shadow:
+    0 14px 30px rgba(0,0,0,0.14),
+    inset 0 0 0 2px var(--alp-blue-30);
   background:
     linear-gradient(135deg, var(--alp-blue-18), rgba(255,255,255,0) 55%),
     var(--card);
@@ -192,9 +198,9 @@ body {
 }
 
 .birdThumb{
-  width: 110px;
-  height: 84px;
-  border-radius: 16px;
+  width: 96px;
+  height: 72px;
+  border-radius: 14px;
   border: 1px solid rgba(0,0,0,0.08);
   background: rgba(0,0,0,0.035);
   display: grid;
@@ -213,10 +219,11 @@ body {
 .birdTitle{
   font-weight: 900;
   letter-spacing: -0.01em;
+  line-height: 1.1;
 }
 
 .birdSub{
-  margin-top: 4px;
+  margin-top: 2px; /* was 4px */
 }
 
 /* -------------------------------------------------
