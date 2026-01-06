@@ -1650,3 +1650,125 @@ body {
 .pigeonTooltip.canceled.leaflet-tooltip::before{
   border-top-color: rgba(217,45,32,0.10);
 }
+
+/* -------------------------------------------------
+   CANCELED marker + tooltip
+------------------------------------------------- */
+
+/* Cancel = kill all rings + make dot red */
+.pigeonMarker.canceled .pigeonPulseRing,
+.pigeonMarker.canceled .pigeonSleepRing{
+  display: none !important;
+}
+
+.pigeonMarker.canceled .pigeonDot{
+  background: #d92d20;
+  border-color: #fff;
+}
+
+/* Tooltip: red-tinted, no animated dot */
+.pigeonTooltip.canceled.leaflet-tooltip{
+  background: rgba(217,45,32,0.10);
+  border: 1px solid rgba(217,45,32,0.25);
+}
+
+.pigeonTooltip.canceled.leaflet-tooltip::before{
+  border-top-color: rgba(217,45,32,0.10);
+}
+
+.birdStatusCard{
+  display:inline-flex;
+  background: rgba(255,255,255,0.70);
+  border: 1px solid rgba(0,0,0,0.10);
+  border-radius: 18px;
+  padding: 10px 12px;
+  box-shadow: 0 10px 18px rgba(0,0,0,0.08);
+}
+
+.birdStatusRow{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+}
+
+.birdStatusThumb{
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.10);
+  background: rgba(0,0,0,0.035);
+  overflow: hidden;
+  display:grid;
+  place-items:center;
+  flex: 0 0 auto;
+}
+
+.birdStatusThumb img{
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display:block;
+}
+
+/* Tiny “state hint” treatments (optional but nice) */
+.birdStatusThumb.sleeping{
+  box-shadow: inset 0 0 0 2px rgba(88,80,236,0.25);
+  background: rgba(88,80,236,0.08);
+}
+
+.birdStatusThumb.delivered{
+  box-shadow: inset 0 0 0 2px rgba(22,163,74,0.25);
+  background: rgba(22,163,74,0.08);
+}
+
+.birdStatusThumb.canceled{
+  box-shadow: inset 0 0 0 2px rgba(220,38,38,0.25);
+  background: rgba(220,38,38,0.08);
+}
+
+.birdStatusTitle{
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+
+/* Canceled: stop all ring animations */
+.pigeonMarker.canceled .pigeonPulseRing,
+.pigeonMarker.canceled .pigeonPulseRing.ring2,
+.pigeonMarker.canceled .pigeonSleepRing {
+  display: none !important;
+}
+
+/* Skull marker */
+.pigeonMarker .pigeonSkull {
+  width: 18px;
+  height: 18px;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  line-height: 18px;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.25));
+  transform: translateY(-1px);
+}
+
+/* Tooltip skull glyph */
+.pigeonTooltipRow .pigeonStatusGlyph {
+  display: inline-flex;
+  margin-right: 8px;
+  transform: translateY(1px);
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.22));
+}
+
+/* Optional: make canceled tooltip feel “danger” */
+.pigeonTooltip.canceled {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.08);
+}

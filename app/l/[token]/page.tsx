@@ -257,6 +257,52 @@ function Ico({
   }
 }
 
+function birdImageSrc(bird: BirdType) {
+  // ✅ Uses your current bird-choice filenames
+  if (bird === "snipe") return "/birds/great-snipe.png";
+  if (bird === "goose") return "/birds/canada-goose.png";
+  return "/birds/homing-pigeon.png";
+}
+
+function BirdStatusCard({
+  bird,
+  mode,
+  wakeText,
+}: {
+  bird: BirdType;
+  mode: "flying" | "sleeping" | "delivered" | "canceled";
+  wakeText?: string;
+}) {
+  const src = birdImageSrc(bird);
+
+  const label =
+    mode === "canceled"
+      ? "Recalled"
+      : mode === "delivered"
+      ? "Delivered"
+      : mode === "sleeping"
+      ? `Sleeping${wakeText ? ` · wakes ${wakeText}` : ""}`
+      : "In flight";
+
+  return (
+    <div className="birdStatusCard">
+      <div className="birdStatusRow">
+        <div className={`birdStatusThumb ${mode}`}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={src} alt={`${bird} bird`} />
+        </div>
+
+        <div style={{ minWidth: 0 }}>
+          <div className="birdStatusTitle">{birdLabel(bird)}</div>
+          <div className="muted" style={{ marginTop: 2 }}>
+            {label}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- wax seal overlay ---------- */
 function WaxSealOverlay({
   etaText,
@@ -817,6 +863,9 @@ export default function LetterStatusPage() {
               </div>
 
               <div className="subRow">
+                {/* ✅ NEW: Bird image card */}
+                <BirdStatusCard bird={bird} mode={markerMode} wakeText={flight?.sleep_local_text || undefined} />
+
                 {showLive ? (
                   <>
                     <div className="liveStack" style={{ minWidth: 230, flex: "0 0 auto" }}>

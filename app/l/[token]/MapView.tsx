@@ -185,11 +185,25 @@ export default function MapView(props: {
   const [displayProgress, setDisplayProgress] = useState(() => clamp01(props.progress));
   const rafRef = useRef<number | null>(null);
 
-  // ✅ smooth marker progress
+  // ✅ Mode derived from prop (source of truth) + fallback to progress
+  const mode: MarkerMode = props.markerMode ?? (clamp01(props.progress) >= 1 ? "delivered" : "flying");
+
+  const isFlying = mode === "flying";
+  const isSleeping = mode === "sleeping";
+  const isDelivered = mode === "delivered";
+  const isCanceled = mode === "canceled";
+
+  // ✅ smooth marker progress (skip animation for terminal canceled/delivered)
   useEffect(() => {
-    const from = displayProgress;
     const to = clamp01(props.progress);
 
+    // If terminal, just snap.
+    if (isCanceled || isDelivered) {
+      setDisplayProgress(to);
+      return;
+    }
+
+    const from = displayProgress;
     if (Math.abs(to - from) < 0.00001) return;
 
     const durationMs = 420;
@@ -210,7 +224,7 @@ export default function MapView(props: {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.progress]);
+  }, [props.progress, isCanceled, isDelivered]);
 
   const current = useMemo(
     () => ({
@@ -220,14 +234,7 @@ export default function MapView(props: {
     [origin.lat, origin.lon, dest.lat, dest.lon, displayProgress]
   );
 
-  // ✅ Mode derived from prop (source of truth) + fallback to progress
-  const mode: MarkerMode = props.markerMode ?? (clamp01(props.progress) >= 1 ? "delivered" : "flying");
-
-  const isFlying = mode === "flying";
-  const isSleeping = mode === "sleeping";
-  const isDelivered = mode === "delivered";
-  const isCanceled = mode === "canceled";
-
+  // ✅ CANCELED: render skull marker instead of dot
   const liveIcon = useMemo(
     () =>
       L.divIcon({
@@ -239,7 +246,12 @@ export default function MapView(props: {
             <span class="pigeonPulseRing"></span>
             <span class="pigeonPulseRing ring2"></span>
             <span class="pigeonSleepRing"></span>
-            <div class="pigeonDot"></div>
+
+            ${
+              isCanceled
+                ? `<div class="pigeonSkull" aria-hidden="true">💀</div>`
+                : `<div class="pigeonDot"></div>`
+            }
           </div>
         `,
         iconSize: [44, 44],
@@ -355,8 +367,14 @@ export default function MapView(props: {
             }`}
           >
             <span className="pigeonTooltipRow">
-              {/* ✅ no live dot for delivered or canceled */}
-              {!isDelivered && !isCanceled && <span className={`pigeonLiveDot ${isSleeping ? "sleep" : ""}`} />}
+              {isCanceled ? (
+                <span className="pigeonStatusGlyph" aria-hidden>
+                  💀
+                </span>
+              ) : !isDelivered ? (
+                <span className={`pigeonLiveDot ${isSleeping ? "sleep" : ""}`} />
+              ) : null}
+
               <span className="pigeonTooltipText">{tooltip}</span>
             </span>
           </Tooltip>
