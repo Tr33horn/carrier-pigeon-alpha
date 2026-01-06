@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   if (!key) return NextResponse.json({ error: "Missing RESEND_API_KEY" }, { status: 500 });
 
   const base = process.env.APP_BASE_URL || "http://localhost:3000";
-  const mailFrom = process.env.MAIL_FROM || "Carrier Pigeon <no-reply@localhost>";
+  const mailFrom = process.env.MAIL_FROM || "FLOK <onboarding@resend.dev>";
 
   // Verify the sender matches the letter
   const { data: letter, error } = await supabaseServer

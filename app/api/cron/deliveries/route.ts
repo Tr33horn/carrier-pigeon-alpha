@@ -61,7 +61,7 @@ export async function GET(req: Request) {
   const resend = new Resend(key);
 
   const base = process.env.APP_BASE_URL || "http://localhost:3000";
-  const mailFrom = process.env.MAIL_FROM || "Carrier Pigeon <no-reply@localhost>";
+  const mailFrom = process.env.MAIL_FROM || "FLOK <onboarding@resend.dev>";
 
   /* --------------------------
      A) DELIVERIES
