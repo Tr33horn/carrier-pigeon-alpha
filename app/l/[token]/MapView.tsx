@@ -8,12 +8,25 @@ import L from "leaflet";
 export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
 export type MarkerMode = "flying" | "sleeping" | "delivered";
 
+type LatLon = { lat: number; lon: number };
+
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
+}
+
+function isFiniteLatLon(p: any): p is LatLon {
+  return (
+    p &&
+    typeof p === "object" &&
+    Number.isFinite(p.lat) &&
+    Number.isFinite(p.lon) &&
+    Math.abs(p.lat) <= 90 &&
+    Math.abs(p.lon) <= 180
+  );
 }
 
 function getCarto(style: MapStyle) {
@@ -39,23 +52,20 @@ function getCarto(style: MapStyle) {
 
 /**
  * ✅ Fit bounds ONLY when origin/dest change (primitive deps)
- * No ref-reset loops, no “snap back”.
+ * ✅ Guard: do nothing unless coords are valid
  */
-function FitBoundsOnRouteChange({
-  origin,
-  dest,
-}: {
-  origin: { lat: number; lon: number };
-  dest: { lat: number; lon: number };
-}) {
+function FitBoundsOnRouteChange({ origin, dest }: { origin: LatLon; dest: LatLon }) {
   const map = useMap();
   const didFitKey = useRef<string>("");
 
   useEffect(() => {
+    if (!isFiniteLatLon(origin) || !isFiniteLatLon(dest)) return;
+
     const key = `${origin.lat.toFixed(6)},${origin.lon.toFixed(6)}|${dest.lat.toFixed(6)},${dest.lon.toFixed(6)}`;
     if (didFitKey.current === key) return;
 
     didFitKey.current = key;
+
     const bounds: [number, number][] = [
       [origin.lat, origin.lon],
       [dest.lat, dest.lon],
@@ -78,7 +88,7 @@ function normalizeTooltip(text?: string) {
 }
 
 /** tiny deterministic "random" from coords so each route gets its own vibe */
-function seedFromCoords(o: { lat: number; lon: number }, d: { lat: number; lon: number }) {
+function seedFromCoords(o: LatLon, d: LatLon) {
   const n = Math.sin(o.lat * 12.9898 + o.lon * 78.233 + d.lat * 37.719 + d.lon * 11.131) * 43758.5453;
   return n - Math.floor(n); // 0..1
 }
@@ -87,11 +97,10 @@ function seedFromCoords(o: { lat: number; lon: number }, d: { lat: number; lon: 
  * Build a "near-straight" path with tiny perpendicular drift.
  * - Static at a given progress value (depends on progress, not time)
  * - Drift grows gently with distance traveled
- * - Designed NOT to look like the bird went wildly off course
  */
 function makeNearStraightDriftPath(args: {
-  origin: { lat: number; lon: number };
-  dest: { lat: number; lon: number };
+  origin: LatLon;
+  dest: LatLon;
   progress: number; // 0..1
   points?: number;
 }) {
@@ -148,14 +157,27 @@ function makeNearStraightDriftPath(args: {
 }
 
 export default function MapView(props: {
-  origin: { lat: number; lon: number };
-  dest: { lat: number; lon: number };
+  origin?: LatLon;
+  dest?: LatLon;
   progress: number; // 0..1
   tooltipText?: string;
   mapStyle?: MapStyle;
   markerMode?: MarkerMode; // "flying" | "sleeping" | "delivered"
 }) {
-  const { origin, dest } = props;
+  // ✅ Hard guard: never crash the page if coords are missing/bad
+  if (!isFiniteLatLon(props.origin) || !isFiniteLatLon(props.dest)) {
+    return (
+      <div className="mapShell" style={{ display: "grid", placeItems: "center", minHeight: 260 }}>
+        <div className="muted" style={{ textAlign: "center", padding: 16 }}>
+          Map unavailable (missing route coordinates).
+          <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>No worries — the bird is still real.</div>
+        </div>
+      </div>
+    );
+  }
+
+  const origin = props.origin;
+  const dest = props.dest;
 
   const mapStyle: MapStyle = props.mapStyle ?? "carto-positron";
   const tile = useMemo(() => getCarto(mapStyle), [mapStyle]);
@@ -213,11 +235,7 @@ export default function MapView(props: {
           <div class="pigeonPulseWrap">
             <span class="pigeonPulseRing"></span>
             <span class="pigeonPulseRing ring2"></span>
-
-            <!-- 🌙 sleep halo + moon glyph (CSS toggles visibility) -->
             <span class="pigeonSleepRing"></span>
-            <span class="pigeonMoon" aria-hidden="true">🌙</span>
-
             <div class="pigeonDot"></div>
           </div>
         `,
@@ -285,10 +303,6 @@ export default function MapView(props: {
   /**
    * ✅ Don’t hardcode colors in JS.
    * Use CSS variables with fallbacks so your theme can control it.
-   *
-   * Define in CSS (recommended):
-   * --route-ideal: rgba(18,18,18,0.35);
-   * --route-flown: rgba(22,163,74,0.85);
    */
   const idealColor = "var(--route-ideal, rgba(18,18,18,0.35))";
   const flownColor = "var(--route-flown, rgba(22,163,74,0.85))";
