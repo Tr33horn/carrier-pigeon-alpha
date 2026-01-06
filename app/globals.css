@@ -78,6 +78,51 @@ body {
   .twoCol { grid-template-columns: 1fr; }
 }
 
+
+/* -------------------------------------------------
+   Home page (center aligned)
+------------------------------------------------- */
+.homeCenter{
+  min-height: calc(100vh - 48px);
+  display: grid;
+  place-items: center;
+  gap: 14px;
+  padding: 28px 0;
+}
+
+.homeCenter > *{
+  width: 100%;
+  max-width: 620px;
+}
+
+/* Hero placeholder */
+.homeHero{
+  height: 240px;
+  border-radius: 24px;
+  padding: 0; /* just a frame */
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, var(--alp-blue-30), rgba(255,255,255,0) 58%),
+    linear-gradient(0deg, rgba(0,0,0,0.03), rgba(0,0,0,0));
+  position: relative;
+}
+
+.homeHeroInner{
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 18px;
+}
+
+.homeHeroTitle{
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  opacity: 0.55;
+}
+
 /* -------------------------------------------------
    Typography
 ------------------------------------------------- */
