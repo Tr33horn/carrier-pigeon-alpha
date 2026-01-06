@@ -76,7 +76,7 @@ type Flight = {
   sleep_until_iso: string | null;
   sleep_local_text: string; // e.g. "6:00 AM"
   tooltip_text: string; // "Location: ..."
-  marker_mode: "flying" | "sleeping" | "delivered";
+  marker_mode: "flying" | "sleeping" | "delivered" | "canceled";
 
   // server-provided so UI never has to guess
   current_speed_kmh?: number;
@@ -216,7 +216,13 @@ function Ico({
       return (
         <svg {...common}>
           <path d="M7 7h10M7 17h10" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-          <path d="M9 9l-2-2 2-2M15 15l2 2-2 2" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M9 9l-2-2 2-2M15 15l2 2-2 2"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       );
     case "check":
@@ -588,14 +594,13 @@ export default function LetterStatusPage() {
 
   const sleeping = !!flight?.sleeping;
 
-  // ✅ delivered is server truth, but canceled overrides
+  // ✅ delivered is server truth; canceled always overrides
   const uiDelivered = useMemo(() => {
     if (canceled) return false;
-    if (flight?.marker_mode === "delivered") return true;
     return !!delivered;
-  }, [canceled, flight?.marker_mode, delivered]);
+  }, [canceled, delivered]);
 
-  // ✅ progress: prefer server sleep-aware progress (fine even if canceled: it will freeze)
+  // ✅ progress: prefer server sleep-aware progress (it freezes when canceled)
   const progress = useMemo(() => {
     if (flight && Number.isFinite(flight.progress)) return clamp01(flight.progress);
 
@@ -744,8 +749,12 @@ export default function LetterStatusPage() {
     });
   }, [items.badges]);
 
-  const markerMode: Flight["marker_mode"] =
-    flight?.marker_mode ?? (uiDelivered ? "delivered" : sleeping ? "sleeping" : "flying");
+  // ✅ marker mode: force canceled if canceled
+  const markerMode: Flight["marker_mode"] = useMemo(() => {
+    if (canceled) return "canceled";
+    if (flight?.marker_mode) return flight.marker_mode;
+    return uiDelivered ? "delivered" : sleeping ? "sleeping" : "flying";
+  }, [canceled, flight?.marker_mode, uiDelivered, sleeping]);
 
   // ✅ confetti/reveal: only for real delivery (never canceled)
   useEffect(() => {
@@ -936,10 +945,7 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div
-                className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""}
-                style={{ opacity: uiDelivered && !canceled ? 1 : 0 }}
-              >
+              <div className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: uiDelivered && !canceled ? 1 : 0 }}>
                 <div className="body">{uiDelivered && !canceled ? (letter.body ?? "") : ""}</div>
               </div>
 

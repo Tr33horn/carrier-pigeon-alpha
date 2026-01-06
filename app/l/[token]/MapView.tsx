@@ -6,7 +6,7 @@ import L from "leaflet";
 
 // ✅ Match the LetterStatusPage values
 export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
-export type MarkerMode = "flying" | "sleeping" | "delivered";
+export type MarkerMode = "flying" | "sleeping" | "delivered" | "canceled";
 
 type LatLon = { lat: number; lon: number };
 
@@ -162,7 +162,7 @@ export default function MapView(props: {
   progress: number; // 0..1
   tooltipText?: string;
   mapStyle?: MapStyle;
-  markerMode?: MarkerMode; // "flying" | "sleeping" | "delivered"
+  markerMode?: MarkerMode; // "flying" | "sleeping" | "delivered" | "canceled"
 }) {
   // ✅ Hard guard: never crash the page if coords are missing/bad
   if (!isFiniteLatLon(props.origin) || !isFiniteLatLon(props.dest)) {
@@ -226,11 +226,14 @@ export default function MapView(props: {
   const isFlying = mode === "flying";
   const isSleeping = mode === "sleeping";
   const isDelivered = mode === "delivered";
+  const isCanceled = mode === "canceled";
 
   const liveIcon = useMemo(
     () =>
       L.divIcon({
-        className: `pigeonMarker ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} ${isDelivered ? "delivered" : ""}`,
+        className: `pigeonMarker ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} ${isDelivered ? "delivered" : ""} ${
+          isCanceled ? "canceled" : ""
+        }`,
         html: `
           <div class="pigeonPulseWrap">
             <span class="pigeonPulseRing"></span>
@@ -242,7 +245,7 @@ export default function MapView(props: {
         iconSize: [44, 44],
         iconAnchor: [22, 22],
       }),
-    [isFlying, isSleeping, isDelivered]
+    [isFlying, isSleeping, isDelivered, isCanceled]
   );
 
   const originIcon = useMemo(
@@ -347,10 +350,13 @@ export default function MapView(props: {
             opacity={1}
             permanent
             interactive={false}
-            className={`pigeonTooltip ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} ${isDelivered ? "delivered" : ""}`}
+            className={`pigeonTooltip ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} ${isDelivered ? "delivered" : ""} ${
+              isCanceled ? "canceled" : ""
+            }`}
           >
             <span className="pigeonTooltipRow">
-              {!isDelivered && <span className={`pigeonLiveDot ${isSleeping ? "sleep" : ""}`} />}
+              {/* ✅ no live dot for delivered or canceled */}
+              {!isDelivered && !isCanceled && <span className={`pigeonLiveDot ${isSleeping ? "sleep" : ""}`} />}
               <span className="pigeonTooltipText">{tooltip}</span>
             </span>
           </Tooltip>
