@@ -42,7 +42,7 @@ export default function Home() {
             <div className="homeHeroInner">
               <div className="homeHeroTitle">Hero image placeholder</div>
               <div className="muted" style={{ fontSize: 12 }}>
-                (Drop an image here later)
+                <img src="/hero/home-hero.jpg" alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
               </div>
             </div>
           </div>
