@@ -88,8 +88,7 @@ function nextTransitionUtcMs(utcMs: number, offsetMin: number, cfg: SleepConfig 
 
   // Wrap case: 22 -> 6
   if (sleeping) {
-    const nextLocal =
-      h >= cfg.sleepStartHour ? mkLocal(y, m, day + 1, cfg.sleepEndHour) : mkLocal(y, m, day, cfg.sleepEndHour);
+    const nextLocal = h >= cfg.sleepStartHour ? mkLocal(y, m, day + 1, cfg.sleepEndHour) : mkLocal(y, m, day, cfg.sleepEndHour);
     return toUtcMs(nextLocal, offsetMin);
   } else {
     const todayStart = mkLocal(y, m, day, cfg.sleepStartHour);
@@ -124,12 +123,7 @@ function awakeMsBetween(startUtcMs: number, endUtcMs: number, offsetMin: number,
  * Returns UTC ms when requiredAwakeMs of "awake time" has elapsed.
  * ✅ Guard fallback => baseline no-sleep ETA
  */
-function etaFromRequiredAwakeMs(
-  sentUtcMs: number,
-  requiredAwakeMs: number,
-  offsetMin: number,
-  cfg: SleepConfig = SLEEP
-) {
+function etaFromRequiredAwakeMs(sentUtcMs: number, requiredAwakeMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
   let t = sentUtcMs;
   let remaining = requiredAwakeMs;
 
@@ -205,14 +199,9 @@ function stripOverPrefix(s: string) {
 
 /**
  * Create “<Bird> slept …” events as synthetic checkpoints
+ * ✅ FIX: If wake time is already in the past, say “awoke at …”
  */
-function buildSleepEvents(args: {
-  sentMs: number;
-  nowMs: number;
-  offsetMin: number;
-  birdLabel?: string;
-  cfg?: SleepConfig;
-}) {
+function buildSleepEvents(args: { sentMs: number; nowMs: number; offsetMin: number; birdLabel?: string; cfg?: SleepConfig }) {
   const { sentMs, nowMs, offsetMin } = args;
   const cfg = args.cfg ?? SLEEP;
   const birdLabel = (args.birdLabel || "Pigeon").trim() || "Pigeon";
@@ -243,9 +232,7 @@ function buildSleepEvents(args: {
     const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
 
     const sleepStartLocal = Date.UTC(y, m, d, cfg.sleepStartHour, 0, 0, 0);
-    const sleepEndLocal = wraps
-      ? Date.UTC(y, m, d + 1, cfg.sleepEndHour, 0, 0, 0)
-      : Date.UTC(y, m, d, cfg.sleepEndHour, 0, 0, 0);
+    const sleepEndLocal = wraps ? Date.UTC(y, m, d + 1, cfg.sleepEndHour, 0, 0, 0) : Date.UTC(y, m, d, cfg.sleepEndHour, 0, 0, 0);
 
     const sleepStartUtc = toUtcMs(sleepStartLocal, offsetMin);
     const sleepEndUtc = toUtcMs(sleepEndLocal, offsetMin);
@@ -256,6 +243,7 @@ function buildSleepEvents(args: {
 
       if (started <= nowMs) {
         const wakeText = sleepUntilLocalText(wake, offsetMin);
+        const verb = wake <= nowMs ? "awoke at" : "wakes at";
         events.push({
           id: `sleep-${y}-${m + 1}-${d}`,
           idx: 10_000 + events.length,
@@ -266,7 +254,7 @@ function buildSleepEvents(args: {
           geo_text: "Sleeping",
           region_id: null,
           region_label: null,
-          name: `${birdLabel} slept — wakes at ${wakeText}`,
+          name: `${birdLabel} slept — ${verb} ${wakeText}`,
           _sleep_meta: {
             sleep_start_utc: new Date(sleepStartUtc).toISOString(),
             sleep_end_utc: new Date(sleepEndUtc).toISOString(),
@@ -508,9 +496,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   const offsetMin = offsetMinutesFromLon(originLon);
 
   const requiredAwakeMs =
-    Number.isFinite(speedKmh) && speedKmh > 0 && Number.isFinite(distanceKm) && distanceKm > 0
-      ? (distanceKm / speedKmh) * 3600_000
-      : 0;
+    Number.isFinite(speedKmh) && speedKmh > 0 && Number.isFinite(distanceKm) && distanceKm > 0 ? (distanceKm / speedKmh) * 3600_000 : 0;
 
   const etaAdjustedMs = safeAdjustedEtaMs({
     sentMs,
@@ -550,8 +536,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
     const isFirst = i === 0;
     const isLast = i === arr.length - 1;
 
-    const geo =
-      Number.isFinite(cp.lat) && Number.isFinite(cp.lon) ? checkpointGeoText(cp.lat, cp.lon) : "somewhere over the U.S.";
+    const geo = Number.isFinite(cp.lat) && Number.isFinite(cp.lon) ? checkpointGeoText(cp.lat, cp.lon) : "somewhere over the U.S.";
 
     const region = Number.isFinite(cp.lat) && Number.isFinite(cp.lon) ? geoRegionForPoint(cp.lat, cp.lon) : null;
 
@@ -591,11 +576,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   }
 
   const geoBase = delivered ? "Delivered" : stripOverPrefix(current_over_text);
-  const tooltip_text = delivered
-    ? `Location: Delivered`
-    : sleeping
-    ? `Location: Sleeping — ${geoBase || "somewhere over the U.S."}`
-    : `Location: ${geoBase || "somewhere over the U.S."}`;
+  const tooltip_text = delivered ? `Location: Delivered` : sleeping ? `Location: Sleeping — ${geoBase || "somewhere over the U.S."}` : `Location: ${geoBase || "somewhere over the U.S."}`;
 
   // ✅ Award badges (past checkpoints only — NOT sleep events)
   const past = cpsBase.filter((cp: any) => {
@@ -606,15 +587,10 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   const pastRegionIds = past.map((cp: any) => cp.region_id).filter(Boolean) as string[];
 
   const originRegion = Number.isFinite(originLat) && Number.isFinite(originLon) ? geoRegionForPoint(originLat, originLon) : null;
-
   const destRegion = Number.isFinite(destLat) && Number.isFinite(destLon) ? geoRegionForPoint(destLat, destLon) : null;
 
   const deliveredAtISO =
-    delivered && Number.isFinite(etaAdjustedMs)
-      ? new Date(etaAdjustedMs).toISOString()
-      : delivered
-      ? new Date(nowMs).toISOString()
-      : undefined;
+    delivered && Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : delivered ? new Date(nowMs).toISOString() : undefined;
 
   const computedBadges = computeBadgesFromRegions({
     origin: { name: (meta as any).origin_name, regionId: originRegion?.id ?? null },
@@ -639,9 +615,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
       meta: b.meta ?? {},
     }));
 
-    const { error: upsertErr } = await supabaseServer
-      .from("letter_items")
-      .upsert(rows, { onConflict: "letter_id,kind,code" });
+    const { error: upsertErr } = await supabaseServer.from("letter_items").upsert(rows, { onConflict: "letter_id,kind,code" });
 
     if (upsertErr) console.error("BADGE UPSERT ERROR:", upsertErr);
   }

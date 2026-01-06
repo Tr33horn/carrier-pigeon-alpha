@@ -1438,4 +1438,7 @@ body {
 /* small alignment tweak */
 .subRow .metaPill{ align-self: flex-start; }
 
-
+:root{
+  --route-ideal: rgba(18,18,18,0.35);
+  --route-flown: rgba(22,163,74,0.85);
+}

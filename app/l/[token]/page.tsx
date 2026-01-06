@@ -1,1082 +1,308 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { MapContainer, TileLayer, Polyline, Marker, Tooltip, useMap } from "react-leaflet";
+import L from "leaflet";
 
-const MapView = dynamic(() => import("./MapView"), { ssr: false });
+export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
+export type MarkerMode = "flying" | "sleeping" | "delivered";
 
-type Letter = {
-  id: string;
-  public_token: string;
-  from_name: string | null;
-  to_name: string | null;
-  subject: string | null;
-  body: string | null;
-  origin_name: string;
-  origin_lat: number;
-  origin_lon: number;
-  dest_name: string;
-  dest_lat: number;
-  dest_lon: number;
-  distance_km: number;
-  speed_kmh: number;
-  sent_at: string;
-  eta_at: string;
-
-  bird?: "pigeon" | "snipe" | "goose" | null;
-
-  eta_at_adjusted?: string;
-  eta_utc_text?: string;
-
-  archived_at?: string | null;
-};
-
-type Checkpoint = {
-  id: string;
-  idx: number;
-  name: string;
-  at: string;
-  geo_text?: string;
-  kind?: string; // allow server to send kind: "sleep" | "checkpoint"
-};
-
-type BadgeItem = {
-  id: string;
-  kind: "badge";
-  code: string;
-  title: string;
-  subtitle?: string | null;
-  icon?: string | null;
-  rarity?: "common" | "rare" | "legendary";
-  earned_at?: string | null;
-  meta?: any;
-};
-
-type AddonItem = {
-  id: string;
-  kind: "addon";
-  code: string;
-  title: string;
-  subtitle?: string | null;
-  icon?: string | null;
-  rarity?: "common" | "rare" | "legendary";
-  earned_at?: string | null;
-  meta?: any;
-};
-
-type LetterItems = {
-  badges: BadgeItem[];
-  addons: AddonItem[];
-};
-
-type Flight = {
-  progress: number; // sleep-aware 0..1
-  sleeping: boolean;
-  sleep_until_iso: string | null;
-  sleep_local_text: string; // e.g. "6:00 AM"
-  tooltip_text: string; // "Location: ..."
-  marker_mode: "flying" | "sleeping" | "delivered";
-
-  // server-provided so UI never has to guess
-  current_speed_kmh?: number;
-};
-
-type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
-type TimelineKind = "checkpoint" | "sleep" | "day";
-
-type TimelineItem = {
-  key: string;
-  name: string;
-  at: string; // ISO
-  kind: TimelineKind;
-};
-
-type BirdType = "pigeon" | "snipe" | "goose";
-
-function inferBird(letter: Letter | null): BirdType {
-  const raw = String((letter as any)?.bird || "").toLowerCase();
-  if (raw === "pigeon" || raw === "snipe" || raw === "goose") return raw as BirdType;
-
-  const sp = Number((letter as any)?.speed_kmh);
-  if (Number.isFinite(sp) && sp >= 80) return "snipe";
-  if (Number.isFinite(sp) && sp <= 60) return "goose";
-  return "pigeon";
-}
-
-function birdLabel(b: BirdType) {
-  if (b === "snipe") return "🏎️ Great Snipe";
-  if (b === "goose") return "🪿 Canada Goose";
-  return "🕊️ Homing Pigeon";
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
 }
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
 }
 
-function formatCountdown(ms: number) {
-  if (ms <= 0) return "Delivered";
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  const pad = (x: number) => String(x).padStart(2, "0");
-  return `${h}:${pad(m)}:${pad(s)}`;
-}
-
-function formatUtcFallback(iso: string) {
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "";
-  return `${d.toISOString().replace("T", " ").replace("Z", "")} UTC`;
-}
-
-function dayLabelLocal(iso: string) {
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function timeLabelLocal(iso: string) {
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "";
-  return d.toLocaleString();
-}
-
-/* ---------- tiny icon system (inline SVG) ---------- */
-function Ico({
-  name,
-  size = 16,
-}: {
-  name: "live" | "pin" | "speed" | "distance" | "check" | "mail" | "timeline" | "moon";
-  size?: number;
-}) {
-  const common = {
-    width: size,
-    height: size,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    xmlns: "http://www.w3.org/2000/svg",
-    style: { display: "block" as const },
-  };
-
-  switch (name) {
-    case "pin":
-      return (
-        <svg {...common}>
-          <path
-            d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinejoin="round"
-          />
-          <path d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z" stroke="currentColor" strokeWidth="2.4" />
-        </svg>
-      );
-
-    case "speed":
-      return (
-        <svg {...common}>
-          <path d="M5 13a7 7 0 0 1 14 0" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-          <path d="M12 13l4.5-4.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M4 13h2M18 13h2" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-        </svg>
-      );
-
-    case "distance":
-      return (
-        <svg {...common}>
-          <path d="M7 7h10M7 17h10" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-          <path
-            d="M9 9l-2-2 2-2M15 15l2 2-2 2"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      );
-
-    case "check":
-      return (
-        <svg {...common}>
-          <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-
-    case "mail":
-      return (
-        <svg {...common}>
-          <path d="M4 7h16v10H4V7Z" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round" />
-          <path d="m4 8 8 6 8-6" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round" />
-        </svg>
-      );
-
-    case "timeline":
-      return (
-        <svg {...common}>
-          <path d="M7 6h10M7 12h10M7 18h10" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-          <path d="M4 6h.01M4 12h.01M4 18h.01" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-        </svg>
-      );
-
-    case "moon":
-      // simple crescent
-      return (
-        <svg {...common}>
-          <path
-            d="M20 14.5a7.5 7.5 0 0 1-9.5-9.5A8.5 8.5 0 1 0 20 14.5Z"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinejoin="round"
-          />
-        </svg>
-      );
-
-    case "live":
-    default:
-      return (
-        <svg {...common}>
-          <path d="M4 12a8 8 0 0 1 16 0" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-          <path d="M8 12a4 4 0 0 1 8 0" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-          <path d="M12 12h.01" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
-        </svg>
-      );
+function getCarto(style: MapStyle) {
+  if (style === "carto-voyager") {
+    return {
+      url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+      attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+    };
   }
+
+  if (style === "carto-positron-nolabels") {
+    return {
+      url: "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
+      attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+    };
+  }
+
+  return {
+    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+  };
 }
 
-/* ---------- wax seal overlay ---------- */
-function WaxSealOverlay({ etaText, cracking }: { etaText: string; cracking?: boolean }) {
-  return (
-    <div className={cracking ? "seal crack" : "seal"} style={{ position: "relative" }}>
-      <div className="sealCard">
-        <div className="sealVeil" />
-        <div className="sealRow">
-          <div className="wax" aria-label="Wax seal" title="Sealed until delivery">
-            <div className="waxInner">AH</div>
-          </div>
-          <div>
-            <div className="sealTitle">Sealed until delivery</div>
-            <div className="sealSub">Opens at {etaText}</div>
-            <div className="sealHint">No peeking. The bird is watching.</div>
-          </div>
-        </div>
-        <div className="sealNoise" />
-      </div>
-    </div>
-  );
-}
-
-function ConfettiBurst({ show }: { show: boolean }) {
-  if (!show) return null;
-  return (
-    <div className="confetti" aria-hidden>
-      {Array.from({ length: 18 }).map((_, i) => (
-        <span key={i} className="confetti-bit" />
-      ))}
-    </div>
-  );
-}
-
-/* ---------- timeline rail (grouped by day + sleep blocks) ---------- */
-function RailTimeline({
-  items,
-  now,
-  currentKey,
-  birdName,
+function FitBoundsOnRouteChange({
+  origin,
+  dest,
 }: {
-  items: TimelineItem[];
-  now: Date;
-  currentKey: string | null;
-  birdName: string;
+  origin: { lat: number; lon: number };
+  dest: { lat: number; lon: number };
 }) {
-  const [popped, setPopped] = useState<Record<string, boolean>>({});
+  const map = useMap();
+  const didFitKey = useRef<string>("");
 
   useEffect(() => {
-    const updates: Record<string, boolean> = {};
-    let changed = false;
+    const key = `${origin.lat.toFixed(6)},${origin.lon.toFixed(6)}|${dest.lat.toFixed(6)},${dest.lon.toFixed(6)}`;
+    if (didFitKey.current === key) return;
 
-    for (const it of items) {
-      if (it.kind === "day") continue;
-      const isPast = new Date(it.at).getTime() <= now.getTime();
-      if (isPast && !popped[it.key]) {
-        updates[it.key] = true;
-        changed = true;
-      }
-    }
+    didFitKey.current = key;
+    const bounds: [number, number][] = [
+      [origin.lat, origin.lon],
+      [dest.lat, dest.lon],
+    ];
 
-    if (changed) setPopped((prev) => ({ ...prev, ...updates }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, now]);
+    map.fitBounds(bounds as any, { padding: [30, 30] });
+  }, [map, origin.lat, origin.lon, dest.lat, dest.lon]);
 
-  // night-ish accent for sleep nodes/cards (kept inline, no CSS required)
-  const sleepAccent = {
-    dotBgPast: "rgba(88,80,236,0.95)",
-    dotBgFuture: "rgba(88,80,236,0.75)",
-    dotHalo: "rgba(88,80,236,0.16)",
-    cardBg: "rgba(88,80,236,0.08)",
-    cardBorder: "rgba(88,80,236,0.35)",
-    tagBg: "#5850ec",
-  } as const;
-
-  return (
-    <div className="rail">
-      <div className="railLine" />
-      <div className="railList">
-        {items.map((it) => {
-          if (it.kind === "day") {
-            return (
-              <div key={it.key} style={{ margin: "10px 0 2px 0" }}>
-                <div
-                  className="metaPill faint"
-                  style={{
-                    display: "inline-flex",
-                    background: "rgba(0,0,0,0.03)",
-                    border: "1px solid rgba(0,0,0,0.08)",
-                    padding: "6px 10px",
-                    fontSize: 11,
-                  }}
-                >
-                  {it.name}
-                </div>
-              </div>
-            );
-          }
-
-          const isPast = new Date(it.at).getTime() <= now.getTime();
-          const shouldPop = popped[it.key] && isPast;
-          const isCurrent = currentKey === it.key;
-          const isSleep = it.kind === "sleep";
-
-          return (
-            <div key={it.key} className="railItem">
-              <div className={`railNode ${isPast ? "past" : ""} ${shouldPop ? "pop" : ""}`}>
-                <span
-                  className="railDot"
-                  style={
-                    isSleep
-                      ? {
-                          background: isPast ? sleepAccent.dotBgPast : sleepAccent.dotBgFuture,
-                          boxShadow: `0 0 0 7px ${sleepAccent.dotHalo}`,
-                          color: "#fff",
-                          fontSize: 12,
-                        }
-                      : undefined
-                  }
-                  aria-label={isSleep ? "Sleep event" : "Checkpoint"}
-                  title={isSleep ? "Sleep event" : undefined}
-                >
-                  {isSleep ? "🌙" : isPast ? "✓" : ""}
-                </span>
-              </div>
-
-              <div
-                className={`railCard ${isPast ? "past" : ""} ${isCurrent ? "current" : ""}`}
-                style={
-                  isSleep
-                    ? {
-                        background: sleepAccent.cardBg,
-                        borderColor: sleepAccent.cardBorder,
-                      }
-                    : undefined
-                }
-              >
-                {isCurrent && (
-                  <div className="pigeonTag livePulseRow" style={isSleep ? { background: sleepAccent.tagBg } : undefined}>
-                    <span className="livePulseDot" aria-hidden />
-                    <span>{isSleep ? `${birdName} is sleeping` : `${birdName} is here`}</span>
-                  </div>
-                )}
-
-                <div className="railTitleRow">
-                  <div className="railTitle" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {isSleep ? (
-                      <>
-                        <span className="metaPill faint" style={{ padding: "3px 8px", fontSize: 11, lineHeight: "11px" }}>
-                          🌙 Slept
-                        </span>
-                        <span className="ico" aria-hidden style={{ opacity: 0.9 }}>
-                          <Ico name="moon" size={14} />
-                        </span>
-                      </>
-                    ) : null}
-                    <span style={{ minWidth: 0 }}>{it.name}</span>
-                  </div>
-
-                  <div className="railTime">{timeLabelLocal(it.at)}</div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  return null;
 }
 
-function rarityLabel(r?: string) {
-  if (r === "legendary") return "Legendary";
-  if (r === "rare") return "Rare";
-  return "Common";
+function normalizeTooltip(text?: string) {
+  let t = (text || "").trim();
+  if (!t) return "Location: Somewhere over the U.S.";
+
+  t = t.replace(/^currently over:\s*/i, "").trim();
+  if (!/^location:\s*/i.test(t)) t = `Location: ${t}`;
+  return t;
 }
 
-function isSleepCheckpoint(cp: Checkpoint) {
-  const id = String(cp.id || "").toLowerCase();
-  const name = String(cp.name || "").toLowerCase();
-  const geo = String(cp.geo_text || "").toLowerCase();
-  const kind = String((cp as any).kind || "").toLowerCase();
-
-  // Prefer the explicit signal if server provides it:
-  if (kind === "sleep") return true;
-
-  // Fallbacks:
-  return id.startsWith("sleep-") || geo === "sleeping" || name.includes("slept") || name.startsWith("sleeping");
+function seedFromCoords(o: { lat: number; lon: number }, d: { lat: number; lon: number }) {
+  const n = Math.sin(o.lat * 12.9898 + o.lon * 78.233 + d.lat * 37.719 + d.lon * 11.131) * 43758.5453;
+  return n - Math.floor(n);
 }
 
-export default function LetterStatusPage() {
-  const params = useParams() as Record<string, string | string[] | undefined>;
+function makeNearStraightDriftPath(args: {
+  origin: { lat: number; lon: number };
+  dest: { lat: number; lon: number };
+  progress: number;
+  points?: number;
+}) {
+  const { origin, dest } = args;
+  const steps = Math.max(18, args.points ?? 56);
+  const p = clamp01(args.progress);
 
-  // ✅ robust param: supports [token], [public_token], [id] without you thinking about it again
-  const raw = params?.token ?? params?.public_token ?? params?.id;
-  const token = Array.isArray(raw) ? raw[0] : raw;
+  const A = { x: origin.lon, y: origin.lat };
+  const B = { x: dest.lon, y: dest.lat };
 
-  const [letter, setLetter] = useState<Letter | null>(null);
-  const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
-  const [items, setItems] = useState<LetterItems>({ badges: [], addons: [] });
-  const [flight, setFlight] = useState<Flight | null>(null);
+  const dx = B.x - A.x;
+  const dy = B.y - A.y;
+  const dist = Math.hypot(dx, dy);
 
-  const [archived, setArchived] = useState(false);
-  const archivedRef = useRef(false);
+  const px = -dy;
+  const py = dx;
+  const plen = Math.hypot(px, py) || 1;
+  const ux = px / plen;
+  const uy = py / plen;
 
-  const [archivedAtISO, setArchivedAtISO] = useState<string | null>(null);
+  const s = seedFromCoords(origin, dest);
 
-  const [serverNowISO, setServerNowISO] = useState<string | null>(null);
-  const [serverNowUtcText, setServerNowUtcText] = useState<string | null>(null);
+  const base = Math.min(0.06, Math.max(0.01, dist * 0.0012));
+  const travelGain = 0.35 + 0.65 * Math.sqrt(p);
 
-  const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(new Date());
-  const [delivered, setDelivered] = useState(false);
-  const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
+  const pts: [number, number][] = [];
+  const N = Math.max(2, Math.floor(steps * p));
 
-  const [currentOverText, setCurrentOverText] = useState<string | null>(null);
+  for (let i = 0; i <= N; i++) {
+    const t = (i / Math.max(1, N)) * p;
 
-  const prevDelivered = useRef(false);
-  const [revealStage, setRevealStage] = useState<"idle" | "crack" | "open">("idle");
-  const [confetti, setConfetti] = useState(false);
+    const x0 = A.x + dx * t;
+    const y0 = A.y + dy * t;
 
-  const [mapStyle, setMapStyle] = useState<MapStyle>("carto-positron");
+    const w =
+      Math.sin((t * 8 + s * 3 + p * 1.3) * Math.PI * 2) * 0.55 +
+      Math.sin((t * 3.5 + s * 7 + p * 0.7) * Math.PI * 2) * 0.35 +
+      Math.sin((t * 13 + s * 11 + p * 2.1) * Math.PI * 2) * 0.1;
+
+    const taper = Math.sin(Math.PI * (i / Math.max(1, N)));
+    const off = base * travelGain * taper * w;
+
+    const x = x0 + ux * off;
+    const y = y0 + uy * off;
+
+    pts.push([y, x]);
+  }
+
+  if (pts.length === 0) pts.push([origin.lat, origin.lon]);
+
+  return pts;
+}
+
+export default function MapView(props: {
+  origin: { lat: number; lon: number };
+  dest: { lat: number; lon: number };
+  progress: number;
+  tooltipText?: string;
+  mapStyle?: MapStyle;
+  markerMode?: MarkerMode;
+}) {
+  const { origin, dest } = props;
+
+  const mapStyle: MapStyle = props.mapStyle ?? "carto-positron";
+  const tile = useMemo(() => getCarto(mapStyle), [mapStyle]);
+
+  const [displayProgress, setDisplayProgress] = useState(() => clamp01(props.progress));
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
-    archivedRef.current = archived;
-  }, [archived]);
+    const from = displayProgress;
+    const to = clamp01(props.progress);
 
-  useEffect(() => {
-    const rawSaved = window.localStorage.getItem("pigeon_map_style");
-    const saved = (rawSaved || "").trim();
+    if (Math.abs(to - from) < 0.00001) return;
 
-    if (saved === "carto-dark") {
-      setMapStyle("carto-positron-nolabels");
-      window.localStorage.setItem("pigeon_map_style", "carto-positron-nolabels");
-      return;
-    }
+    const durationMs = 420;
+    const start = performance.now();
 
-    if (saved === "carto-positron" || saved === "carto-voyager" || saved === "carto-positron-nolabels") {
-      setMapStyle(saved);
-    }
-  }, []);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
-  useEffect(() => {
-    window.localStorage.setItem("pigeon_map_style", mapStyle);
-  }, [mapStyle]);
-
-  // ✅ clock: if archived, freeze at server snapshot
-  useEffect(() => {
-    if (archived && serverNowISO) {
-      setNow(new Date(serverNowISO));
-      return;
-    }
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, [archived, serverNowISO]);
-
-  // ✅ shared loader via ref so polling can call it
-  const loadRef = useRef<(() => Promise<void>) | null>(null);
-
-  // ✅ effect A: define + run loader once per token
-  useEffect(() => {
-    if (!token) return;
-
-    let alive = true;
-
-    const load = async () => {
-      try {
-        setError(null);
-
-        const res = await fetch(`/api/letters/${encodeURIComponent(token)}`, { cache: "no-store" });
-
-        // ✅ tolerate non-JSON server errors (rare, but saves a blank page)
-        let data: any = null;
-        try {
-          data = await res.json();
-        } catch {
-          data = { error: "Unexpected server response" };
-        }
-
-        if (!res.ok) {
-          if (!alive) return;
-          setError(data?.error ?? "Letter not found");
-          return;
-        }
-        if (!alive) return;
-
-        setServerNowISO(typeof data.server_now_iso === "string" ? data.server_now_iso : null);
-        setServerNowUtcText(typeof data.server_now_utc_text === "string" ? data.server_now_utc_text : null);
-
-        setLetter(data.letter as Letter);
-
-        const nextArchived = !!data.archived;
-        setArchived(nextArchived);
-
-        const aISO = (data.archived_at as string | null) || (data.letter?.archived_at as string | null) || null;
-        setArchivedAtISO(aISO && String(aISO).trim() ? String(aISO) : null);
-
-        setDelivered(!!data.delivered);
-        setCheckpoints((data.checkpoints ?? []) as Checkpoint[]);
-        setCurrentOverText(typeof data.current_over_text === "string" ? data.current_over_text : null);
-
-        setFlight((data.flight ?? null) as Flight | null);
-
-        const nextItems = (data.items ?? {}) as Partial<LetterItems>;
-        setItems({
-          badges: Array.isArray(nextItems.badges) ? (nextItems.badges as BadgeItem[]) : [],
-          addons: Array.isArray(nextItems.addons) ? (nextItems.addons as AddonItem[]) : [],
-        });
-
-        setLastFetchedAt(new Date());
-      } catch (e: any) {
-        console.error("LOAD ERROR:", e);
-        if (!alive) return;
-        setError(e?.message ?? String(e));
-      }
+    const tick = (now: number) => {
+      const t = clamp01((now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplayProgress(lerp(from, to, eased));
+      if (t < 1) rafRef.current = requestAnimationFrame(tick);
     };
 
-    loadRef.current = load;
-    void load();
+    rafRef.current = requestAnimationFrame(tick);
 
     return () => {
-      alive = false;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [token]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.progress]);
 
-  // ✅ effect B: poll ONLY when not archived (and hard-stop if it flips)
-  useEffect(() => {
-    if (!token) return;
-    if (archived) return;
+  const current = useMemo(
+    () => ({
+      lat: lerp(origin.lat, dest.lat, displayProgress),
+      lon: lerp(origin.lon, dest.lon, displayProgress),
+    }),
+    [origin.lat, origin.lon, dest.lat, dest.lon, displayProgress]
+  );
 
-    const interval = setInterval(() => {
-      if (archivedRef.current) return; // hard-stop even if interval already exists
-      const fn = loadRef.current;
-      if (fn) void fn();
-    }, 15000);
+  const mode: MarkerMode = props.markerMode ?? (clamp01(props.progress) >= 1 ? "delivered" : "flying");
 
-    return () => clearInterval(interval);
-  }, [token, archived]);
+  const isFlying = mode === "flying";
+  const isSleeping = mode === "sleeping";
+  const isDelivered = mode === "delivered";
 
-  // Always use adjusted ETA for display + countdown
-  const effectiveEtaISO = useMemo(() => {
-    if (!letter) return "";
-    return (letter.eta_at_adjusted && letter.eta_at_adjusted.trim()) || letter.eta_at;
-  }, [letter]);
+  const liveIcon = useMemo(
+    () =>
+      L.divIcon({
+        className: `pigeonMarker ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} ${isDelivered ? "delivered" : ""}`,
+        html: `
+          <div class="pigeonPulseWrap">
+            <span class="pigeonPulseRing"></span>
+            <span class="pigeonPulseRing ring2"></span>
+            <span class="pigeonSleepRing"></span>
+            <div class="pigeonDot"></div>
+          </div>
+        `,
+        iconSize: [44, 44],
+        iconAnchor: [22, 22],
+      }),
+    [isFlying, isSleeping, isDelivered]
+  );
 
-  const sleeping = !!flight?.sleeping;
+  const originIcon = useMemo(
+    () =>
+      L.divIcon({
+        className: "routeMarker originDot",
+        html: `<span></span>`,
+        iconSize: [12, 12],
+        iconAnchor: [6, 6],
+      }),
+    []
+  );
 
-  // ✅ delivered is server truth
-  const uiDelivered = useMemo(() => {
-    if (flight?.marker_mode === "delivered") return true;
-    return !!delivered;
-  }, [flight?.marker_mode, delivered]);
+  const destIcon = useMemo(
+    () =>
+      L.divIcon({
+        className: "routeMarker destPin",
+        html: `
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linejoin="round"
+            />
+            <circle cx="12" cy="10" r="2.5" fill="currentColor"/>
+          </svg>
+        `,
+        iconSize: [22, 28],
+        iconAnchor: [11, 28],
+      }),
+    []
+  );
 
-  // ✅ progress: prefer server sleep-aware progress
-  const progress = useMemo(() => {
-    if (flight && Number.isFinite(flight.progress)) return clamp01(flight.progress);
+  const straightLine: [number, number][] = useMemo(
+    () => [
+      [origin.lat, origin.lon],
+      [dest.lat, dest.lon],
+    ],
+    [origin.lat, origin.lon, dest.lat, dest.lon]
+  );
 
-    if (!letter) return 0;
-    const sent = new Date(letter.sent_at).getTime();
-    const eta = new Date(effectiveEtaISO).getTime();
-    const t = now.getTime();
-    if (!Number.isFinite(sent) || !Number.isFinite(eta) || eta <= sent) return 1;
-    return clamp01((t - sent) / (eta - sent));
-  }, [flight, letter, effectiveEtaISO, now]);
-
-  const countdown = useMemo(() => {
-    if (!letter) return "";
-    const msLeft = new Date(effectiveEtaISO).getTime() - now.getTime();
-    return formatCountdown(msLeft);
-  }, [letter, effectiveEtaISO, now]);
-
-  // ✅ server-provided speed wins
-  const currentSpeedKmh = useMemo(() => {
-    if (typeof flight?.current_speed_kmh === "number" && Number.isFinite(flight.current_speed_kmh)) {
-      return Math.max(0, flight.current_speed_kmh);
-    }
-
-    if (!letter) return 0;
-    if (uiDelivered || archived || sleeping) return 0;
-
-    const sp = Number(letter.speed_kmh);
-    return Number.isFinite(sp) ? sp : 0;
-  }, [letter, flight?.current_speed_kmh, uiDelivered, archived, sleeping]);
-
-  // milestones should be progress-based (sleep-aware)
-  const milestones = useMemo(() => {
-    if (!letter) return [];
-    const defs = [
-      { pct: 25, frac: 0.25, label: "25% reached" },
-      { pct: 50, frac: 0.5, label: "50% reached" },
-      { pct: 75, frac: 0.75, label: "75% reached" },
-    ];
-    return defs.map((m) => ({ ...m, isPast: progress >= m.frac }));
-  }, [letter, progress]);
-
-  const checkpointsByTime = useMemo(() => {
-    const cps = [...checkpoints];
-    cps.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
-    return cps;
-  }, [checkpoints]);
-
-  const currentCheckpoint = useMemo(() => {
-    if (!checkpointsByTime.length || !letter) return null;
-    const t = now.getTime();
-    let current: Checkpoint | null = null;
-    for (const cp of checkpointsByTime) {
-      if (new Date(cp.at).getTime() <= t) current = cp;
-    }
-    return current ?? checkpointsByTime[0];
-  }, [checkpointsByTime, letter, now]);
-
-  const secondsSinceFetch = useMemo(() => {
-    if (!lastFetchedAt) return null;
-    return Math.max(0, Math.floor((now.getTime() - lastFetchedAt.getTime()) / 1000));
-  }, [now, lastFetchedAt]);
-
-  const currentlyOver = useMemo(() => {
-    if (uiDelivered) return "Delivered";
-    if (currentOverText && currentOverText.trim()) return currentOverText;
-
-    const fallback =
-      (currentCheckpoint?.geo_text && currentCheckpoint.geo_text.trim()) ||
-      (currentCheckpoint?.name && currentCheckpoint.name.trim()) ||
-      "somewhere over the U.S.";
-
-    return fallback;
-  }, [uiDelivered, currentOverText, currentCheckpoint]);
-
-  const mapTooltip = useMemo(() => {
-    if (flight?.tooltip_text && flight.tooltip_text.trim()) return flight.tooltip_text;
-    if (uiDelivered) return "Location: Delivered";
-    return `Location: ${currentlyOver || "somewhere over the U.S."}`;
-  }, [flight?.tooltip_text, uiDelivered, currentlyOver]);
-
-  // ✅ live indicator only when not archived AND not delivered
-  const showLive = !archived && !uiDelivered;
-
-  const timelineItems = useMemo(() => {
-    const base: TimelineItem[] = checkpointsByTime.map((cp) => ({
-      key: `cp-${cp.id}`,
-      name: cp.name,
-      at: cp.at,
-      kind: isSleepCheckpoint(cp) ? "sleep" : "checkpoint",
-    }));
-
-    const grouped: TimelineItem[] = [];
-    let lastDay = "";
-
-    for (const it of base) {
-      const d = dayLabelLocal(it.at);
-      if (d && d !== lastDay) {
-        grouped.push({
-          key: `day-${d}`,
-          name: d,
-          at: it.at,
-          kind: "day",
-        });
-        lastDay = d;
-      }
-      grouped.push(it);
-    }
-
-    return grouped;
-  }, [checkpointsByTime]);
-
-  const currentTimelineKey = useMemo(() => {
-    if (uiDelivered) return null;
-
-    const realItems = timelineItems.filter((it) => it.kind !== "day");
-    if (!realItems.length) return null;
-
-    const nowT = now.getTime();
-    let bestKey: string | null = null;
-    let bestT = -Infinity;
-
-    for (const it of realItems) {
-      const t = new Date(it.at).getTime();
-      if (t <= nowT && t >= bestT) {
-        bestT = t;
-        bestKey = it.key;
-      }
-    }
-
-    return bestKey ?? realItems[0].key;
-  }, [timelineItems, now, uiDelivered]);
-
-  const etaTextUTC = useMemo(() => {
-    if (!letter) return "";
-    return (letter.eta_utc_text && letter.eta_utc_text.trim()) || formatUtcFallback(effectiveEtaISO);
-  }, [letter, effectiveEtaISO]);
-
-  const badgesSorted = useMemo(() => {
-    const b = items.badges ?? [];
-    return [...b].sort((a, c) => {
-      const ta = a.earned_at ? Date.parse(a.earned_at) : 0;
-      const tb = c.earned_at ? Date.parse(c.earned_at) : 0;
-      return ta - tb;
+  const flownPts = useMemo(() => {
+    const p = clamp01(displayProgress);
+    if (p <= 0.0001) return [[origin.lat, origin.lon]] as [number, number][];
+    return makeNearStraightDriftPath({
+      origin,
+      dest,
+      progress: p,
+      points: 60,
     });
-  }, [items.badges]);
+  }, [origin, dest, displayProgress]);
 
-  // ✅ marker mode should be server truth
-  const markerMode: Flight["marker_mode"] =
-    flight?.marker_mode ?? (uiDelivered ? "delivered" : sleeping ? "sleeping" : "flying");
+  const tooltip = useMemo(() => normalizeTooltip(props.tooltipText), [props.tooltipText]);
 
-  useEffect(() => {
-    if (!prevDelivered.current && uiDelivered) {
-      setRevealStage("crack");
-      setConfetti(true);
-
-      const t1 = setTimeout(() => setRevealStage("open"), 520);
-      const t2 = setTimeout(() => setConfetti(false), 1400);
-
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-      };
-    }
-
-    prevDelivered.current = uiDelivered;
-  }, [uiDelivered]);
-
-  if (error) {
-    return (
-      <main className="pageBg">
-        <main className="wrap">
-          <h1 className="h1">Flight Status</h1>
-          <p className="err">❌ {error}</p>
-        </main>
-      </main>
-    );
-  }
-
-  if (!letter) {
-    return (
-      <main className="pageBg">
-        <main className="wrap">
-          <h1 className="h1">Flight Status</h1>
-          <p className="muted">Loading…</p>
-        </main>
-      </main>
-    );
-  }
-
-  const bird = inferBird(letter);
-  const birdName = birdLabel(bird);
-
-  const archivedLabel = archivedAtISO ? `Archived • ${new Date(archivedAtISO).toLocaleString()}` : "Archived";
+  const idealColor = "var(--route-ideal, rgba(18,18,18,0.35))";
+  const flownColor = "var(--route-flown, rgba(22,163,74,0.85))";
 
   return (
-    <main className="pageBg">
-      <main className="wrap">
-        <section className="routeBanner">
-          <div className="bannerTop">
-            <div>
-              <div className="kicker">Flight status</div>
+    <div className="mapShell">
+      <MapContainer zoom={4} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
+        <TileLayer attribution={tile.attribution} url={tile.url} />
 
-              <div className="routeHeadline">
-                {letter.origin_name} <span className="arrow">→</span> {letter.dest_name}
-              </div>
+        <FitBoundsOnRouteChange origin={origin} dest={dest} />
 
-              <div className="subRow">
-                {showLive ? (
-                  <>
-                    <div className="liveStack" style={{ minWidth: 230, flex: "0 0 auto" }}>
-                      <div className={`liveWrap ${sleeping ? "sleep" : ""}`}>
-                        <span className={`liveDot ${sleeping ? "sleep" : ""}`} />
-                        <span className="liveText">{sleeping ? "SLEEPING" : "LIVE"}</span>
-                      </div>
-                      <div className="liveSub">
-                        {sleeping ? `Wakes at ${flight?.sleep_local_text || "soon"}` : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
-                      </div>
-                    </div>
+        <Polyline positions={straightLine} pathOptions={{ color: idealColor, weight: 3, opacity: 1 }} />
 
-                    <div className="metaPill" style={{ flex: "1 1 auto" }}>
-                      <span className="ico">
-                        <Ico name="pin" />
-                      </span>
-                      <span>
-                        Location: <strong>{currentlyOver}</strong>
-                      </span>
-                    </div>
-                  </>
-                ) : archived ? (
-                  <div className="metaPill">
-                    <span className="ico">
-                      <Ico name="timeline" />
-                    </span>
-                    <span>
-                      <strong>ARCHIVED</strong> — snapshot view. <span style={{ opacity: 0.75 }}>{archivedLabel}</span>
-                    </span>
-                  </div>
-                ) : (
-                  <div className="metaPill">
-                    <span className="ico">
-                      <Ico name="check" />
-                    </span>
-                    <span>
-                      <strong>Delivered</strong> — the bird has clocked out.
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
+        <Polyline
+          positions={flownPts}
+          pathOptions={{
+            color: flownColor,
+            weight: 3,
+            opacity: 1,
+            dashArray: "2 10",
+            lineCap: "round",
+            lineJoin: "round",
+          }}
+        />
 
-            <div className="etaBox">
-              <div className="kicker">ETA (UTC)</div>
-              <div className="etaTime">{etaTextUTC}</div>
+        <Marker position={[origin.lat, origin.lon]} icon={originIcon} />
+        <Marker position={[dest.lat, dest.lon]} icon={destIcon} />
 
-              {!uiDelivered && !archived && <div className="etaSub">T-minus {countdown}</div>}
-
-              {archived && (
-                <div className="etaSub">
-                  Snapshot: <span style={{ fontVariantNumeric: "tabular-nums" }}>{serverNowUtcText ?? "frozen"}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="statsRow">
-            <div className="stat">
-              <span className="ico">
-                <Ico name="distance" />
-              </span>
-              <div>
-                <div className="statLabel">Distance</div>
-                <div className="statValue">{Number(letter.distance_km).toFixed(0)} km</div>
-              </div>
-            </div>
-
-            <div className="stat">
-              <span className="ico">
-                <Ico name="speed" />
-              </span>
-              <div>
-                <div className="statLabel">Speed</div>
-                <div className="statValue">{Number(currentSpeedKmh).toFixed(0)} km/h</div>
-              </div>
-            </div>
-
-            <div className="stat">
-              <span className="ico">
-                <Ico name="timeline" />
-              </span>
-              <div>
-                <div className="statLabel">Progress</div>
-                <div className="statValue">{Math.round(progress * 100)}%</div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <div className="card" style={{ marginTop: 14, position: "relative" }}>
-          <ConfettiBurst show={confetti} />
-
-          <div className="cardHead" style={{ marginBottom: 8 }}>
-            <div>
-              <div className="kicker">Letter</div>
-              <div className="h2">
-                From {letter.from_name || "Sender"} to {letter.to_name || "Recipient"}
-              </div>
-            </div>
-
-            <div className="metaPill faint">
-              <span className="ico">
-                <Ico name="mail" />
-              </span>
-              <span>Sealed until delivery</span>
-            </div>
-          </div>
-
-          <div className="soft">
-            <div className="subject">{letter.subject || "(No subject)"}</div>
-
-            <div style={{ position: "relative" }}>
-              <div className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: uiDelivered ? 1 : 0 }}>
-                <div className="body">{uiDelivered ? (letter.body ?? "") : ""}</div>
-              </div>
-
-              {!uiDelivered || revealStage !== "open" ? (
-                <div style={{ position: uiDelivered ? "absolute" : "relative", inset: 0 }}>
-                  <WaxSealOverlay etaText={etaTextUTC} cracking={uiDelivered && revealStage === "crack"} />
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="token">Token: {letter.public_token}</div>
-        </div>
-
-        <div className="grid">
-          <div className="card">
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-              <div className="kicker">Map</div>
-
-              <div className="mapStyleRow" role="group" aria-label="Map style">
-                <button
-                  type="button"
-                  className={`mapStyleBtn ${mapStyle === "carto-positron" ? "on" : ""}`}
-                  onClick={() => setMapStyle("carto-positron")}
-                  aria-pressed={mapStyle === "carto-positron"}
-                >
-                  Light
-                </button>
-
-                <button
-                  type="button"
-                  className={`mapStyleBtn ${mapStyle === "carto-voyager" ? "on" : ""}`}
-                  onClick={() => setMapStyle("carto-voyager")}
-                  aria-pressed={mapStyle === "carto-voyager"}
-                >
-                  Voyager
-                </button>
-
-                <button
-                  type="button"
-                  className={`mapStyleBtn ${mapStyle === "carto-positron-nolabels" ? "on" : ""}`}
-                  onClick={() => setMapStyle("carto-positron-nolabels")}
-                  aria-pressed={mapStyle === "carto-positron-nolabels"}
-                >
-                  No Labels
-                </button>
-              </div>
-            </div>
-
-            <div style={{ marginTop: 12 }}>
-              <MapView
-                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-                progress={progress}
-                tooltipText={mapTooltip}
-                mapStyle={mapStyle}
-                markerMode={markerMode}
-              />
-            </div>
-
-            <div style={{ marginTop: 14 }}>
-              <div className="bar">
-                <div className="barFill" style={{ width: `${Math.round(progress * 100)}%` }} />
-                {[25, 50, 75].map((p) => (
-                  <span key={p} className="barTick" style={{ left: `${p}%` }} />
-                ))}
-              </div>
-
-              <div className="barMeta">
-                <div className="mutedStrong">{Math.round(progress * 100)}%</div>
-                <div className="muted">{`Current: ${currentlyOver}`}</div>
-              </div>
-
-              <div className="chips">
-                {milestones.map((m) => (
-                  <div key={m.pct} className={`chip ${m.isPast ? "on" : ""}`}>
-                    <span className="chipDot">{m.isPast ? "●" : "○"}</span>
-                    <span className="chipLabel">{m.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="stack">
-            <div className="card">
-              <div className="cardHead">
-                <div>
-                  <div className="kicker">Timeline</div>
-                  <div className="h2">Flight log</div>
-                </div>
-                <div className="pillBtn subtle" title="Auto refresh">
-                  <span className="ico">
-                    <Ico name="live" />
-                  </span>
-                  {uiDelivered || archived ? "Final" : "Auto"}
-                </div>
-              </div>
-
-              <RailTimeline items={timelineItems} now={now} currentKey={currentTimelineKey} birdName={birdName} />
-            </div>
-
-            <div className="card">
-              <div className="cardHead" style={{ marginBottom: 10 }}>
-                <div>
-                  <div className="kicker">Badges</div>
-                  <div className="h2">Earned on this flight</div>
-                </div>
-
-                <div className="metaPill faint" title="Badges earned so far">
-                  🏅 <strong>{badgesSorted.length}</strong>
-                </div>
-              </div>
-
-              {badgesSorted.length === 0 ? (
-                <div className="soft">
-                  <div className="muted">None yet. The bird’s still grinding XP. 🕊️</div>
-                </div>
-              ) : (
-                <div className="stack">
-                  {badgesSorted.map((b) => (
-                    <div key={b.id} className="soft" style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                      <div
-                        className="metaPill"
-                        style={{
-                          padding: "8px 10px",
-                          background: "rgba(0,0,0,0.04)",
-                          border: "1px solid rgba(0,0,0,0.10)",
-                          flex: "0 0 auto",
-                        }}
-                        aria-label="Badge icon"
-                        title={rarityLabel(b.rarity)}
-                      >
-                        <span style={{ fontSize: 16, lineHeight: "16px" }}>{b.icon || "🏅"}</span>
-                      </div>
-
-                      <div style={{ minWidth: 0, flex: "1 1 auto" }}>
-                        <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-                          <div style={{ fontWeight: 900, letterSpacing: "-0.01em" }}>{b.title}</div>
-                          <div className="muted" style={{ fontSize: 11 }}>
-                            {rarityLabel(b.rarity)}
-                            {b.earned_at ? ` • ${new Date(b.earned_at).toLocaleString()}` : ""}
-                          </div>
-                        </div>
-
-                        {b.subtitle ? <div className="muted" style={{ marginTop: 4 }}>{b.subtitle}</div> : null}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </main>
-    </main>
+        <Marker position={[current.lat, current.lon]} icon={liveIcon}>
+          <Tooltip
+            direction="top"
+            offset={[0, -10]}
+            opacity={1}
+            permanent
+            interactive={false}
+            className={`pigeonTooltip ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} ${isDelivered ? "delivered" : ""}`}
+          >
+            <span className="pigeonTooltipRow">
+              {!isDelivered && <span className={`pigeonLiveDot ${isSleeping ? "sleep" : ""}`} />}
+              <span className="pigeonTooltipText">{tooltip}</span>
+            </span>
+          </Tooltip>
+        </Marker>
+      </MapContainer>
+    </div>
   );
 }
