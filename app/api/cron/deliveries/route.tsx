@@ -5,6 +5,7 @@ import { sendEmail } from "../../../lib/email/send";
 
 import { LetterDeliveredEmail } from "@/emails/LetterDelivered";
 import { LetterProgressUpdateEmail } from "@/emails/LetterProgressUpdate";
+import { DeliveryReceiptEmail } from "@/emails/DeliveryReceipt";
 
 type BirdType = "pigeon" | "snipe" | "goose";
 
@@ -121,7 +122,7 @@ export async function GET(req: Request) {
     // Always mark delivered_notified_at (even if no to_email)
     await supabaseServer.from("letters").update({ delivered_notified_at: nowISO }).eq("id", letter.id);
 
-    // Sender receipt (inline) — MUST be absolute
+    // ✅ Sender receipt (template) — MUST be absolute
     if (letter.from_email && !letter.sender_receipt_sent_at) {
       const deliveredAtUtc = formatUtc(nowISO);
       const absoluteStatusUrl = joinUrl(baseUrl, statusPath);
@@ -130,32 +131,12 @@ export async function GET(req: Request) {
         to: letter.from_email,
         subject: "Delivery receipt: confirmed",
         react: (
-          <div style={{ fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial", lineHeight: 1.5 }}>
-            <h2 style={{ margin: "0 0 8px" }}>Delivery confirmed ✅</h2>
-            <p style={{ margin: "0 0 12px" }}>
-              Your letter to <strong>{letter.to_name || "the recipient"}</strong> has been delivered.
-            </p>
-            <p style={{ margin: "0 0 12px", opacity: 0.75 }}>
-              <strong>Delivered:</strong> {deliveredAtUtc}
-            </p>
-            <p style={{ margin: "0 0 16px" }}>
-              <a
-                href={absoluteStatusUrl}
-                style={{
-                  display: "inline-block",
-                  padding: "10px 14px",
-                  borderRadius: 10,
-                  textDecoration: "none",
-                  border: "1px solid #222",
-                }}
-              >
-                View flight status
-              </a>
-            </p>
-            <p style={{ opacity: 0.7, margin: 0 }}>
-              The courier has been compensated in snacks.
-            </p>
-          </div>
+          <DeliveryReceiptEmail
+            toName={letter.to_name}
+            deliveredAtUtc={deliveredAtUtc}
+            statusUrl={absoluteStatusUrl}
+            bird={bird}
+          />
         ),
       });
 
