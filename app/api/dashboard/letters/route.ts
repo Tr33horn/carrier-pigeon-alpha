@@ -81,7 +81,8 @@ function nextBoundaryUtcMs(utcMs: number, offsetMin: number, cfg: SleepConfig = 
 
   const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
 
-  const mkLocal = (yy: number, mm: number, dd: number, hh: number) => Date.UTC(yy, mm, dd, hh, 0, 0, 0);
+  const mkLocal = (yy: number, mm: number, dd: number, hh: number) =>
+    Date.UTC(yy, mm, dd, hh, 0, 0, 0);
 
   const todaySleepStartLocal = mkLocal(y, m, day, cfg.sleepStartHour);
   const todaySleepEndLocal = mkLocal(y, m, day, cfg.sleepEndHour);
@@ -98,7 +99,9 @@ function nextBoundaryUtcMs(utcMs: number, offsetMin: number, cfg: SleepConfig = 
   candidatesLocal.push(tomorrowStartLocal);
   candidatesLocal.push(tomorrowEndLocal);
 
-  const candidatesUtc = candidatesLocal.map((lm) => toUtcMs(lm, offsetMin)).filter((t) => t > utcMs + 1);
+  const candidatesUtc = candidatesLocal
+    .map((lm) => toUtcMs(lm, offsetMin))
+    .filter((t) => t > utcMs + 1);
 
   if (!candidatesUtc.length) return utcMs + 3600_000;
   return Math.min(...candidatesUtc);
@@ -122,7 +125,12 @@ function awakeMsBetween(startUtcMs: number, endUtcMs: number, offsetMin: number,
   return awake;
 }
 
-function etaFromRequiredAwakeMs(sentUtcMs: number, requiredAwakeMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
+function etaFromRequiredAwakeMs(
+  sentUtcMs: number,
+  requiredAwakeMs: number,
+  offsetMin: number,
+  cfg: SleepConfig = SLEEP
+) {
   let t = sentUtcMs;
   let remaining = requiredAwakeMs;
 
@@ -172,7 +180,6 @@ const BIRD_RULES: Record<BirdType, { ignoresSleep: boolean }> = {
 };
 
 type Direction = "sent" | "incoming";
-
 type RawLetter = any;
 
 function matchesQuerySent(l: RawLetter, q: string) {
@@ -222,7 +229,9 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
   // ✅ Compute adjusted ETA if we safely can; otherwise fall back to stored eta_at.
   let etaAdjustedMs: number | null = null;
   if (sentMs != null && requiredAwakeMs > 0) {
-    etaAdjustedMs = ignoresSleep ? sentMs + requiredAwakeMs : etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin);
+    etaAdjustedMs = ignoresSleep
+      ? sentMs + requiredAwakeMs
+      : etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin);
   } else if (etaStoredMs != null) {
     etaAdjustedMs = etaStoredMs;
   }
@@ -326,7 +335,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
   }
 
-  // --- Sent letters (what you already had) ---
+  // --- Sent letters ---
   const { data: sentData, error: sentErr } = await supabaseServer
     .from("letters")
     .select(
@@ -352,11 +361,11 @@ export async function GET(req: Request) {
       speed_kmh,
       archived_at,
       canceled_at,
-      bird
+      bird,
+      recipient_archived_at
     `
     )
     .eq("from_email", email)
-    // ✅ keep your “normal inbox or canceled” behavior for sent letters
     .or("archived_at.is.null,canceled_at.not.is.null")
     .order("sent_at", { ascending: false })
     .limit(50);
@@ -366,8 +375,7 @@ export async function GET(req: Request) {
   }
 
   // --- Incoming letters (NEW) ---
-  // NOTE: Do NOT hide incoming letters just because the sender archived them.
-  // If you want recipient archiving later, we’ll add a separate field.
+  // ✅ recipient_archived_at hides only from the recipient’s dashboard
   const { data: incomingData, error: incomingErr } = await supabaseServer
     .from("letters")
     .select(
@@ -393,10 +401,12 @@ export async function GET(req: Request) {
       speed_kmh,
       archived_at,
       canceled_at,
-      bird
+      bird,
+      recipient_archived_at
     `
     )
     .eq("to_email", email)
+    .is("recipient_archived_at", null)
     .order("sent_at", { ascending: false })
     .limit(50);
 
@@ -416,7 +426,6 @@ export async function GET(req: Request) {
   // Gather checkpoints for BOTH sets
   const realNowMs = Date.now();
   const all = [...sentLetters, ...incomingLetters];
-
   const letterIds = all.map((l: any) => l.id).filter(Boolean);
 
   const checkpointsByLetter = new Map<string, any[]>();
@@ -439,7 +448,9 @@ export async function GET(req: Request) {
   }
 
   // Compute view models
-  let sentOut = sentLetters.map((l: any) => computeViewModel(l, checkpointsByLetter.get(l.id) ?? [], realNowMs, "sent"));
+  let sentOut = sentLetters.map((l: any) =>
+    computeViewModel(l, checkpointsByLetter.get(l.id) ?? [], realNowMs, "sent")
+  );
   let incomingOut = incomingLetters.map((l: any) =>
     computeViewModel(l, checkpointsByLetter.get(l.id) ?? [], realNowMs, "incoming")
   );
@@ -463,8 +474,8 @@ export async function GET(req: Request) {
   }
 
   // ✅ Backward compatible:
-  // - `letters` remains the original Sent list so your existing Dashboard UI won’t crash
-  // - new fields for the Incoming UI
+  // - `letters` remains the original Sent list so older UI doesn’t explode
+  // - new fields are for your Incoming tab UI
   return NextResponse.json({
     letters: sentOut,
     sentLetters: sentOut,
