@@ -83,7 +83,9 @@ type Flight = {
 };
 
 type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
-type TimelineKind = "checkpoint" | "sleep" | "day";
+
+// ✅ add delivered
+type TimelineKind = "checkpoint" | "sleep" | "day" | "delivered";
 
 type TimelineItem = {
   key: string;
@@ -257,19 +259,10 @@ function Ico({
   }
 }
 
-/** ✅ Bird image based on bird + state
- *  Files:
- *  - canada-goose-fly.gif / canada-goose-sleep.gif / canada-goose-landed.gif
- *  - great-snipe-fly.gif / great-snipe-sleep.gif / great-snipe-landed.gif
- *  - homing-pigeon-fly.gif / homing-pigeon-sleep.gif / homing-pigeon-landed.gif
- */
+/** ✅ Bird image based on bird + state */
 function birdImageSrc(bird: BirdType, mode: "flying" | "sleeping" | "delivered" | "canceled") {
-  const base =
-    bird === "snipe" ? "great-snipe" : bird === "goose" ? "canada-goose" : "homing-pigeon";
-
-  const state =
-    mode === "sleeping" ? "sleep" : mode === "delivered" ? "landed" : mode === "canceled" ? "landed" : "fly";
-
+  const base = bird === "snipe" ? "great-snipe" : bird === "goose" ? "canada-goose" : "homing-pigeon";
+  const state = mode === "sleeping" ? "sleep" : mode === "delivered" ? "landed" : mode === "canceled" ? "landed" : "fly";
   return `/birds/${base}-${state}.gif`;
 }
 
@@ -313,15 +306,7 @@ function BirdStatusCard({
 }
 
 /* ---------- wax seal overlay ---------- */
-function WaxSealOverlay({
-  etaText,
-  cracking,
-  canceled,
-}: {
-  etaText: string;
-  cracking?: boolean;
-  canceled?: boolean;
-}) {
+function WaxSealOverlay({ etaText, cracking, canceled }: { etaText: string; cracking?: boolean; canceled?: boolean }) {
   return (
     <div className={cracking ? "seal crack" : "seal"} style={{ position: "relative" }}>
       <div className="sealCard">
@@ -359,11 +344,13 @@ function RailTimeline({
   now,
   currentKey,
   birdName,
+  final,
 }: {
   items: TimelineItem[];
   now: Date;
   currentKey: string | null;
   birdName: string;
+  final: boolean;
 }) {
   const [popped, setPopped] = useState<Record<string, boolean>>({});
 
@@ -373,7 +360,7 @@ function RailTimeline({
 
     for (const it of items) {
       if (it.kind === "day") continue;
-      const isPast = new Date(it.at).getTime() <= now.getTime();
+      const isPast = final || new Date(it.at).getTime() <= now.getTime(); // ✅ Final forces past
       if (isPast && !popped[it.key]) {
         updates[it.key] = true;
         changed = true;
@@ -382,7 +369,7 @@ function RailTimeline({
 
     if (changed) setPopped((prev) => ({ ...prev, ...updates }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, now]);
+  }, [items, now, final]);
 
   return (
     <div className="rail">
@@ -408,10 +395,13 @@ function RailTimeline({
             );
           }
 
-          const isPast = new Date(it.at).getTime() <= now.getTime();
+          const isDeliveredRow = it.kind === "delivered";
+          const isSleep = it.kind === "sleep";
+
+          // ✅ delivered row is always past; final forces everything past
+          const isPast = final || isDeliveredRow || new Date(it.at).getTime() <= now.getTime();
           const shouldPop = popped[it.key] && isPast;
           const isCurrent = currentKey === it.key;
-          const isSleep = it.kind === "sleep";
 
           return (
             <div key={it.key} className="railItem">
@@ -425,10 +415,16 @@ function RailTimeline({
                           boxShadow: "0 0 0 7px rgba(88,80,236,0.12)",
                           color: "#fff",
                         }
+                      : isDeliveredRow
+                      ? {
+                          background: "rgba(34,197,94,0.95)",
+                          boxShadow: "0 0 0 7px rgba(34,197,94,0.12)",
+                          color: "#fff",
+                        }
                       : undefined
                   }
                 >
-                  {isSleep ? "🌙" : isPast ? "✓" : ""}
+                  {isSleep ? "🌙" : isDeliveredRow ? "✓" : isPast ? "✓" : ""}
                 </span>
               </div>
 
@@ -439,6 +435,11 @@ function RailTimeline({
                     ? {
                         background: "rgba(88,80,236,0.08)",
                         borderColor: "rgba(88,80,236,0.35)",
+                      }
+                    : isDeliveredRow
+                    ? {
+                        background: "rgba(34,197,94,0.10)",
+                        borderColor: "rgba(34,197,94,0.40)",
                       }
                     : undefined
                 }
@@ -741,6 +742,10 @@ export default function LetterStatusPage() {
 
   const showLive = !archived && !canceled && !uiDelivered;
 
+  // ✅ NEW: final timeline state
+  const timelineFinal = uiDelivered || archived || canceled;
+
+  // ✅ Build timeline + add Delivered card
   const timelineItems = useMemo(() => {
     const base: TimelineItem[] = checkpointsByTime.map((cp) => ({
       key: `cp-${cp.id}`,
@@ -748,6 +753,16 @@ export default function LetterStatusPage() {
       at: cp.at,
       kind: isSleepCheckpoint(cp) ? "sleep" : "checkpoint",
     }));
+
+    // ✅ Add a final delivered row (distinct tint)
+    if (uiDelivered && !canceled) {
+      base.push({
+        key: "delivered",
+        name: "Delivered ✅",
+        at: effectiveEtaISO || new Date().toISOString(),
+        kind: "delivered",
+      });
+    }
 
     const grouped: TimelineItem[] = [];
     let lastDay = "";
@@ -767,7 +782,7 @@ export default function LetterStatusPage() {
     }
 
     return grouped;
-  }, [checkpointsByTime]);
+  }, [checkpointsByTime, uiDelivered, canceled, effectiveEtaISO]);
 
   const currentTimelineKey = useMemo(() => {
     if (uiDelivered || canceled) return null;
@@ -858,6 +873,9 @@ export default function LetterStatusPage() {
 
   const archivedLabel = archivedAtISO ? `Archived • ${new Date(archivedAtISO).toLocaleString()}` : "Archived";
   const canceledLabel = canceledAtISO ? `Canceled • ${new Date(canceledAtISO).toLocaleString()}` : "Canceled";
+
+  // ✅ pill label improved
+  const timelineModeLabel = uiDelivered ? "Delivered" : canceled ? "Canceled" : archived ? "Archived" : "Auto";
 
   return (
     <main className="pageBg">
@@ -1094,15 +1112,16 @@ export default function LetterStatusPage() {
                   <div className="kicker">Timeline</div>
                   <div className="h2">Flight log</div>
                 </div>
-                <div className="pillBtn subtle" title="Auto refresh">
+
+                <div className="pillBtn subtle" title="Timeline mode">
                   <span className="ico">
                     <Ico name="live" />
                   </span>
-                  {uiDelivered || archived || canceled ? "Final" : "Auto"}
+                  {timelineModeLabel}
                 </div>
               </div>
 
-              <RailTimeline items={timelineItems} now={now} currentKey={currentTimelineKey} birdName={birdName} />
+              <RailTimeline items={timelineItems} now={now} currentKey={currentTimelineKey} birdName={birdName} final={timelineFinal} />
             </div>
 
             <div className="card">
