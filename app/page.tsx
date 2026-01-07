@@ -2,24 +2,40 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { supabase } from "./lib/supabase";
 
 export default function Home() {
   const [status, setStatus] = useState("Checking Supabase connection...");
   const [ok, setOk] = useState<boolean | null>(null);
 
   useEffect(() => {
+    let alive = true;
+
     async function run() {
-      const { error } = await supabase.from("letters").select("id").limit(1);
-      if (error) {
-        setOk(false);
-        setStatus("Supabase error: " + error.message);
-      } else {
+      try {
+        const res = await fetch("/api/health/supabase", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+
+        if (!alive) return;
+
+        if (!res.ok || !data?.ok) {
+          setOk(false);
+          setStatus("Supabase error: " + (data?.error ?? "Unknown error"));
+          return;
+        }
+
         setOk(true);
         setStatus("Supabase connected successfully.");
+      } catch (e: any) {
+        if (!alive) return;
+        setOk(false);
+        setStatus("Supabase error: " + (e?.message ?? "Network error"));
       }
     }
+
     run();
+    return () => {
+      alive = false;
+    };
   }, []);
 
   return (
@@ -33,7 +49,7 @@ export default function Home() {
               Made to wait. Meant to matter.
             </h1>
             <p className="muted" style={{ marginTop: 10, fontSize: 14, opacity: 0.8 }}>
-              Brought to you by Polaroid & Maruchan Instant noodles
+              Brought to you by Polaroid &amp; Maruchan Instant noodles
             </p>
           </div>
 
@@ -41,7 +57,16 @@ export default function Home() {
           <div className="card homeHero" aria-hidden="true">
             <div className="homeHeroInner">
               <div className="muted" style={{ fontSize: 12 }}>
-                <img src="/hero/floklogo.png" alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/>
+                <img
+                  src="/hero/floklogo.png"
+                  alt=""
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -64,7 +89,17 @@ export default function Home() {
                 <span
                   className="ico"
                   aria-hidden="true"
-                  style={{ width: 10, height: 10, borderRadius: 999, background: ok === null ? "rgba(0,0,0,0.35)" : ok ? "var(--ok-green)" : "#d92d20" }}
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 999,
+                    background:
+                      ok === null
+                        ? "rgba(0,0,0,0.35)"
+                        : ok
+                        ? "var(--ok-green)"
+                        : "#d92d20",
+                  }}
                 />
                 <span style={{ fontWeight: 900 }}>
                   {ok === null ? "Checking" : ok ? "Connected" : "Issue"}
