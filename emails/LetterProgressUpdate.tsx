@@ -10,33 +10,53 @@ function joinUrl(base: string, pathOrUrl: string) {
   return `${b}${p}`;
 }
 
-export function LetterDeliveredEmail({
-  toName,
+export function LetterProgressUpdateEmail({
+  milestone,
+  pct,
   fromName,
   statusUrl,
-  originName,
-  destName,
+  etaTextUtc,
+  funLine,
 }: {
-  toName?: string | null;
+  milestone: 25 | 50 | 75;
+  pct: number;
   fromName?: string | null;
-  statusUrl: string; // full URL or path
-  originName: string;
-  destName: string;
+  statusUrl: string; // path or full URL
+  etaTextUtc: string;
+  funLine: string;
 }) {
   const href = joinUrl(APP_URL, statusUrl);
 
+  const preview =
+    milestone === 25
+      ? "25% of the way there."
+      : milestone === 50
+      ? "Halfway there."
+      : "75% complete (incoming).";
+
+  const title =
+    milestone === 25
+      ? "Update: 25%"
+      : milestone === 50
+      ? "Update: 50%"
+      : "Update: 75%";
+
   return (
-    <EmailLayout preview="Your letter has arrived.">
+    <EmailLayout preview={preview}>
       <Text style={{ fontSize: 18, fontWeight: 800, margin: "6px 0 8px" }}>
-        Delivered
+        {title}
       </Text>
 
       <Text style={{ margin: "0 0 10px" }}>
-        Hey {toName || "there"} — your letter from {fromName || "someone"} has landed.
+        Your sealed letter from <strong>{fromName || "someone"}</strong> is still in flight.
+      </Text>
+
+      <Text style={{ margin: "0 0 12px", color: "#444" }}>
+        ETA (UTC): <strong>{etaTextUtc}</strong>
       </Text>
 
       <Text style={{ margin: "0 0 14px", color: "#444" }}>
-        Route: <strong>{originName}</strong> → <strong>{destName}</strong>
+        <em>{funLine}</em>
       </Text>
 
       <Section style={{ marginTop: 12 }}>
@@ -52,7 +72,7 @@ export function LetterDeliveredEmail({
             fontWeight: 700,
           }}
         >
-          Open the letter
+          Check flight status ({pct}%)
         </Button>
       </Section>
 

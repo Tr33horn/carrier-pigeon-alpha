@@ -1,7 +1,14 @@
 import * as React from "react";
 import { Button, Section, Text } from "@react-email/components";
-import { APP_URL, BRAND } from "@/app/lib/email/config";
+import { APP_URL } from "@/app/lib/email/config";
 import { EmailLayout } from "./components/Layout";
+
+function joinUrl(base: string, pathOrUrl: string) {
+  if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
+  const b = base.endsWith("/") ? base.slice(0, -1) : base;
+  const p = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
+  return `${b}${p}`;
+}
 
 export function LetterOnTheWayEmail({
   toName,
@@ -13,12 +20,12 @@ export function LetterOnTheWayEmail({
 }: {
   toName?: string | null;
   fromName?: string | null;
-  statusUrl: string; // full URL or path; we’ll normalize below
+  statusUrl: string; // full URL or path; normalized below
   originName: string;
   destName: string;
   etaTextUtc: string;
 }) {
-  const href = statusUrl.startsWith("http") ? statusUrl : `${APP_URL}${statusUrl}`;
+  const href = joinUrl(APP_URL, statusUrl);
 
   return (
     <EmailLayout preview="A letter is on the way.">

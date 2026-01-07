@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import React from "react";
 import { supabaseServer } from "../../../lib/supabaseServer";
-import { Resend } from "resend";
+import { sendEmail } from "../../../lib/email/send";
 
 import { LetterDeliveredEmail } from "@/emails/LetterDelivered";
+import { LetterProgressUpdateEmail } from "@/emails/LetterProgressUpdate";
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
@@ -17,7 +18,7 @@ function progressPct(sentISO: string, etaISO: string) {
   return Math.round(clamp01((now - sent) / (eta - sent)) * 100);
 }
 
-/** ✅ Format an ISO date as a UTC string (consistent everywhere) */
+/** Format an ISO date as a UTC string (consistent everywhere) */
 function formatUtc(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
@@ -35,21 +36,13 @@ function formatUtc(iso: string) {
 }
 
 export async function GET(req: Request) {
-  // Auth first
+  // --- auth ---
   const auth = req.headers.get("authorization");
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    return NextResponse.json({ error: "Missing RESEND_API_KEY" }, { status: 500 });
-  }
-  const resend = new Resend(key);
-
-  // Prefer APP_URL (matches your email config), fallback to APP_BASE_URL, then localhost
-  const base = process.env.APP_URL || process.env.APP_BASE_URL || "http://localhost:3000";
-  const mailFrom = process.env.MAIL_FROM || "FLOK <onboarding@resend.dev>";
+  const nowISO = new Date().toISOString();
 
   /* --------------------------
      A) DELIVERIES
@@ -58,10 +51,10 @@ export async function GET(req: Request) {
   const { data: lettersToDeliver, error: deliverErr } = await supabaseServer
     .from("letters")
     .select(
-      "id, public_token, eta_at, subject, body, from_name, from_email, to_name, to_email, delivered_notified_at, sender_receipt_sent_at, origin_name, dest_name"
+      "id, public_token, eta_at, from_name, from_email, to_name, to_email, delivered_notified_at, sender_receipt_sent_at, origin_name, dest_name, subject"
     )
     .is("delivered_notified_at", null)
-    .lte("eta_at", new Date().toISOString());
+    .lte("eta_at", nowISO);
 
   if (deliverErr) {
     return NextResponse.json({ error: deliverErr.message }, { status: 500 });
@@ -71,19 +64,17 @@ export async function GET(req: Request) {
   let delivered_sender_receipts = 0;
 
   for (const letter of lettersToDeliver ?? []) {
-    const url = `${base}/l/${letter.public_token}`;
-    const deliveredAtUtc = formatUtc(new Date().toISOString());
+    const statusPath = `/l/${letter.public_token}`;
 
-    // Recipient delivery email (TEMPLATE)
+    // Recipient delivered email
     if (letter.to_email) {
-      await resend.emails.send({
-        from: mailFrom,
+      await sendEmail({
         to: letter.to_email,
         subject: letter.subject?.trim() ? `Delivered: ${letter.subject.trim()}` : "Your letter has arrived",
         react: React.createElement(LetterDeliveredEmail, {
           toName: letter.to_name,
           fromName: letter.from_name,
-          statusUrl: url,
+          statusUrl: statusPath, // template will join with APP_URL
           originName: letter.origin_name || "Origin",
           destName: letter.dest_name || "Destination",
         }),
@@ -92,13 +83,17 @@ export async function GET(req: Request) {
       delivered_recipient_emails++;
     }
 
-    // Mark delivered notification done (even if no to_email)
-    await supabaseServer.from("letters").update({ delivered_notified_at: new Date().toISOString() }).eq("id", letter.id);
+    // Always mark delivered_notified_at (even if no to_email)
+    await supabaseServer
+      .from("letters")
+      .update({ delivered_notified_at: new Date().toISOString() })
+      .eq("id", letter.id);
 
-    // Sender receipt (inline React element)
+    // Sender receipt (optional, still inline)
     if (letter.from_email && !letter.sender_receipt_sent_at) {
-      await resend.emails.send({
-        from: mailFrom,
+      const deliveredAtUtc = formatUtc(new Date().toISOString());
+
+      await sendEmail({
         to: letter.from_email,
         subject: "Delivery receipt: confirmed",
         react: React.createElement(
@@ -125,7 +120,7 @@ export async function GET(req: Request) {
             React.createElement(
               "a",
               {
-                href: url,
+                href: statusPath,
                 style: {
                   display: "inline-block",
                   padding: "10px 14px",
@@ -152,11 +147,9 @@ export async function GET(req: Request) {
 
   /* --------------------------
      B) MID-FLIGHT UPDATES (25/50/75)
-     - Only for letters NOT delivered yet
-     - Only if recipient email exists
+     - only not delivered
+     - only if recipient has email
   -------------------------- */
-
-  const nowISO = new Date().toISOString();
 
   const { data: inFlight, error: inflightErr } = await supabaseServer
     .from("letters")
@@ -183,7 +176,7 @@ export async function GET(req: Request) {
     }
 
     const pct = progressPct(letter.sent_at, letter.eta_at);
-    const url = `${base}/l/${letter.public_token}`;
+    const statusPath = `/l/${letter.public_token}`;
     const etaUtcText = formatUtc(letter.eta_at);
 
     const sendUpdate = async (
@@ -195,7 +188,7 @@ export async function GET(req: Request) {
           ? "Update: 25% of the way there"
           : milestone === 50
           ? "Update: Halfway there"
-          : "Update: 75% complete (incoming!)";
+          : "Update: 75% complete (incoming)";
 
       const funLine =
         milestone === 25
@@ -204,54 +197,23 @@ export async function GET(req: Request) {
           ? "Mid-flight snack negotiations successful."
           : "You may now hear faint wing sounds in the distance.";
 
-      await resend.emails.send({
-        from: mailFrom,
+      await sendEmail({
         to: letter.to_email!,
         subject: subjectLine,
-        react: React.createElement(
-          "div",
-          { style: { fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial", lineHeight: 1.5 } },
-          React.createElement("h2", { style: { margin: "0 0 8px" } }, `${milestone}% progress`),
-          React.createElement(
-            "p",
-            { style: { margin: "0 0 12px" } },
-            "Your sealed letter from ",
-            React.createElement("strong", null, letter.from_name || "Someone"),
-            " is still in flight."
-          ),
-          React.createElement(
-            "p",
-            { style: { margin: "0 0 12px", opacity: 0.75 } },
-            React.createElement("strong", null, "ETA (UTC):"),
-            " ",
-            etaUtcText
-          ),
-          React.createElement("p", { style: { margin: "0 0 12px" } }, React.createElement("em", null, funLine)),
-          React.createElement(
-            "p",
-            { style: { margin: "0 0 16px" } },
-            React.createElement(
-              "a",
-              {
-                href: url,
-                style: {
-                  display: "inline-block",
-                  padding: "10px 14px",
-                  borderRadius: 10,
-                  textDecoration: "none",
-                  border: "1px solid #222",
-                },
-              },
-              `Check flight status (${pct}%)`
-            )
-          ),
-          React.createElement("p", { style: { opacity: 0.7, margin: 0 } }, "Still sealed. Still mysterious.")
-        ),
+        react: React.createElement(LetterProgressUpdateEmail, {
+          milestone,
+          pct,
+          fromName: letter.from_name,
+          statusUrl: statusPath,
+          etaTextUtc: etaUtcText,
+          funLine,
+        }),
       });
 
       await supabaseServer.from("letters").update({ [column]: new Date().toISOString() }).eq("id", letter.id);
     };
 
+    // milestone logic (highest first)
     if (pct >= 75 && !letter.progress_75_sent_at) {
       await sendUpdate(75, "progress_75_sent_at");
       midflight_75++;
@@ -273,14 +235,12 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    ran_at: new Date().toISOString(),
-
+    ran_at: nowISO,
     deliveries: {
       eligible: (lettersToDeliver ?? []).length,
       delivered_recipient_emails,
       delivered_sender_receipts,
     },
-
     midflight: {
       eligible: (inFlight ?? []).length,
       sent_25: midflight_25,

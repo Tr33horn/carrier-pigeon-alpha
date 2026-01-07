@@ -19,10 +19,13 @@ export function EmailLayout({
           <Section style={{ marginBottom: 12 }}>
             <Img
               src={BRAND.logoUrl}
-              width="120"
-              height="auto"
               alt={BRAND.name}
-              style={{ display: "block" }}
+              width={120}
+              style={{
+                display: "block",
+                maxWidth: "100%",
+                height: "auto",
+              }}
             />
           </Section>
 
@@ -31,7 +34,7 @@ export function EmailLayout({
           <Section style={{ marginTop: 20, paddingTop: 14, borderTop: "1px solid #eee" }}>
             <Text style={{ fontSize: 12, color: "#666", margin: 0 }}>
               Sent by {BRAND.name}.{" "}
-              <Link href={`${APP_URL}`} style={{ color: "#111" }}>
+              <Link href={APP_URL} style={{ color: "#111" }}>
                 Open FLOK
               </Link>
             </Text>
