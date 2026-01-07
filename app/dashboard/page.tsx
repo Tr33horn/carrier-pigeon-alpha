@@ -26,31 +26,25 @@ type DashboardLetter = {
   eta_at: string;
 
   delivered: boolean;
-  progress: number; // 0..1
+  progress: number; // 0..1 (server-provided; we won't trust it for UI)
 
   current_lat: number | null;
   current_lon: number | null;
 
-  // ✅ from API (recommended)
   current_over_text?: string | null;
 
-  // ✅ NEW (recommended)
   bird?: "pigeon" | "snipe" | "goose";
-
-  // ✅ NEW (recommended) - allows “Sleeping” in dashboard
   sleeping?: boolean;
 
   sent_utc_text: string;
   eta_utc_text: string;
 
-  // ✅ dashboard should prefer this (sleep/bird-aware eta)
   eta_utc_iso: string | null;
 
   badges_count?: number;
 
-  // ✅ Cancel support
   canceled_at?: string | null;
-  canceled?: boolean; // optional server-provided convenience
+  canceled?: boolean;
 };
 
 type Filter = "all" | "inflight" | "delivered";
@@ -115,6 +109,31 @@ async function copyToClipboard(text: string) {
   document.body.removeChild(ta);
 }
 
+/**
+ * ✅ Single source of truth for progress in the dashboard:
+ * Uses the SAME ETA you use for countdown (eta_utc_iso first).
+ */
+function progressFromTimes(opts: {
+  nowMs: number;
+  sentISO: string;
+  etaISO: string | null | undefined;
+  delivered: boolean;
+  canceled: boolean;
+}) {
+  const { nowMs, sentISO, etaISO, delivered, canceled } = opts;
+
+  if (canceled) return 0;
+  if (delivered) return 1;
+
+  const sentMs = parseMs(sentISO);
+  const etaMs = parseMs(etaISO ?? null);
+
+  if (sentMs == null || etaMs == null) return 0;
+  if (etaMs <= sentMs) return 1;
+
+  return clamp01((nowMs - sentMs) / (etaMs - sentMs));
+}
+
 /* ---------- Mini route thumbnail (no Leaflet) ---------- */
 function RouteThumb(props: {
   origin: { lat: number; lon: number };
@@ -160,7 +179,13 @@ function RouteThumb(props: {
   return (
     <div className="routeThumb" aria-hidden>
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
-        <path d={`M ${pts.o.x} ${pts.o.y} L ${pts.d.x} ${pts.d.y}`} stroke="currentColor" strokeWidth="3" opacity="0.55" strokeLinecap="round" />
+        <path
+          d={`M ${pts.o.x} ${pts.o.y} L ${pts.d.x} ${pts.d.y}`}
+          stroke="currentColor"
+          strokeWidth="3"
+          opacity="0.55"
+          strokeLinecap="round"
+        />
         <circle cx={pts.o.x} cy={pts.o.y} r="4.5" fill="currentColor" />
         <circle cx={pts.d.x} cy={pts.d.y} r="6.2" fill="none" stroke="currentColor" strokeWidth="2.2" opacity="0.95" />
 
@@ -297,7 +322,6 @@ export default function DashboardPage() {
 
     setCancelingId(letter.id);
 
-    // optimistic update (briefly shows “Canceled” before it disappears after reload because canceled => archived)
     const prevSnapshot = letters;
     const nowIso = new Date().toISOString();
 
@@ -498,10 +522,22 @@ export default function DashboardPage() {
             </div>
           ) : (
             filteredSorted.map((l) => {
-              const pct = Math.round(clamp01(l.progress ?? 0) * 100);
-
               const isCanceled = !!(l.canceled || (l.canceled_at && String(l.canceled_at).trim()));
+
+              // ✅ Resolve ETA once (same as countdown)
               const etaIsoResolved = l.eta_utc_iso || l.eta_at;
+
+              // ✅ Use the SAME ETA for progress too
+              const derivedProgress = progressFromTimes({
+                nowMs: now.getTime(),
+                sentISO: l.sent_at,
+                etaISO: etaIsoResolved,
+                delivered: !!l.delivered,
+                canceled: isCanceled,
+              });
+
+              const pct = Math.round(derivedProgress * 100);
+
               const etaAbsMs = parseMs(etaIsoResolved);
               const msLeft = etaAbsMs == null ? null : etaAbsMs - now.getTime();
               const countdown = formatCountdown(msLeft);
@@ -571,7 +607,12 @@ export default function DashboardPage() {
                     </div>
 
                     {canThumb ? (
-                      <RouteThumb origin={{ lat: l.origin_lat, lon: l.origin_lon }} dest={{ lat: l.dest_lat, lon: l.dest_lon }} current={current} progress={l.progress ?? 0} />
+                      <RouteThumb
+                        origin={{ lat: l.origin_lat, lon: l.origin_lon }}
+                        dest={{ lat: l.dest_lat, lon: l.dest_lon }}
+                        current={current}
+                        progress={derivedProgress}
+                      />
                     ) : null}
                   </div>
 
