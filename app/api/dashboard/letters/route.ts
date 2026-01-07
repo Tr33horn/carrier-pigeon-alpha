@@ -171,19 +171,163 @@ const BIRD_RULES: Record<BirdType, { ignoresSleep: boolean }> = {
   snipe: { ignoresSleep: true },
 };
 
+type Direction = "sent" | "incoming";
+
+type RawLetter = any;
+
+function matchesQuerySent(l: RawLetter, q: string) {
+  const hay = [l.subject, l.to_name, l.to_email, l.origin_name, l.dest_name, l.public_token]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(q);
+}
+
+function matchesQueryIncoming(l: RawLetter, q: string) {
+  const hay = [l.subject, l.from_name, l.from_email, l.origin_name, l.dest_name, l.public_token]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(q);
+}
+
+function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction: Direction) {
+  const bird = normalizeBird(l.bird);
+  const ignoresSleep = BIRD_RULES[bird].ignoresSleep;
+
+  const sentMs = safeParseMs(l.sent_at);
+  const etaStoredMs = safeParseMs(l.eta_at);
+
+  const canceledAtMs = safeParseMs(l.canceled_at);
+  const canceled = canceledAtMs != null && Number.isFinite(canceledAtMs);
+
+  // ✅ If canceled, freeze calculations at cancel time (not "now")
+  const calcNowMs = canceled ? Math.min(realNowMs, canceledAtMs!) : realNowMs;
+
+  const originLon = Number(l.origin_lon);
+  const offsetMin = offsetMinutesFromLon(originLon);
+
+  const distanceKm = Number(l.distance_km);
+  const speedKmh = Number(l.speed_kmh);
+
+  const hasFlightInputs =
+    sentMs != null &&
+    Number.isFinite(distanceKm) &&
+    distanceKm > 0 &&
+    Number.isFinite(speedKmh) &&
+    speedKmh > 0;
+
+  const requiredAwakeMs = hasFlightInputs ? (distanceKm / speedKmh) * 3600_000 : 0;
+
+  // ✅ Compute adjusted ETA if we safely can; otherwise fall back to stored eta_at.
+  let etaAdjustedMs: number | null = null;
+  if (sentMs != null && requiredAwakeMs > 0) {
+    etaAdjustedMs = ignoresSleep ? sentMs + requiredAwakeMs : etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin);
+  } else if (etaStoredMs != null) {
+    etaAdjustedMs = etaStoredMs;
+  }
+
+  // ✅ Last-resort fallback: "deliver now" if we have neither.
+  if (etaAdjustedMs == null) etaAdjustedMs = calcNowMs;
+
+  // ✅ Delivered is false if canceled (even if time would have passed)
+  const delivered = canceled ? false : calcNowMs >= etaAdjustedMs;
+
+  // ✅ sleeping flag for dashboard (never sleeping if canceled)
+  const sleeping = canceled ? false : !delivered && !ignoresSleep ? isSleepingAt(calcNowMs, offsetMin) : false;
+
+  // ✅ progress (sleep-aware)
+  let traveledMs = 0;
+  if (sentMs != null && calcNowMs > sentMs && requiredAwakeMs > 0) {
+    traveledMs = ignoresSleep
+      ? Math.min(calcNowMs, etaAdjustedMs) - sentMs
+      : awakeMsBetween(sentMs, Math.min(calcNowMs, etaAdjustedMs), offsetMin);
+  }
+  const progress = requiredAwakeMs > 0 ? clamp(traveledMs / requiredAwakeMs, 0, 1) : delivered ? 1 : 0;
+
+  // Current label: last checkpoint whose time has passed
+  let current_over_text = delivered ? "Delivered" : "somewhere over the U.S.";
+
+  if (canceled) {
+    current_over_text = "Canceled";
+  } else if (!delivered && cps.length) {
+    let best = cps[0];
+    let bestT = -Infinity;
+
+    for (const cp of cps) {
+      const t = safeParseMs(cp.at);
+      if (t != null && t <= calcNowMs && t >= bestT) {
+        bestT = t;
+        best = cp;
+      }
+    }
+
+    if (Number.isFinite(best?.lat) && Number.isFinite(best?.lon)) {
+      current_over_text = checkpointGeoText(best.lat, best.lon);
+    }
+  }
+
+  // thumb coords: progress-based
+  const curLat =
+    Number.isFinite(l.origin_lat) && Number.isFinite(l.dest_lat)
+      ? l.origin_lat + (l.dest_lat - l.origin_lat) * progress
+      : null;
+
+  const curLon =
+    Number.isFinite(l.origin_lon) && Number.isFinite(l.dest_lon)
+      ? l.origin_lon + (l.dest_lon - l.origin_lon) * progress
+      : null;
+
+  // ETA fields:
+  const etaAdjustedISO = new Date(etaAdjustedMs).toISOString();
+  const canceledISO = canceledAtMs ? new Date(canceledAtMs).toISOString() : null;
+
+  const eta_utc_iso = canceled ? canceledISO : etaAdjustedISO;
+  const eta_utc_text = canceled
+    ? canceledISO
+      ? `Canceled at ${formatUTC(canceledISO)} UTC`
+      : "Canceled"
+    : etaAdjustedISO
+    ? `${formatUTC(etaAdjustedISO)} UTC`
+    : "";
+
+  return {
+    ...l,
+    direction, // ✅ NEW
+
+    bird,
+
+    canceled,
+    canceled_at: canceledISO,
+
+    delivered,
+    sleeping,
+    progress,
+
+    current_lat: curLat,
+    current_lon: curLon,
+
+    current_over_text,
+
+    sent_utc_text: l.sent_at ? `${formatUTC(l.sent_at)} UTC` : "",
+    eta_utc_text,
+    eta_utc_iso: eta_utc_iso || null,
+
+    badges_count: 0,
+  };
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const email = (searchParams.get("email") || "").trim().toLowerCase();
-  const q = (searchParams.get("q") || "").trim().toLowerCase();
+  const qRaw = (searchParams.get("q") || "").trim().toLowerCase();
 
   if (!email || !isValidEmail(email)) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
   }
 
-  // ✅ IMPORTANT:
-  // Include "normal inbox" letters (archived_at is null) OR canceled letters (canceled_at is not null),
-  // because the cancel endpoint typically sets archived_at too.
-  const { data, error } = await supabaseServer
+  // --- Sent letters (what you already had) ---
+  const { data: sentData, error: sentErr } = await supabaseServer
     .from("letters")
     .select(
       `
@@ -212,28 +356,68 @@ export async function GET(req: Request) {
     `
     )
     .eq("from_email", email)
+    // ✅ keep your “normal inbox or canceled” behavior for sent letters
     .or("archived_at.is.null,canceled_at.not.is.null")
     .order("sent_at", { ascending: false })
     .limit(50);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (sentErr) {
+    return NextResponse.json({ error: sentErr.message }, { status: 500 });
   }
 
+  // --- Incoming letters (NEW) ---
+  // NOTE: Do NOT hide incoming letters just because the sender archived them.
+  // If you want recipient archiving later, we’ll add a separate field.
+  const { data: incomingData, error: incomingErr } = await supabaseServer
+    .from("letters")
+    .select(
+      `
+      id,
+      public_token,
+      from_name,
+      from_email,
+      to_name,
+      to_email,
+      subject,
+      origin_name,
+      origin_lat,
+      origin_lon,
+      dest_name,
+      dest_lat,
+      dest_lon,
+      sent_at,
+      eta_at,
+      delivered_notified_at,
+      sender_receipt_sent_at,
+      distance_km,
+      speed_kmh,
+      archived_at,
+      canceled_at,
+      bird
+    `
+    )
+    .eq("to_email", email)
+    .order("sent_at", { ascending: false })
+    .limit(50);
+
+  if (incomingErr) {
+    return NextResponse.json({ error: incomingErr.message }, { status: 500 });
+  }
+
+  let sentLetters = (sentData ?? []) as RawLetter[];
+  let incomingLetters = (incomingData ?? []) as RawLetter[];
+
+  // Server-side search filter (kept fast + consistent)
+  if (qRaw) {
+    sentLetters = sentLetters.filter((l) => matchesQuerySent(l, qRaw));
+    incomingLetters = incomingLetters.filter((l) => matchesQueryIncoming(l, qRaw));
+  }
+
+  // Gather checkpoints for BOTH sets
   const realNowMs = Date.now();
-  let letters = data ?? [];
+  const all = [...sentLetters, ...incomingLetters];
 
-  if (q) {
-    letters = letters.filter((l: any) => {
-      const hay = [l.subject, l.to_name, l.to_email, l.origin_name, l.dest_name, l.public_token]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
-    });
-  }
-
-  const letterIds = letters.map((l: any) => l.id).filter(Boolean);
+  const letterIds = all.map((l: any) => l.id).filter(Boolean);
 
   const checkpointsByLetter = new Map<string, any[]>();
   if (letterIds.length) {
@@ -254,134 +438,13 @@ export async function GET(req: Request) {
     }
   }
 
-  let out = letters.map((l: any) => {
-    const bird = normalizeBird(l.bird);
-    const ignoresSleep = BIRD_RULES[bird].ignoresSleep;
+  // Compute view models
+  let sentOut = sentLetters.map((l: any) => computeViewModel(l, checkpointsByLetter.get(l.id) ?? [], realNowMs, "sent"));
+  let incomingOut = incomingLetters.map((l: any) =>
+    computeViewModel(l, checkpointsByLetter.get(l.id) ?? [], realNowMs, "incoming")
+  );
 
-    const sentMs = safeParseMs(l.sent_at);
-    const etaStoredMs = safeParseMs(l.eta_at);
-
-    const canceledAtMs = safeParseMs(l.canceled_at);
-    const canceled = canceledAtMs != null && Number.isFinite(canceledAtMs);
-
-    // ✅ If canceled, freeze calculations at cancel time (not "now")
-    const calcNowMs = canceled ? Math.min(realNowMs, canceledAtMs!) : realNowMs;
-
-    const originLon = Number(l.origin_lon);
-    const offsetMin = offsetMinutesFromLon(originLon);
-
-    const distanceKm = Number(l.distance_km);
-    const speedKmh = Number(l.speed_kmh);
-
-    const hasFlightInputs =
-      sentMs != null &&
-      Number.isFinite(distanceKm) &&
-      distanceKm > 0 &&
-      Number.isFinite(speedKmh) &&
-      speedKmh > 0;
-
-    const requiredAwakeMs = hasFlightInputs ? (distanceKm / speedKmh) * 3600_000 : 0;
-
-    // ✅ Compute adjusted ETA if we safely can; otherwise fall back to stored eta_at.
-    let etaAdjustedMs: number | null = null;
-    if (sentMs != null && requiredAwakeMs > 0) {
-      etaAdjustedMs = ignoresSleep ? sentMs + requiredAwakeMs : etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin);
-    } else if (etaStoredMs != null) {
-      etaAdjustedMs = etaStoredMs;
-    }
-
-    // ✅ Last-resort fallback: "deliver now" if we have neither.
-    if (etaAdjustedMs == null) etaAdjustedMs = calcNowMs;
-
-    // ✅ Delivered is false if canceled (even if time would have passed)
-    const delivered = canceled ? false : calcNowMs >= etaAdjustedMs;
-
-    // ✅ sleeping flag for dashboard (never sleeping if canceled)
-    const sleeping = canceled ? false : !delivered && !ignoresSleep ? isSleepingAt(calcNowMs, offsetMin) : false;
-
-    // ✅ progress (sleep-aware), with safe fallbacks — computed up to calcNowMs
-    let traveledMs = 0;
-    if (sentMs != null && calcNowMs > sentMs && requiredAwakeMs > 0) {
-      traveledMs = ignoresSleep
-        ? Math.min(calcNowMs, etaAdjustedMs) - sentMs
-        : awakeMsBetween(sentMs, Math.min(calcNowMs, etaAdjustedMs), offsetMin);
-    }
-    const progress = requiredAwakeMs > 0 ? clamp(traveledMs / requiredAwakeMs, 0, 1) : delivered ? 1 : 0;
-
-    // Current label: last checkpoint whose time has passed
-    const cps = checkpointsByLetter.get(l.id) ?? [];
-    let current_over_text = delivered ? "Delivered" : "somewhere over the U.S.";
-
-    if (canceled) {
-      current_over_text = "Canceled";
-    } else if (!delivered && cps.length) {
-      let best = cps[0];
-      let bestT = -Infinity;
-
-      for (const cp of cps) {
-        const t = safeParseMs(cp.at);
-        if (t != null && t <= calcNowMs && t >= bestT) {
-          bestT = t;
-          best = cp;
-        }
-      }
-
-      if (Number.isFinite(best?.lat) && Number.isFinite(best?.lon)) {
-        current_over_text = checkpointGeoText(best.lat, best.lon);
-      }
-    }
-
-    // thumb coords: progress-based
-    const curLat =
-      Number.isFinite(l.origin_lat) && Number.isFinite(l.dest_lat)
-        ? l.origin_lat + (l.dest_lat - l.origin_lat) * progress
-        : null;
-
-    const curLon =
-      Number.isFinite(l.origin_lon) && Number.isFinite(l.dest_lon)
-        ? l.origin_lon + (l.dest_lon - l.origin_lon) * progress
-        : null;
-
-    // ETA fields:
-    // - normal: etaAdjusted
-    // - canceled: show canceled timestamp (and no countdown in UI)
-    const etaAdjustedISO = new Date(etaAdjustedMs).toISOString();
-    const canceledISO = canceledAtMs ? new Date(canceledAtMs).toISOString() : null;
-
-    const eta_utc_iso = canceled ? canceledISO : etaAdjustedISO;
-    const eta_utc_text = canceled
-      ? canceledISO
-        ? `Canceled at ${formatUTC(canceledISO)} UTC`
-        : "Canceled"
-      : etaAdjustedISO
-      ? `${formatUTC(etaAdjustedISO)} UTC`
-      : "";
-
-    return {
-      ...l,
-      bird,
-
-      canceled,
-      canceled_at: canceledISO,
-
-      delivered,
-      sleeping,
-      progress,
-
-      current_lat: curLat,
-      current_lon: curLon,
-
-      current_over_text,
-
-      sent_utc_text: l.sent_at ? `${formatUTC(l.sent_at)} UTC` : "",
-      eta_utc_text,
-      eta_utc_iso: eta_utc_iso || null,
-
-      badges_count: 0,
-    };
-  });
-
-  // ✅ Badge counts (cheap)
+  // Badge counts (cheap) for BOTH sets
   if (letterIds.length) {
     const { data: badgeRows, error: badgeErr } = await supabaseServer
       .from("letter_items")
@@ -394,12 +457,17 @@ export async function GET(req: Request) {
       for (const r of badgeRows as any[]) {
         counts.set(r.letter_id, (counts.get(r.letter_id) ?? 0) + 1);
       }
-      out = out.map((l: any) => ({
-        ...l,
-        badges_count: counts.get(l.id) ?? 0,
-      }));
+      sentOut = sentOut.map((l: any) => ({ ...l, badges_count: counts.get(l.id) ?? 0 }));
+      incomingOut = incomingOut.map((l: any) => ({ ...l, badges_count: counts.get(l.id) ?? 0 }));
     }
   }
 
-  return NextResponse.json({ letters: out });
+  // ✅ Backward compatible:
+  // - `letters` remains the original Sent list so your existing Dashboard UI won’t crash
+  // - new fields for the Incoming UI
+  return NextResponse.json({
+    letters: sentOut,
+    sentLetters: sentOut,
+    incomingLetters: incomingOut,
+  });
 }

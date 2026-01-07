@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+type Direction = "sent" | "incoming";
+
 type DashboardLetter = {
   id: string;
   public_token: string;
@@ -45,10 +47,14 @@ type DashboardLetter = {
 
   canceled_at?: string | null;
   canceled?: boolean;
+
+  // ✅ NEW from API
+  direction?: Direction;
 };
 
 type Filter = "all" | "inflight" | "delivered";
 type Sort = "newest" | "etaSoonest" | "oldest";
+type BoxTab = "all" | "sent" | "incoming";
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
@@ -202,15 +208,51 @@ function RouteThumb(props: {
   );
 }
 
+function TabBar(props: {
+  tab: BoxTab;
+  setTab: (t: BoxTab) => void;
+  counts: { all: number; sent: number; incoming: number };
+}) {
+  const pillStyle = (active: boolean): React.CSSProperties => ({
+    padding: "8px 10px",
+    borderRadius: 999,
+    border: "1px solid rgba(0,0,0,0.12)",
+    background: active ? "rgba(0,0,0,0.06)" : "transparent",
+    fontWeight: 900,
+    cursor: "pointer",
+    display: "inline-flex",
+    gap: 8,
+    alignItems: "center",
+  });
+
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <button type="button" style={pillStyle(props.tab === "all")} onClick={() => props.setTab("all")}>
+        All <span style={{ opacity: 0.7 }}>{props.counts.all}</span>
+      </button>
+      <button type="button" style={pillStyle(props.tab === "sent")} onClick={() => props.setTab("sent")}>
+        Sent <span style={{ opacity: 0.7 }}>{props.counts.sent}</span>
+      </button>
+      <button type="button" style={pillStyle(props.tab === "incoming")} onClick={() => props.setTab("incoming")}>
+        Incoming <span style={{ opacity: 0.7 }}>{props.counts.incoming}</span>
+      </button>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [email, setEmail] = useState("");
   const [q, setQ] = useState("");
 
-  const [letters, setLetters] = useState<DashboardLetter[]>([]);
+  // ✅ New split state
+  const [sentLetters, setSentLetters] = useState<DashboardLetter[]>([]);
+  const [incomingLetters, setIncomingLetters] = useState<DashboardLetter[]>([]);
+
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [now, setNow] = useState(new Date());
 
+  const [tab, setTab] = useState<BoxTab>("all"); // ✅ NEW
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("newest");
 
@@ -258,19 +300,24 @@ export default function DashboardPage() {
       localStorage.setItem("cp_sender_email", e);
 
       const res = await fetch(`/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(qs)}`, { cache: "no-store" });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to load");
 
-      setLetters((data.letters ?? []) as DashboardLetter[]);
+      const sent = (data.sentLetters ?? data.letters ?? []) as DashboardLetter[];
+      const incoming = (data.incomingLetters ?? []) as DashboardLetter[];
+
+      setSentLetters(sent.map((l) => ({ ...l, direction: l.direction ?? "sent" })));
+      setIncomingLetters(incoming.map((l) => ({ ...l, direction: l.direction ?? "incoming" })));
     } catch (err: any) {
       setError(err?.message ?? String(err));
-      setLetters([]);
+      setSentLetters([]);
+      setIncomingLetters([]);
     } finally {
       setLoading(false);
     }
   }
 
+  // ✅ actions only apply to sent letters
   async function archiveLetter(letter: DashboardLetter) {
     if (archivingId || cancelingId) return;
 
@@ -281,8 +328,8 @@ export default function DashboardPage() {
 
     setArchivingId(letter.id);
 
-    const prevSnapshot = letters;
-    setLetters((cur) => cur.filter((x) => x.id !== letter.id));
+    const prevSnapshot = sentLetters;
+    setSentLetters((cur) => cur.filter((x) => x.id !== letter.id));
 
     try {
       const res = await fetch(`/api/letters/archive/${encodeURIComponent(letter.public_token)}`, {
@@ -296,7 +343,7 @@ export default function DashboardPage() {
       setToast("Archived ✅");
       void load();
     } catch (err: any) {
-      setLetters(prevSnapshot);
+      setSentLetters(prevSnapshot);
       setToast("Archive failed ❌");
       console.error("ARCHIVE ERROR:", err);
     } finally {
@@ -322,10 +369,10 @@ export default function DashboardPage() {
 
     setCancelingId(letter.id);
 
-    const prevSnapshot = letters;
+    const prevSnapshot = sentLetters;
     const nowIso = new Date().toISOString();
 
-    setLetters((cur) =>
+    setSentLetters((cur) =>
       cur.map((x) =>
         x.id === letter.id
           ? {
@@ -352,7 +399,7 @@ export default function DashboardPage() {
       setToast("Canceled 🛑");
       void load();
     } catch (err: any) {
-      setLetters(prevSnapshot);
+      setSentLetters(prevSnapshot);
       setToast("Cancel failed ❌");
       console.error("CANCEL ERROR:", err);
     } finally {
@@ -360,14 +407,33 @@ export default function DashboardPage() {
     }
   }
 
+  const allLetters = useMemo(() => {
+    // newest-ish by default; final sort happens later
+    return [...sentLetters, ...incomingLetters];
+  }, [sentLetters, incomingLetters]);
+
+  const activeLetters = useMemo(() => {
+    if (tab === "sent") return sentLetters;
+    if (tab === "incoming") return incomingLetters;
+    return allLetters;
+  }, [tab, sentLetters, incomingLetters, allLetters]);
+
+  const counts = useMemo(() => {
+    return {
+      all: allLetters.length,
+      sent: sentLetters.length,
+      incoming: incomingLetters.length,
+    };
+  }, [allLetters.length, sentLetters.length, incomingLetters.length]);
+
   const stats = useMemo(() => {
-    const delivered = letters.filter((l) => l.delivered).length;
-    const inflight = letters.length - delivered;
-    return { delivered, inflight, total: letters.length };
-  }, [letters]);
+    const delivered = activeLetters.filter((l) => l.delivered).length;
+    const inflight = activeLetters.length - delivered;
+    return { delivered, inflight, total: activeLetters.length };
+  }, [activeLetters]);
 
   const filteredSorted = useMemo(() => {
-    let list = [...letters];
+    let list = [...activeLetters];
 
     if (filter === "inflight") list = list.filter((l) => !l.delivered);
     if (filter === "delivered") list = list.filter((l) => l.delivered);
@@ -385,7 +451,7 @@ export default function DashboardPage() {
     });
 
     return list;
-  }, [letters, filter, sort]);
+  }, [activeLetters, filter, sort]);
 
   function onLookupKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
@@ -393,6 +459,15 @@ export default function DashboardPage() {
       void load();
     }
   }
+
+  const emptyMessage =
+    counts.all === 0
+      ? "No letters loaded yet. Enter your email and hit “Load letters”."
+      : tab === "incoming"
+      ? "No incoming letters match your filter/search."
+      : tab === "sent"
+      ? "No sent letters match your filter/search."
+      : "No letters match your filter/search.";
 
   return (
     <main className="pageBg">
@@ -403,7 +478,7 @@ export default function DashboardPage() {
               <div className="kicker">Mailbox</div>
               <h1 className="h1">Dashboard</h1>
               <p className="muted" style={{ marginTop: 6 }}>
-                View letters you’ve sent by entering the sender email you used on the write form.
+                Enter the email you used (sender or recipient). We’ll show what you’ve sent and what’s coming to you.
               </p>
             </div>
 
@@ -412,8 +487,12 @@ export default function DashboardPage() {
             </a>
           </div>
 
-          {letters.length > 0 && (
-            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          {counts.all > 0 && (
+            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <TabBar tab={tab} setTab={setTab} counts={counts} />
+
+              <div style={{ flex: "1 1 auto" }} />
+
               <div className="metaPill">
                 Total: <strong>{stats.total}</strong>
               </div>
@@ -451,14 +530,14 @@ export default function DashboardPage() {
           <div className="cardHead" style={{ marginBottom: 10 }}>
             <div>
               <div className="kicker">Lookup</div>
-              <div className="h2">Load your sent letters</div>
+              <div className="h2">Load your mailbox</div>
             </div>
             <div className="metaPill faint">Uses local storage</div>
           </div>
 
           <div className="stack">
             <label className="field">
-              <span className="fieldLabel">Sender email</span>
+              <span className="fieldLabel">Email</span>
               <input
                 className={`input ${email.trim() && !emailLooksValid(email) ? "invalid" : ""}`}
                 value={email}
@@ -478,7 +557,7 @@ export default function DashboardPage() {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 onKeyDown={onLookupKeyDown}
-                placeholder="subject, recipient, city, token…"
+                placeholder="subject, sender/recipient, city, token…"
               />
             </label>
 
@@ -516,18 +595,14 @@ export default function DashboardPage() {
         <div style={{ marginTop: 14 }} className="stack">
           {filteredSorted.length === 0 && !loading ? (
             <div className="card">
-              <div className="muted">
-                {letters.length === 0 ? "No letters loaded yet. Enter your sender email and hit “Load letters”." : "No letters match your filter/search."}
-              </div>
+              <div className="muted">{emptyMessage}</div>
             </div>
           ) : (
             filteredSorted.map((l) => {
               const isCanceled = !!(l.canceled || (l.canceled_at && String(l.canceled_at).trim()));
 
-              // ✅ Resolve ETA once (same as countdown)
               const etaIsoResolved = l.eta_utc_iso || l.eta_at;
 
-              // ✅ Use the SAME ETA for progress too
               const derivedProgress = progressFromTimes({
                 nowMs: now.getTime(),
                 sentISO: l.sent_at,
@@ -546,6 +621,8 @@ export default function DashboardPage() {
 
               const statusLabel = isCanceled ? "Canceled" : l.delivered ? "Delivered" : isSleeping ? "Sleeping" : "In Flight";
               const statusEmoji = isCanceled ? "🛑" : l.delivered ? "✅" : isSleeping ? "😴" : "🕊️";
+
+              const direction: Direction = l.direction ?? "sent";
 
               const statusPath = `/l/${l.public_token}`;
               const statusUrl = typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
@@ -575,19 +652,34 @@ export default function DashboardPage() {
 
               const disableActions = isArchivingThis || isCancelingThis;
 
+              const whoLine =
+                direction === "incoming" ? (
+                  <div className="muted" style={{ marginTop: 6 }}>
+                    From: <strong>{l.from_name || "Sender"}</strong>{" "}
+                    <span style={{ opacity: 0.65 }}>
+                      • {l.origin_name} → {l.dest_name}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="muted" style={{ marginTop: 6 }}>
+                    To: <strong>{l.to_name || "Recipient"}</strong>{" "}
+                    <span style={{ opacity: 0.65 }}>
+                      • {l.origin_name} → {l.dest_name}
+                    </span>
+                  </div>
+                );
+
               return (
                 <div key={l.id} className="card">
                   <div className="dashRowTop" style={{ marginBottom: 10 }}>
                     <div className="dashRowMain">
-                      <div className="kicker">Letter</div>
+                      <div className="kicker">
+                        {direction === "incoming" ? "Incoming" : "Sent"}
+                      </div>
+
                       <div className="h2">{l.subject?.trim() ? l.subject : "(No subject)"}</div>
 
-                      <div className="muted" style={{ marginTop: 6 }}>
-                        To: <strong>{l.to_name || "Recipient"}</strong>{" "}
-                        <span style={{ opacity: 0.65 }}>
-                          • {l.origin_name} → {l.dest_name}
-                        </span>
-                      </div>
+                      {whoLine}
 
                       {birdLabel && (
                         <div className="muted" style={{ marginTop: 6, opacity: 0.75 }}>
@@ -638,25 +730,30 @@ export default function DashboardPage() {
                       Copy link
                     </button>
 
-                    <button
-                      type="button"
-                      className="btnGhost"
-                      onClick={() => void cancelLetter(l)}
-                      title="Cancel (recall) letter"
-                      disabled={disableActions || l.delivered || isCanceled}
-                    >
-                      {isCancelingThis ? "Canceling…" : isCanceled ? "Canceled" : "Cancel"}
-                    </button>
+                    {/* ✅ Only Sent letters can be canceled/archived (for now) */}
+                    {direction === "sent" && (
+                      <>
+                        <button
+                          type="button"
+                          className="btnGhost"
+                          onClick={() => void cancelLetter(l)}
+                          title="Cancel (recall) letter"
+                          disabled={disableActions || l.delivered || isCanceled}
+                        >
+                          {isCancelingThis ? "Canceling…" : isCanceled ? "Canceled" : "Cancel"}
+                        </button>
 
-                    <button
-                      type="button"
-                      className="btnGhost"
-                      onClick={() => void archiveLetter(l)}
-                      title="Archive letter (soft delete)"
-                      disabled={disableActions || isCanceled}
-                    >
-                      {isArchivingThis ? "Archiving…" : "Archive"}
-                    </button>
+                        <button
+                          type="button"
+                          className="btnGhost"
+                          onClick={() => void archiveLetter(l)}
+                          title="Archive letter (soft delete)"
+                          disabled={disableActions || isCanceled}
+                        >
+                          {isArchivingThis ? "Archiving…" : "Archive"}
+                        </button>
+                      </>
+                    )}
                   </div>
 
                   <div className="muted" style={{ marginTop: 10 }}>
