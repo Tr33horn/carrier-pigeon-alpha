@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import React from "react";
 import { supabaseServer } from "../../../lib/supabaseServer";
 import { sendEmail } from "../../../lib/email/send";
-import { APP_URL } from "@/app/lib/email/config";
 
 import { LetterDeliveredEmail } from "@/emails/LetterDelivered";
 import { LetterProgressUpdateEmail } from "@/emails/LetterProgressUpdate";
@@ -52,6 +51,18 @@ function normalizeBird(raw: unknown): BirdType {
   return "pigeon";
 }
 
+function getBaseUrl(req: Request) {
+  const envBase = process.env.APP_URL || process.env.APP_BASE_URL;
+  if (envBase && envBase.trim()) return envBase.trim();
+
+  // Works on Vercel + local + most hosts
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  const proto = req.headers.get("x-forwarded-proto") || "https";
+  if (host) return `${proto}://${host}`;
+
+  return "http://localhost:3000";
+}
+
 export async function GET(req: Request) {
   // --- auth ---
   const auth = req.headers.get("authorization");
@@ -59,6 +70,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const baseUrl = getBaseUrl(req);
   const nowISO = new Date().toISOString();
 
   /* --------------------------
@@ -88,7 +100,9 @@ export async function GET(req: Request) {
     if (letter.to_email) {
       await sendEmail({
         to: letter.to_email,
-        subject: letter.subject?.trim() ? `Delivered: ${letter.subject.trim()}` : "Your letter has arrived",
+        subject: letter.subject?.trim()
+          ? `Delivered: ${letter.subject.trim()}`
+          : "Your letter has arrived",
         react: (
           <LetterDeliveredEmail
             toName={letter.to_name}
@@ -96,7 +110,7 @@ export async function GET(req: Request) {
             statusUrl={statusPath}
             originName={letter.origin_name || "Origin"}
             destName={letter.dest_name || "Destination"}
-            bird={bird} // ✅ for landed image
+            bird={bird}
           />
         ),
       });
@@ -107,10 +121,10 @@ export async function GET(req: Request) {
     // Always mark delivered_notified_at (even if no to_email)
     await supabaseServer.from("letters").update({ delivered_notified_at: nowISO }).eq("id", letter.id);
 
-    // Sender receipt (inline) — make link absolute
+    // Sender receipt (inline) — MUST be absolute
     if (letter.from_email && !letter.sender_receipt_sent_at) {
       const deliveredAtUtc = formatUtc(nowISO);
-      const absoluteStatusUrl = joinUrl(APP_URL, statusPath);
+      const absoluteStatusUrl = joinUrl(baseUrl, statusPath);
 
       await sendEmail({
         to: letter.from_email,
@@ -138,7 +152,9 @@ export async function GET(req: Request) {
                 View flight status
               </a>
             </p>
-            <p style={{ opacity: 0.7, margin: 0 }}>The courier has been compensated in snacks.</p>
+            <p style={{ opacity: 0.7, margin: 0 }}>
+              The courier has been compensated in snacks.
+            </p>
           </div>
         ),
       });
@@ -150,8 +166,6 @@ export async function GET(req: Request) {
 
   /* --------------------------
      B) MID-FLIGHT UPDATES (25/50/75)
-     - only not delivered
-     - only if recipient has email
   -------------------------- */
 
   const { data: inFlight, error: inflightErr } = await supabaseServer
@@ -212,7 +226,7 @@ export async function GET(req: Request) {
             statusUrl={statusPath}
             etaTextUtc={etaUtcText}
             funLine={funLine}
-            bird={bird} // ✅ for fly image
+            bird={bird}
           />
         ),
       });
@@ -220,7 +234,6 @@ export async function GET(req: Request) {
       await supabaseServer.from("letters").update({ [column]: nowISO }).eq("id", letter.id);
     };
 
-    // milestone logic (highest first)
     if (pct >= 75 && !letter.progress_75_sent_at) {
       await sendUpdate(75, "progress_75_sent_at");
       midflight_75++;

@@ -29,7 +29,10 @@ function distanceKm(aLat: number, aLon: number, bLat: number, bLon: number) {
   const lat1 = toRad(aLat);
   const lat2 = toRad(bLat);
 
-  const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+
   return 2 * R * Math.asin(Math.sqrt(x));
 }
 
@@ -65,7 +68,10 @@ function formatUtc(iso: string) {
 
 type BirdType = "pigeon" | "snipe" | "goose";
 
-const BIRDS: Record<BirdType, { label: string; speed_kmh: number; roost_hours: number; inefficiency: number }> = {
+const BIRDS: Record<
+  BirdType,
+  { label: string; speed_kmh: number; roost_hours: number; inefficiency: number }
+> = {
   pigeon: { label: "Homing Pigeon", speed_kmh: 72, roost_hours: 8, inefficiency: 1.15 },
   snipe: { label: "Great Snipe", speed_kmh: 88, roost_hours: 0, inefficiency: 1.05 },
   goose: { label: "Canada Goose", speed_kmh: 56, roost_hours: 10, inefficiency: 1.2 },
@@ -152,7 +158,14 @@ function stickyGeoLabel(opts: {
   };
 }
 
-function generateCheckpoints(sentAt: Date, etaAt: Date, oLat: number, oLon: number, dLat: number, dLon: number) {
+function generateCheckpoints(
+  sentAt: Date,
+  etaAt: Date,
+  oLat: number,
+  oLon: number,
+  dLat: number,
+  dLon: number
+) {
   const count = 8;
   const totalMs = etaAt.getTime() - sentAt.getTime();
 
@@ -182,7 +195,12 @@ function generateCheckpoints(sentAt: Date, etaAt: Date, oLat: number, oLon: numb
       regions: REGIONS,
     });
 
-    const name = i === 0 ? "Departed roost" : i === count - 1 ? "Final descent" : geo?.text || fallback[i] || `Checkpoint ${i + 1}`;
+    const name =
+      i === 0
+        ? "Departed roost"
+        : i === count - 1
+        ? "Final descent"
+        : geo?.text || fallback[i] || `Checkpoint ${i + 1}`;
 
     return {
       idx: i,
@@ -199,13 +217,24 @@ function generateCheckpoints(sentAt: Date, etaAt: Date, oLat: number, oLon: numb
 export async function POST(req: Request) {
   const body = await req.json();
 
-  const { from_name, from_email, to_name, to_email, subject, message, origin, destination, bird: birdRaw } = body;
+  const {
+    from_name,
+    from_email,
+    to_name,
+    to_email,
+    subject,
+    message,
+    origin,
+    destination,
+    bird: birdRaw,
+  } = body;
 
   const bird = normalizeBird(birdRaw);
-  const birdCfg = BIRDS[bird];
 
-  const normalizedFromEmail = typeof from_email === "string" ? from_email.trim() : "";
-  const normalizedToEmail = typeof to_email === "string" ? to_email.trim() : "";
+  const normalizedFromEmail =
+    typeof from_email === "string" ? from_email.trim().toLowerCase() : "";
+  const normalizedToEmail =
+    typeof to_email === "string" ? to_email.trim().toLowerCase() : "";
 
   if (!normalizedFromEmail || !normalizedToEmail) {
     return NextResponse.json({ error: "Sender and recipient email are required." }, { status: 400 });
@@ -253,11 +282,11 @@ export async function POST(req: Request) {
       dest_lat: destination.lat,
       dest_lon: destination.lon,
       distance_km: km,
-      speed_kmh: birdCfg.speed_kmh,
+      speed_kmh: BIRDS[bird].speed_kmh,
       sent_at: sentAt.toISOString(),
       eta_at: etaAt.toISOString(),
     })
-    .select("id, public_token, eta_at, origin_name, dest_name, from_name, to_name")
+    .select("id, public_token, eta_at, origin_name, dest_name, from_name, to_name, bird")
     .single();
 
   if (letterErr || !letter) {
@@ -299,7 +328,6 @@ export async function POST(req: Request) {
 
     await sendEmail({
       to: normalizedToEmail,
-      // No bird emojis ✅
       subject: "A letter is on the way",
       react: React.createElement(LetterOnTheWayEmail, {
         toName: letter.to_name,
@@ -307,12 +335,12 @@ export async function POST(req: Request) {
         originName: letter.origin_name || origin.name || "Origin",
         destName: letter.dest_name || destination.name || "Destination",
         etaTextUtc,
-        statusUrl: statusPath, // template will join with APP_URL
+        statusUrl: statusPath,
+        bird: (letter.bird as BirdType) || bird, // ✅ pass bird to template
       }),
     });
   } catch (e) {
     console.error("ON THE WAY EMAIL ERROR:", e);
-    // Don’t fail the request if email fails — letter still exists.
   }
 
   return NextResponse.json({ public_token: publicToken, eta_at: letter.eta_at });

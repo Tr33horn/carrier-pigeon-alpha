@@ -5,6 +5,7 @@ import { EmailLayout } from "./components/Layout";
 import { BirdStateImage, type BirdType } from "./components/BirdStateImage";
 
 function joinUrl(base: string, pathOrUrl: string) {
+  if (!pathOrUrl) return base;
   if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
   const b = base.endsWith("/") ? base.slice(0, -1) : base;
   const p = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
@@ -37,7 +38,7 @@ export function LetterDeliveredEmail({
       </Text>
 
       <Text style={{ margin: "0 0 10px" }}>
-        Hey {toName || "there"} — your letter from {fromName || "someone"} has landed.
+        Hey {toName || "there"} — your letter from <strong>{fromName || "someone"}</strong> has landed.
       </Text>
 
       <Text style={{ margin: "0 0 14px", color: "#444" }}>

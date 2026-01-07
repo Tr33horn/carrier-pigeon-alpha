@@ -2,30 +2,14 @@ import * as React from "react";
 import { Button, Section, Text } from "@react-email/components";
 import { APP_URL } from "@/app/lib/email/config";
 import { EmailLayout } from "./components/Layout";
-
-type BirdType = "pigeon" | "snipe" | "goose";
-type BirdState = "fly" | "sleep" | "landed";
+import { BirdStateImage, type BirdType } from "./components/BirdStateImage";
 
 function joinUrl(base: string, pathOrUrl: string) {
+  if (!pathOrUrl) return base;
   if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
   const b = base.endsWith("/") ? base.slice(0, -1) : base;
   const p = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
   return `${b}${p}`;
-}
-
-function birdBase(bird?: BirdType) {
-  if (bird === "snipe") return "great-snipe";
-  if (bird === "goose") return "canada-goose";
-  return "homing-pigeon";
-}
-
-/**
- * Email-safe bird image selector.
- * Matches your actual PNG assets in /public/birds
- */
-function birdHero(bird?: BirdType, state: BirdState = "fly") {
-  const base = birdBase(bird);
-  return `/birds/${base}-${state}.png`;
 }
 
 export function LetterOnTheWayEmail({
@@ -48,17 +32,16 @@ export function LetterOnTheWayEmail({
   const href = joinUrl(APP_URL, statusUrl);
 
   return (
-    <EmailLayout
-      preview="A letter is on the way."
-      heroSrc={birdHero(bird ?? undefined, "fly")}
-      heroAlt="Courier in flight"
-    >
+    <EmailLayout preview="A letter is on the way.">
+      <BirdStateImage bird={bird ?? undefined} state="fly" alt="Courier in flight" />
+
       <Text style={{ fontSize: 18, fontWeight: 800, margin: "6px 0 8px" }}>
         A letter is on the way.
       </Text>
 
       <Text style={{ margin: "0 0 10px" }}>
-        Hey {toName || "there"} — {fromName || "someone"} sent you a letter.
+        Hey {toName || "there"} — <strong>{fromName || "someone"}</strong> sent you a letter.
+        It stays sealed until delivery.
       </Text>
 
       <Text style={{ margin: "0 0 14px", color: "#444" }}>
@@ -85,7 +68,7 @@ export function LetterOnTheWayEmail({
       </Section>
 
       <Text style={{ fontSize: 12, color: "#666", marginTop: 16 }}>
-        The long way home. Messages delivered with patience.
+        No peeking. The bird has a union.
       </Text>
     </EmailLayout>
   );

@@ -3,51 +3,49 @@ import { Img, Section } from "@react-email/components";
 import { APP_URL } from "@/app/lib/email/config";
 
 export type BirdType = "pigeon" | "snipe" | "goose";
-export type BirdState = "flying" | "sleeping" | "landed";
+export type BirdState = "fly" | "sleep" | "landed";
 
-function birdBaseName(bird: BirdType) {
-  switch (bird) {
-    case "goose":
-      return "canada-goose";
-    case "snipe":
-      return "great-snipe";
-    default:
-      return "homing-pigeon";
-  }
+function joinUrl(base: string, pathOrUrl: string) {
+  if (!pathOrUrl) return base;
+  if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
+  const b = base.endsWith("/") ? base.slice(0, -1) : base;
+  const p = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
+  return `${b}${p}`;
 }
 
-function birdImageUrl(bird: BirdType, state: BirdState) {
-  return `${APP_URL}/birds/${birdBaseName(bird)}-${state}.png`;
+function birdPrefix(bird: BirdType) {
+  if (bird === "goose") return "canada-goose";
+  if (bird === "snipe") return "great-snipe";
+  return "homing-pigeon";
+}
+
+function birdFilename(bird: BirdType, state: BirdState) {
+  return `${birdPrefix(bird)}-${state}.png`;
 }
 
 export function BirdStateImage({
   bird = "pigeon",
-  state = "flying",
+  state = "fly",
   alt,
 }: {
   bird?: BirdType | null;
   state?: BirdState;
   alt?: string;
 }) {
-  const safeBird: BirdType =
-    bird === "goose" || bird === "snipe" || bird === "pigeon" ? bird : "pigeon";
-
-  const src = birdImageUrl(safeBird, state);
+  const safeBird: BirdType = bird === "goose" || bird === "snipe" ? bird : "pigeon";
+  const src = joinUrl(APP_URL, `/birds/${birdFilename(safeBird, state)}`);
 
   return (
     <Section style={{ margin: "10px 0 14px" }}>
       <Img
         src={src}
-        alt={alt || `${safeBird} ${state}`}
         width="520"
-        height="auto"
+        alt={alt || `${safeBird} ${state}`}
         style={{
           display: "block",
           width: "100%",
           maxWidth: 520,
           borderRadius: 14,
-          border: "1px solid #eee",
-          backgroundColor: "#fafafa",
         }}
       />
     </Section>

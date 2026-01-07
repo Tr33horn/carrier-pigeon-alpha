@@ -5,6 +5,7 @@ import { EmailLayout } from "./components/Layout";
 import { BirdStateImage, type BirdType } from "./components/BirdStateImage";
 
 function joinUrl(base: string, pathOrUrl: string) {
+  if (!pathOrUrl) return base;
   if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
   const b = base.endsWith("/") ? base.slice(0, -1) : base;
   const p = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
@@ -23,7 +24,7 @@ export function LetterProgressUpdateEmail({
   milestone: 25 | 50 | 75;
   pct: number;
   fromName?: string | null;
-  statusUrl: string;
+  statusUrl: string; // path or absolute
   etaTextUtc: string;
   funLine: string;
   bird?: BirdType | null;
@@ -31,23 +32,14 @@ export function LetterProgressUpdateEmail({
   const href = joinUrl(APP_URL, statusUrl);
 
   const preview =
-    milestone === 25
-      ? "25% of the way there."
-      : milestone === 50
-      ? "Halfway there."
-      : "75% complete (incoming).";
+    milestone === 25 ? "25% of the way there." : milestone === 50 ? "Halfway there." : "75% complete (incoming).";
 
   const title =
-    milestone === 25
-      ? "Update: 25%"
-      : milestone === 50
-      ? "Update: 50%"
-      : "Update: 75%";
+    milestone === 25 ? "Update: 25%" : milestone === 50 ? "Update: 50%" : "Update: 75%";
 
   return (
     <EmailLayout preview={preview}>
-      {/* ✅ Correct bird state */}
-      <BirdStateImage bird={bird} state="flying" alt="Courier in flight" />
+      <BirdStateImage bird={bird ?? undefined} state="fly" alt="Courier in flight" />
 
       <Text style={{ fontSize: 18, fontWeight: 800, margin: "6px 0 8px" }}>
         {title}
@@ -83,7 +75,7 @@ export function LetterProgressUpdateEmail({
       </Section>
 
       <Text style={{ fontSize: 12, color: "#666", marginTop: 16 }}>
-        The long way home.
+        Still sealed. Still mysterious.
       </Text>
     </EmailLayout>
   );

@@ -2,7 +2,14 @@ import * as React from "react";
 import { Button, Section, Text } from "@react-email/components";
 import { APP_URL } from "@/app/lib/email/config";
 import { EmailLayout } from "./components/Layout";
-import { joinUrl, styles } from "./components/utils";
+
+function joinUrl(base: string, pathOrUrl: string) {
+  if (!pathOrUrl) return base;
+  if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
+  const b = base.endsWith("/") ? base.slice(0, -1) : base;
+  const p = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
+  return `${b}${p}`;
+}
 
 export function LetterStatusLinkResentEmail({
   subject,
@@ -13,34 +20,47 @@ export function LetterStatusLinkResentEmail({
   subject: string;
   originName: string;
   destName: string;
-  statusUrl: string; // path or full URL
+  statusUrl: string; // path or absolute
 }) {
   const href = joinUrl(APP_URL, statusUrl);
 
   return (
-    <EmailLayout preview="Your flight status link — track your letter.">
-      <Text style={styles.h1}>Your status link</Text>
-
-      <Text style={styles.p}>
-        Here’s the tracking link you requested.
+    <EmailLayout preview="Your flight status link">
+      <Text style={{ fontSize: 18, fontWeight: 800, margin: "6px 0 8px" }}>
+        Status link re-sent
       </Text>
 
-      <Text style={styles.pill}>
+      <Text style={{ margin: "0 0 10px" }}>
+        You asked nicely. We complied.
+      </Text>
+
+      <Text style={{ margin: "0 0 12px", fontWeight: 700 }}>
+        {subject || "(No subject)"}
+      </Text>
+
+      <Text style={{ margin: "0 0 14px", color: "#444" }}>
         Route: <strong>{originName}</strong> → <strong>{destName}</strong>
       </Text>
 
-      <Text style={{ ...styles.subtle, marginBottom: 0 }}>
-        <strong>{subject}</strong>
-      </Text>
-
       <Section style={{ marginTop: 12 }}>
-        <Button href={href} style={styles.button}>
+        <Button
+          href={href}
+          style={{
+            backgroundColor: "#111",
+            color: "#fff",
+            padding: "12px 16px",
+            borderRadius: 10,
+            display: "inline-block",
+            textDecoration: "none",
+            fontWeight: 700,
+          }}
+        >
           View flight status
         </Button>
       </Section>
 
-      <Text style={styles.small}>
-        If you didn’t request this, you can ignore it.
+      <Text style={{ fontSize: 12, color: "#666", marginTop: 16 }}>
+        We found your link and slapped a stamp on it.
       </Text>
     </EmailLayout>
   );
