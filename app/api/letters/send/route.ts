@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
+import React from "react";
 import { supabaseServer } from "../../../lib/supabaseServer";
-import { Resend } from "resend";
+import { sendEmail } from "../../../lib/email/send";
 
 // ✅ Geo label system
 import { ROUTE_TUNED_REGIONS } from "../../../lib/geo/geoRegions.routes";
 import { geoLabelFor, type GeoRegion } from "../../../lib/geo/geoLabel";
+
+// ✅ Email template
+import { LetterOnTheWayEmail } from "@/emails/LetterOnTheWay";
 
 // ✅ Toggle this ON only after you add DB columns:
 //   letter_checkpoints.region_id (text)
@@ -25,10 +29,7 @@ function distanceKm(aLat: number, aLon: number, bLat: number, bLon: number) {
   const lat1 = toRad(aLat);
   const lat2 = toRad(bLat);
 
-  const x =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(x));
 }
 
@@ -41,7 +42,7 @@ function isEmailValid(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
-/** ✅ One true UTC formatter (match the cron file) */
+/** ✅ One true UTC formatter (match cron) */
 function formatUtc(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
@@ -64,13 +65,10 @@ function formatUtc(iso: string) {
 
 type BirdType = "pigeon" | "snipe" | "goose";
 
-const BIRDS: Record<
-  BirdType,
-  { label: string; emoji: string; speed_kmh: number; roost_hours: number; inefficiency: number }
-> = {
-  pigeon: { label: "Homing Pigeon", emoji: "🕊️", speed_kmh: 72, roost_hours: 8, inefficiency: 1.15 },
-  snipe: { label: "Great Snipe", emoji: "🏎️", speed_kmh: 88, roost_hours: 0, inefficiency: 1.05 },
-  goose: { label: "Canada Goose", emoji: "🪿", speed_kmh: 56, roost_hours: 10, inefficiency: 1.2 },
+const BIRDS: Record<BirdType, { label: string; speed_kmh: number; roost_hours: number; inefficiency: number }> = {
+  pigeon: { label: "Homing Pigeon", speed_kmh: 72, roost_hours: 8, inefficiency: 1.15 },
+  snipe: { label: "Great Snipe", speed_kmh: 88, roost_hours: 0, inefficiency: 1.05 },
+  goose: { label: "Canada Goose", speed_kmh: 56, roost_hours: 10, inefficiency: 1.2 },
 };
 
 function normalizeBird(raw: unknown): BirdType {
@@ -85,8 +83,6 @@ function normalizeBird(raw: unknown): BirdType {
  * - base flight time = distance / speed
  * - inefficiency multiplier
  * - roosting: bird flies (24 - roost_hours) per day, then roosts roost_hours
- *
- * NOTE: This is POC “vibe math”. True sleep alignment is handled in the status route.
  */
 function estimateTravelHours(distanceKm: number, bird: BirdType) {
   const cfg = BIRDS[bird];
@@ -156,14 +152,7 @@ function stickyGeoLabel(opts: {
   };
 }
 
-function generateCheckpoints(
-  sentAt: Date,
-  etaAt: Date,
-  oLat: number,
-  oLon: number,
-  dLat: number,
-  dLon: number
-) {
+function generateCheckpoints(sentAt: Date, etaAt: Date, oLat: number, oLon: number, dLat: number, dLon: number) {
   const count = 8;
   const totalMs = etaAt.getTime() - sentAt.getTime();
 
@@ -193,8 +182,7 @@ function generateCheckpoints(
       regions: REGIONS,
     });
 
-    const name =
-      i === 0 ? "Departed roost" : i === count - 1 ? "Final descent" : geo?.text || fallback[i] || `Checkpoint ${i + 1}`;
+    const name = i === 0 ? "Departed roost" : i === count - 1 ? "Final descent" : geo?.text || fallback[i] || `Checkpoint ${i + 1}`;
 
     return {
       idx: i,
@@ -211,17 +199,7 @@ function generateCheckpoints(
 export async function POST(req: Request) {
   const body = await req.json();
 
-  const {
-    from_name,
-    from_email,
-    to_name,
-    to_email,
-    subject,
-    message,
-    origin,
-    destination,
-    bird: birdRaw,
-  } = body;
+  const { from_name, from_email, to_name, to_email, subject, message, origin, destination, bird: birdRaw } = body;
 
   const bird = normalizeBird(birdRaw);
   const birdCfg = BIRDS[bird];
@@ -259,7 +237,7 @@ export async function POST(req: Request) {
     .from("letters")
     .insert({
       public_token: publicToken,
-      bird, // ✅ stored in DB now
+      bird,
       from_name,
       from_email: normalizedFromEmail,
       sender_receipt_sent_at: null,
@@ -279,21 +257,14 @@ export async function POST(req: Request) {
       sent_at: sentAt.toISOString(),
       eta_at: etaAt.toISOString(),
     })
-    .select("id, public_token, eta_at")
+    .select("id, public_token, eta_at, origin_name, dest_name, from_name, to_name")
     .single();
 
   if (letterErr || !letter) {
     return NextResponse.json({ error: letterErr?.message ?? "Insert failed" }, { status: 500 });
   }
 
-  const checkpoints = generateCheckpoints(
-    sentAt,
-    etaAt,
-    origin.lat,
-    origin.lon,
-    destination.lat,
-    destination.lon
-  );
+  const checkpoints = generateCheckpoints(sentAt, etaAt, origin.lat, origin.lon, destination.lat, destination.lon);
 
   const { error: cpErr } = await supabaseServer
     .from("letter_checkpoints")
@@ -321,40 +292,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: cpErr.message }, { status: 500 });
   }
 
-  // Send “Bird launched” email immediately
+  // ✅ Send “On the way” email using your template system
   try {
-    const key = process.env.RESEND_API_KEY;
-    if (!key) throw new Error("Missing RESEND_API_KEY");
-    const resend = new Resend(key);
+    const statusPath = `/l/${publicToken}`;
+    const etaTextUtc = formatUtc(letter.eta_at);
 
-    const base = process.env.APP_BASE_URL || "http://localhost:3000";
-    const statusUrl = `${base}/l/${publicToken}`;
-
-    const etaText = formatUtc(letter.eta_at);
-
-    await resend.emails.send({
-      from: process.env.MAIL_FROM || "FLOK <no-reply@localhost>",
+    await sendEmail({
       to: normalizedToEmail,
-      subject: `${birdCfg.emoji} A sealed letter is on the way`,
-      html: `
-        <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height: 1.5">
-          <h2 style="margin: 0 0 8px">${birdCfg.emoji} A ${birdCfg.label} has departed.</h2>
-          <p style="margin: 0 0 12px">
-            You have a letter from <strong>${from_name || "Someone"}</strong>.
-            It stays sealed until delivery.
-          </p>
-          <p style="margin: 0 0 12px"><strong>ETA (UTC):</strong> ${etaText}</p>
-          <p style="margin: 0 0 16px">
-            <a href="${statusUrl}" style="display:inline-block;padding:10px 14px;border-radius:10px;text-decoration:none;border:1px solid #222">
-              Track flight status
-            </a>
-          </p>
-          <p style="opacity: 0.7; margin: 0">(No peeking. The bird is watching.)</p>
-        </div>
-      `,
+      // No bird emojis ✅
+      subject: "A letter is on the way",
+      react: React.createElement(LetterOnTheWayEmail, {
+        toName: letter.to_name,
+        fromName: letter.from_name,
+        originName: letter.origin_name || origin.name || "Origin",
+        destName: letter.dest_name || destination.name || "Destination",
+        etaTextUtc,
+        statusUrl: statusPath, // template will join with APP_URL
+      }),
     });
   } catch (e) {
-    console.error("LAUNCH EMAIL ERROR:", e);
+    console.error("ON THE WAY EMAIL ERROR:", e);
+    // Don’t fail the request if email fails — letter still exists.
   }
 
   return NextResponse.json({ public_token: publicToken, eta_at: letter.eta_at });

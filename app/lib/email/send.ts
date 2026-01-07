@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 import { render } from "@react-email/render";
-import { MAIL_FROM } from "./config";
+import { MAIL_FROM, BRAND } from "./config";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -23,6 +23,6 @@ export async function sendEmail({ to, subject, react, replyTo }: SendArgs) {
     to: Array.isArray(to) ? to : [to],
     subject,
     html,
-    ...(replyTo ? { replyTo } : {}),
+    replyTo: replyTo || BRAND.supportEmail,
   });
 }

@@ -2,6 +2,7 @@ import * as React from "react";
 import { Button, Section, Text } from "@react-email/components";
 import { APP_URL } from "@/app/lib/email/config";
 import { EmailLayout } from "./components/Layout";
+import { BirdStateImage, type BirdType } from "./components/BirdStateImage";
 
 function joinUrl(base: string, pathOrUrl: string) {
   if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
@@ -16,19 +17,23 @@ export function LetterDeliveredEmail({
   statusUrl,
   originName,
   destName,
+  bird,
 }: {
   toName?: string | null;
   fromName?: string | null;
-  statusUrl: string; // full URL or path
+  statusUrl: string; // path or absolute
   originName: string;
   destName: string;
+  bird?: BirdType | null;
 }) {
   const href = joinUrl(APP_URL, statusUrl);
 
   return (
     <EmailLayout preview="Your letter has arrived.">
+      <BirdStateImage bird={bird ?? undefined} state="landed" alt="Courier landed" />
+
       <Text style={{ fontSize: 18, fontWeight: 800, margin: "6px 0 8px" }}>
-        Delivered
+        Delivered ✅
       </Text>
 
       <Text style={{ margin: "0 0 10px" }}>

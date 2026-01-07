@@ -2,6 +2,7 @@ import * as React from "react";
 import { Button, Section, Text } from "@react-email/components";
 import { APP_URL } from "@/app/lib/email/config";
 import { EmailLayout } from "./components/Layout";
+import { BirdStateImage, type BirdType } from "./components/BirdStateImage";
 
 function joinUrl(base: string, pathOrUrl: string) {
   if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
@@ -17,13 +18,15 @@ export function LetterProgressUpdateEmail({
   statusUrl,
   etaTextUtc,
   funLine,
+  bird,
 }: {
   milestone: 25 | 50 | 75;
   pct: number;
   fromName?: string | null;
-  statusUrl: string; // path or full URL
+  statusUrl: string;
   etaTextUtc: string;
   funLine: string;
+  bird?: BirdType | null;
 }) {
   const href = joinUrl(APP_URL, statusUrl);
 
@@ -43,6 +46,9 @@ export function LetterProgressUpdateEmail({
 
   return (
     <EmailLayout preview={preview}>
+      {/* ✅ Correct bird state */}
+      <BirdStateImage bird={bird} state="flying" alt="Courier in flight" />
+
       <Text style={{ fontSize: 18, fontWeight: 800, margin: "6px 0 8px" }}>
         {title}
       </Text>
