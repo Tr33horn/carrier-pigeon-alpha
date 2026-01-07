@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Direction = "sent" | "incoming";
+type Direction = "sent" | "incoming" | "both";
 
 type DashboardLetter = {
   id: string;
@@ -48,13 +48,13 @@ type DashboardLetter = {
   canceled_at?: string | null;
   canceled?: boolean;
 
-  // ✅ NEW from API
-  direction?: Direction;
+  // NEW (API sets this)
+  direction?: "sent" | "incoming";
 };
 
 type Filter = "all" | "inflight" | "delivered";
 type Sort = "newest" | "etaSoonest" | "oldest";
-type BoxTab = "all" | "sent" | "incoming";
+type Tab = "sent" | "incoming" | "all";
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
@@ -193,12 +193,29 @@ function RouteThumb(props: {
           strokeLinecap="round"
         />
         <circle cx={pts.o.x} cy={pts.o.y} r="4.5" fill="currentColor" />
-        <circle cx={pts.d.x} cy={pts.d.y} r="6.2" fill="none" stroke="currentColor" strokeWidth="2.2" opacity="0.95" />
+        <circle
+          cx={pts.d.x}
+          cy={pts.d.y}
+          r="6.2"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          opacity="0.95"
+        />
 
         {pts.c && (
           <>
             <circle cx={pts.c.x} cy={pts.c.y} r="4.6" fill="currentColor" />
-            <circle className="thumbPulse" cx={pts.c.x} cy={pts.c.y} r="11" fill="none" stroke="currentColor" strokeWidth="2.2" opacity="0.35" />
+            <circle
+              className="thumbPulse"
+              cx={pts.c.x}
+              cy={pts.c.y}
+              r="11"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              opacity="0.35"
+            />
           </>
         )}
       </svg>
@@ -208,43 +225,25 @@ function RouteThumb(props: {
   );
 }
 
-function TabBar(props: {
-  tab: BoxTab;
-  setTab: (t: BoxTab) => void;
-  counts: { all: number; sent: number; incoming: number };
-}) {
-  const pillStyle = (active: boolean): React.CSSProperties => ({
-    padding: "8px 10px",
-    borderRadius: 999,
-    border: "1px solid rgba(0,0,0,0.12)",
-    background: active ? "rgba(0,0,0,0.06)" : "transparent",
-    fontWeight: 900,
-    cursor: "pointer",
-    display: "inline-flex",
-    gap: 8,
-    alignItems: "center",
-  });
-
-  return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-      <button type="button" style={pillStyle(props.tab === "all")} onClick={() => props.setTab("all")}>
-        All <span style={{ opacity: 0.7 }}>{props.counts.all}</span>
-      </button>
-      <button type="button" style={pillStyle(props.tab === "sent")} onClick={() => props.setTab("sent")}>
-        Sent <span style={{ opacity: 0.7 }}>{props.counts.sent}</span>
-      </button>
-      <button type="button" style={pillStyle(props.tab === "incoming")} onClick={() => props.setTab("incoming")}>
-        Incoming <span style={{ opacity: 0.7 }}>{props.counts.incoming}</span>
-      </button>
-    </div>
-  );
+/** Dedupes by public_token, keeps the first occurrence (sorted order should already be applied). */
+function dedupeByToken(list: DashboardLetter[]) {
+  const seen = new Set<string>();
+  const out: DashboardLetter[] = [];
+  for (const l of list) {
+    const key = l.public_token;
+    if (!key) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(l);
+  }
+  return out;
 }
 
 export default function DashboardPage() {
   const [email, setEmail] = useState("");
   const [q, setQ] = useState("");
 
-  // ✅ New split state
+  // ✅ keep sent/incoming separate
   const [sentLetters, setSentLetters] = useState<DashboardLetter[]>([]);
   const [incomingLetters, setIncomingLetters] = useState<DashboardLetter[]>([]);
 
@@ -252,7 +251,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [now, setNow] = useState(new Date());
 
-  const [tab, setTab] = useState<BoxTab>("all"); // ✅ NEW
+  const [tab, setTab] = useState<Tab>("sent"); // ✅ default to Sent
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("newest");
 
@@ -289,7 +288,7 @@ export default function DashboardPage() {
     const qs = (qOverride ?? q).trim();
 
     if (!emailLooksValid(e)) {
-      setError("Enter a valid sender email.");
+      setError("Enter a valid email.");
       return;
     }
 
@@ -299,15 +298,20 @@ export default function DashboardPage() {
     try {
       localStorage.setItem("cp_sender_email", e);
 
-      const res = await fetch(`/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(qs)}`, { cache: "no-store" });
+      const res = await fetch(
+        `/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(qs)}`,
+        { cache: "no-store" }
+      );
+
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to load");
 
+      // ✅ IMPORTANT: REPLACE arrays (never append)
       const sent = (data.sentLetters ?? data.letters ?? []) as DashboardLetter[];
       const incoming = (data.incomingLetters ?? []) as DashboardLetter[];
 
-      setSentLetters(sent.map((l) => ({ ...l, direction: l.direction ?? "sent" })));
-      setIncomingLetters(incoming.map((l) => ({ ...l, direction: l.direction ?? "incoming" })));
+      setSentLetters(sent.map((l) => ({ ...l, direction: "sent" })));
+      setIncomingLetters(incoming.map((l) => ({ ...l, direction: "incoming" })));
     } catch (err: any) {
       setError(err?.message ?? String(err));
       setSentLetters([]);
@@ -317,7 +321,6 @@ export default function DashboardPage() {
     }
   }
 
-  // ✅ actions only apply to sent letters
   async function archiveLetter(letter: DashboardLetter) {
     if (archivingId || cancelingId) return;
 
@@ -328,7 +331,8 @@ export default function DashboardPage() {
 
     setArchivingId(letter.id);
 
-    const prevSnapshot = sentLetters;
+    // optimistic remove
+    const prevSent = sentLetters;
     setSentLetters((cur) => cur.filter((x) => x.id !== letter.id));
 
     try {
@@ -343,7 +347,7 @@ export default function DashboardPage() {
       setToast("Archived ✅");
       void load();
     } catch (err: any) {
-      setSentLetters(prevSnapshot);
+      setSentLetters(prevSent);
       setToast("Archive failed ❌");
       console.error("ARCHIVE ERROR:", err);
     } finally {
@@ -369,7 +373,7 @@ export default function DashboardPage() {
 
     setCancelingId(letter.id);
 
-    const prevSnapshot = sentLetters;
+    const prevSent = sentLetters;
     const nowIso = new Date().toISOString();
 
     setSentLetters((cur) =>
@@ -399,7 +403,7 @@ export default function DashboardPage() {
       setToast("Canceled 🛑");
       void load();
     } catch (err: any) {
-      setSentLetters(prevSnapshot);
+      setSentLetters(prevSent);
       setToast("Cancel failed ❌");
       console.error("CANCEL ERROR:", err);
     } finally {
@@ -407,37 +411,38 @@ export default function DashboardPage() {
     }
   }
 
-  const allLetters = useMemo(() => {
-    // newest-ish by default; final sort happens later
-    return [...sentLetters, ...incomingLetters];
+  // ✅ Counts per tab
+  const counts = useMemo(() => {
+    const sentTotal = sentLetters.length;
+    const incomingTotal = incomingLetters.length;
+
+    const sentDelivered = sentLetters.filter((l) => l.delivered).length;
+    const incomingDelivered = incomingLetters.filter((l) => l.delivered).length;
+
+    return {
+      sent: { total: sentTotal, delivered: sentDelivered, inflight: sentTotal - sentDelivered },
+      incoming: { total: incomingTotal, delivered: incomingDelivered, inflight: incomingTotal - incomingDelivered },
+    };
   }, [sentLetters, incomingLetters]);
 
-  const activeLetters = useMemo(() => {
-    if (tab === "sent") return sentLetters;
-    if (tab === "incoming") return incomingLetters;
-    return allLetters;
-  }, [tab, sentLetters, incomingLetters, allLetters]);
+  // ✅ Build the active list for the tab
+  const activeList = useMemo(() => {
+    if (tab === "sent") return [...sentLetters];
+    if (tab === "incoming") return [...incomingLetters];
 
-  const counts = useMemo(() => {
-    return {
-      all: allLetters.length,
-      sent: sentLetters.length,
-      incoming: incomingLetters.length,
-    };
-  }, [allLetters.length, sentLetters.length, incomingLetters.length]);
-
-  const stats = useMemo(() => {
-    const delivered = activeLetters.filter((l) => l.delivered).length;
-    const inflight = activeLetters.length - delivered;
-    return { delivered, inflight, total: activeLetters.length };
-  }, [activeLetters]);
+    // tab === "all"
+    // combine then dedupe by token so “send to self” doesn’t appear twice
+    // (we keep the first occurrence after sorting below)
+    return [...sentLetters, ...incomingLetters];
+  }, [tab, sentLetters, incomingLetters]);
 
   const filteredSorted = useMemo(() => {
-    let list = [...activeLetters];
+    let list = [...activeList];
 
     if (filter === "inflight") list = list.filter((l) => !l.delivered);
     if (filter === "delivered") list = list.filter((l) => l.delivered);
 
+    // Sort
     list.sort((a, b) => {
       const aSent = parseMs(a.sent_at) ?? 0;
       const bSent = parseMs(b.sent_at) ?? 0;
@@ -450,8 +455,11 @@ export default function DashboardPage() {
       return bSent - aSent;
     });
 
+    // ✅ Dedupe only in ALL tab (so a self-letter shows once)
+    if (tab === "all") list = dedupeByToken(list);
+
     return list;
-  }, [activeLetters, filter, sort]);
+  }, [activeList, filter, sort, tab]);
 
   function onLookupKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
@@ -459,15 +467,6 @@ export default function DashboardPage() {
       void load();
     }
   }
-
-  const emptyMessage =
-    counts.all === 0
-      ? "No letters loaded yet. Enter your email and hit “Load letters”."
-      : tab === "incoming"
-      ? "No incoming letters match your filter/search."
-      : tab === "sent"
-      ? "No sent letters match your filter/search."
-      : "No letters match your filter/search.";
 
   return (
     <main className="pageBg">
@@ -478,7 +477,7 @@ export default function DashboardPage() {
               <div className="kicker">Mailbox</div>
               <h1 className="h1">Dashboard</h1>
               <p className="muted" style={{ marginTop: 6 }}>
-                Enter the email you used (sender or recipient). We’ll show what you’ve sent and what’s coming to you.
+                Load your mailbox by entering your email. Sent + Incoming are separate tabs now (no more déjà vu).
               </p>
             </div>
 
@@ -487,20 +486,57 @@ export default function DashboardPage() {
             </a>
           </div>
 
-          {counts.all > 0 && (
-            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <TabBar tab={tab} setTab={setTab} counts={counts} />
-
-              <div style={{ flex: "1 1 auto" }} />
-
-              <div className="metaPill">
-                Total: <strong>{stats.total}</strong>
+          {(sentLetters.length > 0 || incomingLetters.length > 0) && (
+            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              {/* Tabs */}
+              <div className="metaPill" style={{ gap: 8 }}>
+                <button
+                  type="button"
+                  className="btnGhost"
+                  onClick={() => setTab("sent")}
+                  aria-pressed={tab === "sent"}
+                >
+                  Sent ({counts.sent.total})
+                </button>
+                <button
+                  type="button"
+                  className="btnGhost"
+                  onClick={() => setTab("incoming")}
+                  aria-pressed={tab === "incoming"}
+                >
+                  Incoming ({counts.incoming.total})
+                </button>
+                <button
+                  type="button"
+                  className="btnGhost"
+                  onClick={() => setTab("all")}
+                  aria-pressed={tab === "all"}
+                  title="Combined view (dedupes by token)"
+                >
+                  All
+                </button>
               </div>
+
               <div className="metaPill">
-                In flight: <strong>{stats.inflight}</strong>
+                In flight:{" "}
+                <strong>
+                  {tab === "incoming"
+                    ? counts.incoming.inflight
+                    : tab === "sent"
+                    ? counts.sent.inflight
+                    : counts.sent.inflight + counts.incoming.inflight}
+                </strong>
               </div>
+
               <div className="metaPill">
-                Delivered: <strong>{stats.delivered}</strong>
+                Delivered:{" "}
+                <strong>
+                  {tab === "incoming"
+                    ? counts.incoming.delivered
+                    : tab === "sent"
+                    ? counts.sent.delivered
+                    : counts.sent.delivered + counts.incoming.delivered}
+                </strong>
               </div>
 
               <div style={{ flex: "1 1 auto" }} />
@@ -595,12 +631,15 @@ export default function DashboardPage() {
         <div style={{ marginTop: 14 }} className="stack">
           {filteredSorted.length === 0 && !loading ? (
             <div className="card">
-              <div className="muted">{emptyMessage}</div>
+              <div className="muted">
+                {(sentLetters.length === 0 && incomingLetters.length === 0)
+                  ? "No letters loaded yet. Enter your email and hit “Load letters”."
+                  : "No letters match your tab/filter/search."}
+              </div>
             </div>
           ) : (
             filteredSorted.map((l) => {
               const isCanceled = !!(l.canceled || (l.canceled_at && String(l.canceled_at).trim()));
-
               const etaIsoResolved = l.eta_utc_iso || l.eta_at;
 
               const derivedProgress = progressFromTimes({
@@ -622,8 +661,6 @@ export default function DashboardPage() {
               const statusLabel = isCanceled ? "Canceled" : l.delivered ? "Delivered" : isSleeping ? "Sleeping" : "In Flight";
               const statusEmoji = isCanceled ? "🛑" : l.delivered ? "✅" : isSleeping ? "😴" : "🕊️";
 
-              const direction: Direction = l.direction ?? "sent";
-
               const statusPath = `/l/${l.public_token}`;
               const statusUrl = typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
 
@@ -633,7 +670,8 @@ export default function DashboardPage() {
                 Number.isFinite(l.dest_lat) &&
                 Number.isFinite(l.dest_lon);
 
-              const current = l.current_lat != null && l.current_lon != null ? { lat: l.current_lat, lon: l.current_lon } : null;
+              const current =
+                l.current_lat != null && l.current_lon != null ? { lat: l.current_lat, lon: l.current_lon } : null;
 
               const geoText = isCanceled
                 ? "Canceled"
@@ -648,38 +686,39 @@ export default function DashboardPage() {
               const isArchivingThis = archivingId === l.id;
               const isCancelingThis = cancelingId === l.id;
 
-              const birdLabel = l.bird === "snipe" ? "Snipe" : l.bird === "goose" ? "Goose" : l.bird === "pigeon" ? "Pigeon" : null;
+              const birdLabel =
+                l.bird === "snipe" ? "Snipe" : l.bird === "goose" ? "Goose" : l.bird === "pigeon" ? "Pigeon" : null;
 
               const disableActions = isArchivingThis || isCancelingThis;
 
-              const whoLine =
-                direction === "incoming" ? (
-                  <div className="muted" style={{ marginTop: 6 }}>
-                    From: <strong>{l.from_name || "Sender"}</strong>{" "}
-                    <span style={{ opacity: 0.65 }}>
-                      • {l.origin_name} → {l.dest_name}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="muted" style={{ marginTop: 6 }}>
-                    To: <strong>{l.to_name || "Recipient"}</strong>{" "}
-                    <span style={{ opacity: 0.65 }}>
-                      • {l.origin_name} → {l.dest_name}
-                    </span>
-                  </div>
-                );
+              const dirTag: Direction =
+                tab === "all"
+                  ? (l.from_email && l.to_email && l.from_email.toLowerCase() === l.to_email.toLowerCase() ? "both" : (l.direction as any) || "sent")
+                  : (tab as any);
+
+              const dirLabel = dirTag === "incoming" ? "INCOMING" : dirTag === "both" ? "SENT + INCOMING" : "SENT";
 
               return (
-                <div key={l.id} className="card">
+                <div key={`${l.public_token}-${l.direction ?? "x"}`} className="card">
                   <div className="dashRowTop" style={{ marginBottom: 10 }}>
                     <div className="dashRowMain">
-                      <div className="kicker">
-                        {direction === "incoming" ? "Incoming" : "Sent"}
-                      </div>
-
+                      <div className="kicker">{dirLabel}</div>
                       <div className="h2">{l.subject?.trim() ? l.subject : "(No subject)"}</div>
 
-                      {whoLine}
+                      <div className="muted" style={{ marginTop: 6 }}>
+                        {dirLabel === "INCOMING" ? (
+                          <>
+                            From: <strong>{l.from_name || "Sender"}</strong>{" "}
+                          </>
+                        ) : (
+                          <>
+                            To: <strong>{l.to_name || "Recipient"}</strong>{" "}
+                          </>
+                        )}
+                        <span style={{ opacity: 0.65 }}>
+                          • {l.origin_name} → {l.dest_name}
+                        </span>
+                      </div>
 
                       {birdLabel && (
                         <div className="muted" style={{ marginTop: 6, opacity: 0.75 }}>
@@ -708,7 +747,15 @@ export default function DashboardPage() {
                     ) : null}
                   </div>
 
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      justifyContent: "flex-end",
+                    }}
+                  >
                     <div className="metaPill">
                       {statusEmoji} <strong>{statusLabel}</strong>
                     </div>
@@ -730,8 +777,8 @@ export default function DashboardPage() {
                       Copy link
                     </button>
 
-                    {/* ✅ Only Sent letters can be canceled/archived (for now) */}
-                    {direction === "sent" && (
+                    {/* ✅ Only Sent letters can be canceled/archived by sender in this UI */}
+                    {dirLabel !== "INCOMING" && (
                       <>
                         <button
                           type="button"
