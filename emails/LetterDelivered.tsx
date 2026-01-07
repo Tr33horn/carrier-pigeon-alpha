@@ -1,0 +1,57 @@
+import * as React from "react";
+import { Button, Section, Text } from "@react-email/components";
+import { APP_URL, BRAND } from "@/app/lib/email/config";
+import { EmailLayout } from "./components/Layout";
+
+export function LetterDeliveredEmail({
+  toName,
+  fromName,
+  statusUrl,
+  originName,
+  destName,
+}: {
+  toName?: string | null;
+  fromName?: string | null;
+  statusUrl: string; // full URL or path
+  originName: string;
+  destName: string;
+}) {
+  const href = statusUrl.startsWith("http") ? statusUrl : `${APP_URL}${statusUrl}`;
+
+  return (
+    <EmailLayout preview="Your letter has arrived.">
+      <Text style={{ fontSize: 18, fontWeight: 800, margin: "6px 0 8px" }}>
+        Delivered ✅
+      </Text>
+
+      <Text style={{ margin: "0 0 10px" }}>
+        Hey {toName || "there"} — your letter from {fromName || "someone"} has landed.
+      </Text>
+
+      <Text style={{ margin: "0 0 14px", color: "#444" }}>
+        Route: <strong>{originName}</strong> → <strong>{destName}</strong>
+      </Text>
+
+      <Section style={{ marginTop: 12 }}>
+        <Button
+          href={href}
+          style={{
+            backgroundColor: "#111",
+            color: "#fff",
+            padding: "12px 16px",
+            borderRadius: 10,
+            display: "inline-block",
+            textDecoration: "none",
+            fontWeight: 700,
+          }}
+        >
+          Open the letter
+        </Button>
+      </Section>
+
+      <Text style={{ fontSize: 12, color: "#666", marginTop: 16 }}>
+        The long way home.
+      </Text>
+    </EmailLayout>
+  );
+}

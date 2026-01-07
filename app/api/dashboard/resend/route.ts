@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import React from "react";
 import { supabaseServer } from "../../../lib/supabaseServer";
-import { Resend } from "resend";
+import { sendEmail } from "../../../lib/email/send";
+import { LetterStatusLinkResentEmail } from "@/emails/LetterStatusLinkResent";
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -18,16 +20,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Valid from_email required" }, { status: 400 });
   }
 
-  const key = process.env.RESEND_API_KEY;
-  if (!key) return NextResponse.json({ error: "Missing RESEND_API_KEY" }, { status: 500 });
-
-  const base = process.env.APP_BASE_URL || "http://localhost:3000";
-  const mailFrom = process.env.MAIL_FROM || "FLOK <onboarding@resend.dev>";
+  // Prefer APP_URL (matches your email config), fallback to APP_BASE_URL, then localhost
+  const base = process.env.APP_URL || process.env.APP_BASE_URL || "http://localhost:3000";
 
   // Verify the sender matches the letter
   const { data: letter, error } = await supabaseServer
     .from("letters")
-    .select("id, public_token, from_email, to_name, subject, origin_name, dest_name, sent_at, eta_at")
+    .select("id, public_token, from_email, subject, origin_name, dest_name")
     .eq("public_token", public_token)
     .maybeSingle();
 
@@ -39,30 +38,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Sender email does not match this letter" }, { status: 403 });
   }
 
-  const resend = new Resend(key);
+  // Always build URL from the DB token (safer than trusting request body)
   const url = `${base}/l/${letter.public_token}`;
 
-  await resend.emails.send({
-    from: mailFrom,
+  await sendEmail({
     to: from_email,
-    subject: "🕊️ Your status link (re-sent)",
-    html: `
-      <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height: 1.5">
-        <h2 style="margin:0 0 8px">Status link re-sent</h2>
-        <p style="margin:0 0 10px">
-          <strong>${(letter.subject || "(No subject)").replace(/</g, "&lt;")}</strong>
-        </p>
-        <p style="margin:0 0 14px; opacity:.85">
-          ${String(letter.origin_name || "").replace(/</g, "&lt;")} → ${String(letter.dest_name || "").replace(/</g, "&lt;")}
-        </p>
-        <p style="margin:0 0 16px">
-          <a href="${url}" style="display:inline-block;padding:10px 14px;border-radius:10px;text-decoration:none;border:1px solid #222">
-            View flight status
-          </a>
-        </p>
-        <p style="opacity:.7;margin:0">The pigeon swears this is the last time.</p>
-      </div>
-    `,
+    subject: "Your status link (re-sent)",
+    react: React.createElement(LetterStatusLinkResentEmail, {
+      subject: letter.subject || "(No subject)",
+      originName: letter.origin_name || "",
+      destName: letter.dest_name || "",
+      statusUrl: url,
+    }),
   });
 
   return NextResponse.json({ ok: true });

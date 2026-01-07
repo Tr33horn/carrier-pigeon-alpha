@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import React from "react";
 import { supabaseServer } from "../../../lib/supabaseServer";
 import { Resend } from "resend";
+
+import { LetterDeliveredEmail } from "@/emails/LetterDelivered";
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
@@ -18,7 +21,6 @@ function progressPct(sentISO: string, etaISO: string) {
 function formatUtc(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
-  // Example: "Jan 3, 2026, 20:22:10 UTC"
   return new Intl.DateTimeFormat("en-US", {
     year: "numeric",
     month: "short",
@@ -30,21 +32,6 @@ function formatUtc(iso: string) {
     timeZone: "UTC",
     timeZoneName: "short",
   }).format(d);
-}
-
-/** Escape any user content so it can't inject HTML into email */
-function escapeHtml(input: string) {
-  return input
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-/** Preserve newlines in email */
-function nl2br(input: string) {
-  return input.replace(/\r\n|\r|\n/g, "<br/>");
 }
 
 export async function GET(req: Request) {
@@ -60,7 +47,8 @@ export async function GET(req: Request) {
   }
   const resend = new Resend(key);
 
-  const base = process.env.APP_BASE_URL || "http://localhost:3000";
+  // Prefer APP_URL (matches your email config), fallback to APP_BASE_URL, then localhost
+  const base = process.env.APP_URL || process.env.APP_BASE_URL || "http://localhost:3000";
   const mailFrom = process.env.MAIL_FROM || "FLOK <onboarding@resend.dev>";
 
   /* --------------------------
@@ -70,7 +58,7 @@ export async function GET(req: Request) {
   const { data: lettersToDeliver, error: deliverErr } = await supabaseServer
     .from("letters")
     .select(
-      "id, public_token, eta_at, subject, body, from_name, from_email, to_name, to_email, delivered_notified_at, sender_receipt_sent_at"
+      "id, public_token, eta_at, subject, body, from_name, from_email, to_name, to_email, delivered_notified_at, sender_receipt_sent_at, origin_name, dest_name"
     )
     .is("delivered_notified_at", null)
     .lte("eta_at", new Date().toISOString());
@@ -84,85 +72,73 @@ export async function GET(req: Request) {
 
   for (const letter of lettersToDeliver ?? []) {
     const url = `${base}/l/${letter.public_token}`;
-
-    const safeSubject = escapeHtml((letter.subject || "(No subject)").trim() || "(No subject)");
-    const safeBody = escapeHtml((letter.body || "").trim());
-    const safeBodyWithBreaks = nl2br(safeBody);
-
-    // ✅ Consistent delivery timestamp in UTC (optional but nice)
     const deliveredAtUtc = formatUtc(new Date().toISOString());
 
-    // Recipient delivery email
+    // Recipient delivery email (TEMPLATE)
     if (letter.to_email) {
       await resend.emails.send({
         from: mailFrom,
         to: letter.to_email,
-        subject: letter.subject || "🕊️ Your letter has arrived",
-        html: `
-          <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height: 1.5">
-            <h2 style="margin:0 0 8px">The pigeon has landed.</h2>
-            <p style="margin:0 0 12px">
-              Your sealed letter from <strong>${escapeHtml(letter.from_name || "Someone")}</strong> is ready.
-            </p>
-
-            <p style="margin:0 0 12px; opacity:.75">
-              <strong>Delivered:</strong> ${deliveredAtUtc}
-            </p>
-
-            <div style="margin:14px 0 14px; padding:12px; border:1px solid #e5e5e5; border-radius:12px; background:#fafafa;">
-              <div style="font-weight:800; margin:0 0 8px;">Subject</div>
-              <div style="margin:0 0 12px;">${safeSubject}</div>
-
-              <div style="font-weight:800; margin:0 0 8px;">Message</div>
-              <div style="white-space: normal; margin:0;">
-                ${safeBodyWithBreaks || "<em>(No message)</em>"}
-              </div>
-            </div>
-
-            <p style="margin:0 0 16px">
-              <a href="${url}" style="display:inline-block;padding:10px 14px;border-radius:10px;text-decoration:none;border:1px solid #222">
-                Open on the flight log
-              </a>
-            </p>
-
-            <p style="opacity:.7;margin:0">No further pecking required.</p>
-          </div>
-        `,
+        subject: letter.subject?.trim() ? `Delivered: ${letter.subject.trim()}` : "Your letter has arrived",
+        react: React.createElement(LetterDeliveredEmail, {
+          toName: letter.to_name,
+          fromName: letter.from_name,
+          statusUrl: url,
+          originName: letter.origin_name || "Origin",
+          destName: letter.dest_name || "Destination",
+        }),
       });
+
       delivered_recipient_emails++;
     }
 
     // Mark delivered notification done (even if no to_email)
-    await supabaseServer
-      .from("letters")
-      .update({ delivered_notified_at: new Date().toISOString() })
-      .eq("id", letter.id);
+    await supabaseServer.from("letters").update({ delivered_notified_at: new Date().toISOString() }).eq("id", letter.id);
 
-    // Sender receipt (if present + not already sent)
+    // Sender receipt (inline React element)
     if (letter.from_email && !letter.sender_receipt_sent_at) {
       await resend.emails.send({
         from: mailFrom,
         to: letter.from_email,
-        subject: "✅ Delivery receipt: your pigeon landed",
-        html: `
-          <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height: 1.5">
-            <h2 style="margin:0 0 8px">Delivery confirmed.</h2>
-            <p style="margin:0 0 12px">
-              Your letter to <strong>${escapeHtml(letter.to_name || "the recipient")}</strong> has been delivered.
-            </p>
-
-            <p style="margin:0 0 12px; opacity:.75">
-              <strong>Delivered:</strong> ${deliveredAtUtc}
-            </p>
-
-            <p style="margin:0 0 16px">
-              <a href="${url}" style="display:inline-block;padding:10px 14px;border-radius:10px;text-decoration:none;border:1px solid #222">
-                View flight status
-              </a>
-            </p>
-            <p style="opacity:.7;margin:0">The bird has been compensated in snacks.</p>
-          </div>
-        `,
+        subject: "Delivery receipt: confirmed",
+        react: React.createElement(
+          "div",
+          { style: { fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial", lineHeight: 1.5 } },
+          React.createElement("h2", { style: { margin: "0 0 8px" } }, "Delivery confirmed ✅"),
+          React.createElement(
+            "p",
+            { style: { margin: "0 0 12px" } },
+            "Your letter to ",
+            React.createElement("strong", null, letter.to_name || "the recipient"),
+            " has been delivered."
+          ),
+          React.createElement(
+            "p",
+            { style: { margin: "0 0 12px", opacity: 0.75 } },
+            React.createElement("strong", null, "Delivered:"),
+            " ",
+            deliveredAtUtc
+          ),
+          React.createElement(
+            "p",
+            { style: { margin: "0 0 16px" } },
+            React.createElement(
+              "a",
+              {
+                href: url,
+                style: {
+                  display: "inline-block",
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  textDecoration: "none",
+                  border: "1px solid #222",
+                },
+              },
+              "View flight status"
+            )
+          ),
+          React.createElement("p", { style: { opacity: 0.7, margin: 0 } }, "The bird has been compensated in snacks.")
+        ),
       });
 
       await supabaseServer
@@ -208,8 +184,6 @@ export async function GET(req: Request) {
 
     const pct = progressPct(letter.sent_at, letter.eta_at);
     const url = `${base}/l/${letter.public_token}`;
-
-    // ✅ Include ETA in UTC for consistency (optional but recommended)
     const etaUtcText = formatUtc(letter.eta_at);
 
     const sendUpdate = async (
@@ -218,14 +192,14 @@ export async function GET(req: Request) {
     ) => {
       const subjectLine =
         milestone === 25
-          ? "🕊️ Update: 25% of the way there"
+          ? "Update: 25% of the way there"
           : milestone === 50
-          ? "🕊️ Update: Halfway to you"
-          : "🕊️ Update: 75% complete (incoming!)";
+          ? "Update: Halfway there"
+          : "Update: 75% complete (incoming!)";
 
       const funLine =
         milestone === 25
-          ? "The pigeon has left the parking lot."
+          ? "The courier has left the parking lot."
           : milestone === 50
           ? "Mid-flight snack negotiations successful."
           : "You may now hear faint wing sounds in the distance.";
@@ -234,33 +208,48 @@ export async function GET(req: Request) {
         from: mailFrom,
         to: letter.to_email!,
         subject: subjectLine,
-        html: `
-          <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height: 1.5">
-            <h2 style="margin:0 0 8px">${milestone}% progress</h2>
-            <p style="margin:0 0 12px">
-              Your sealed letter from <strong>${escapeHtml(letter.from_name || "Someone")}</strong> is still in flight.
-            </p>
-
-            <p style="margin:0 0 12px; opacity:.75">
-              <strong>ETA (UTC):</strong> ${etaUtcText}
-            </p>
-
-            <p style="margin:0 0 12px"><em>${escapeHtml(funLine)}</em></p>
-
-            <p style="margin:0 0 16px">
-              <a href="${url}" style="display:inline-block;padding:10px 14px;border-radius:10px;text-decoration:none;border:1px solid #222">
-                Check flight status (${pct}%)
-              </a>
-            </p>
-            <p style="opacity:.7;margin:0">Still sealed. Still mysterious.</p>
-          </div>
-        `,
+        react: React.createElement(
+          "div",
+          { style: { fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial", lineHeight: 1.5 } },
+          React.createElement("h2", { style: { margin: "0 0 8px" } }, `${milestone}% progress`),
+          React.createElement(
+            "p",
+            { style: { margin: "0 0 12px" } },
+            "Your sealed letter from ",
+            React.createElement("strong", null, letter.from_name || "Someone"),
+            " is still in flight."
+          ),
+          React.createElement(
+            "p",
+            { style: { margin: "0 0 12px", opacity: 0.75 } },
+            React.createElement("strong", null, "ETA (UTC):"),
+            " ",
+            etaUtcText
+          ),
+          React.createElement("p", { style: { margin: "0 0 12px" } }, React.createElement("em", null, funLine)),
+          React.createElement(
+            "p",
+            { style: { margin: "0 0 16px" } },
+            React.createElement(
+              "a",
+              {
+                href: url,
+                style: {
+                  display: "inline-block",
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  textDecoration: "none",
+                  border: "1px solid #222",
+                },
+              },
+              `Check flight status (${pct}%)`
+            )
+          ),
+          React.createElement("p", { style: { opacity: 0.7, margin: 0 } }, "Still sealed. Still mysterious.")
+        ),
       });
 
-      await supabaseServer
-        .from("letters")
-        .update({ [column]: new Date().toISOString() })
-        .eq("id", letter.id);
+      await supabaseServer.from("letters").update({ [column]: new Date().toISOString() }).eq("id", letter.id);
     };
 
     if (pct >= 75 && !letter.progress_75_sent_at) {
