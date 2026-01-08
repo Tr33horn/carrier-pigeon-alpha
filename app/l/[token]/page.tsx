@@ -322,13 +322,12 @@ function WaxSealOverlay({
 
         <div className="sealRow">
           <div className="wax" aria-label="Wax seal" title="Sealed until delivery">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/waxseal.png"
-              alt="Wax seal"
-              className="waxImg"
-              style={{ width: 72, height: 72, display: "block" }}
-            />
+{/* eslint-disable-next-line @next/next/no-img-element */}
+<img
+  src="/waxseal.png"
+  alt="Wax seal"
+  className="waxImg"
+/>
           </div>
 
           <div>

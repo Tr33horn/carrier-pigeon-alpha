@@ -1855,3 +1855,33 @@ body {
 }
 
 .flokMark { opacity: 0.75; }
+
+
+/* --- Wax seal: use image only (kills old CSS wax underneath) --- */
+.wax {
+  width: 76px;           /* the outer box size */
+  height: 76px;
+  padding: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+/* If the old seal is drawn via pseudo-elements, nuke them */
+.wax::before,
+.wax::after {
+  content: none !important;
+  display: none !important;
+}
+
+.waxImg {
+  width: 76px;          /* match the box */
+  height: 76px;
+  display: block;
+  object-fit: contain;  /* keeps 800x800 perfectly proportional */
+}
