@@ -187,15 +187,7 @@ function RouteThumb(props: {
           strokeLinecap="round"
         />
         <circle cx={pts.o.x} cy={pts.o.y} r="4.5" fill="currentColor" />
-        <circle
-          cx={pts.d.x}
-          cy={pts.d.y}
-          r="6.2"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          opacity="0.95"
-        />
+        <circle cx={pts.d.x} cy={pts.d.y} r="6.2" fill="none" stroke="currentColor" strokeWidth="2.2" opacity="0.95" />
 
         {pts.c && (
           <>
@@ -327,10 +319,9 @@ export default function DashboardPage() {
     try {
       localStorage.setItem("cp_sender_email", e);
 
-      const res = await fetch(
-        `/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(qs)}`,
-        { cache: "no-store" }
-      );
+      const res = await fetch(`/api/dashboard/letters?email=${encodeURIComponent(e)}&q=${encodeURIComponent(qs)}`, {
+        cache: "no-store",
+      });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to load");
@@ -493,7 +484,6 @@ export default function DashboardPage() {
 
   function switchTab(next: Tab) {
     setTab(next);
-    // subtle “breathe” animation on tab change
     setTabBump((n) => n + 1);
   }
 
@@ -503,28 +493,24 @@ export default function DashboardPage() {
   return (
     <main className="pageBg">
       <div className="wrap">
+        {/* ✅ Top-centered brand mark (separate from the header card) */}
+        <div className="topBrand">
+          <a href="/" aria-label="FLOK home" title="Home" className="topBrandLink">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/flok-mark.png" alt="FLOK" className="topBrandLogo" />
+          </a>
+        </div>
+
         <div className="card">
           <div className="cardHead">
-<div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-  <a
-    href="/"
-    aria-label="FLOK home"
-    className="flokMarkLink"
-    title="Home"
-  >
-<div className="dashBrand">
-  <img src="/brand/flok-mark.png" alt="FLOK" className="dashLogo" />
-</div>
-  </a>
-
-  <div>
-    <div className="kicker">Mailbox</div>
-    <h1 className="h1">Dashboard</h1>
-    <p className="muted" style={{ marginTop: 6 }}>
-      Load your mailbox by entering your email. Sent + Incoming are separate tabs now (no more déjà vu).
-    </p>
-  </div>
-</div>
+            {/* ✅ Header text only now (no logo here) */}
+            <div>
+              <div className="kicker">Mailbox</div>
+              <h1 className="h1">Dashboard</h1>
+              <p className="muted" style={{ marginTop: 6 }}>
+                Load your mailbox by entering your email. Sent + Incoming are separate tabs now (no more déjà vu).
+              </p>
+            </div>
 
             <a href="/new" className="linkPill">
               + Write a letter
@@ -533,7 +519,6 @@ export default function DashboardPage() {
 
           {hasAny && (
             <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              {/* Tabs */}
               <div className="metaPill tabsPill" style={{ gap: 6 }}>
                 <button
                   type="button"
@@ -675,13 +660,11 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ✅ Tab switch animation wrapper */}
         <div key={`${tab}-${tabBump}`} className="tabStage" style={{ marginTop: 14 }}>
           <div className="stack">
             {filteredSorted.length === 0 && !loading ? (
               <div className="card">
                 <div className="soft">
-                  {/* ✅ Incoming empty-state copy */}
                   {tab === "incoming" ? (
                     <>
                       <div style={{ fontWeight: 800, marginBottom: 6 }}>Nothing incoming yet.</div>
@@ -735,29 +718,16 @@ export default function DashboardPage() {
 
                 const isSleeping = !!l.sleeping && !l.delivered && !isCanceled;
 
-                const statusLabel = isCanceled
-                  ? "Canceled"
-                  : l.delivered
-                  ? "Delivered"
-                  : isSleeping
-                  ? "Sleeping"
-                  : "In Flight";
+                const statusLabel = isCanceled ? "Canceled" : l.delivered ? "Delivered" : isSleeping ? "Sleeping" : "In Flight";
                 const statusEmoji = isCanceled ? "🛑" : l.delivered ? "✅" : isSleeping ? "😴" : "🕊️";
 
                 const statusPath = `/l/${l.public_token}`;
-                const statusUrl =
-                  typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
+                const statusUrl = typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
 
                 const canThumb =
-                  Number.isFinite(l.origin_lat) &&
-                  Number.isFinite(l.origin_lon) &&
-                  Number.isFinite(l.dest_lat) &&
-                  Number.isFinite(l.dest_lon);
+                  Number.isFinite(l.origin_lat) && Number.isFinite(l.origin_lon) && Number.isFinite(l.dest_lat) && Number.isFinite(l.dest_lon);
 
-                const current =
-                  l.current_lat != null && l.current_lon != null
-                    ? { lat: l.current_lat, lon: l.current_lon }
-                    : null;
+                const current = l.current_lat != null && l.current_lon != null ? { lat: l.current_lat, lon: l.current_lon } : null;
 
                 const geoText = isCanceled
                   ? "Canceled"
@@ -773,13 +743,7 @@ export default function DashboardPage() {
                 const isCancelingThis = cancelingId === l.id;
 
                 const birdLabel =
-                  l.bird === "snipe"
-                    ? "Snipe"
-                    : l.bird === "goose"
-                    ? "Goose"
-                    : l.bird === "pigeon"
-                    ? "Pigeon"
-                    : null;
+                  l.bird === "snipe" ? "Snipe" : l.bird === "goose" ? "Goose" : l.bird === "pigeon" ? "Pigeon" : null;
 
                 const disableActions = isArchivingThis || isCancelingThis;
 
@@ -792,7 +756,6 @@ export default function DashboardPage() {
 
                 const dirLabel = dirTag === "incoming" ? "INCOMING" : dirTag === "both" ? "SENT + INCOMING" : "SENT";
 
-                // ✅ Badge pill pulse if this token just gained a badge
                 const shouldPulseBadge = badgePulseKey === l.public_token;
 
                 return (
@@ -835,32 +798,16 @@ export default function DashboardPage() {
                       </div>
 
                       {canThumb ? (
-                        <RouteThumb
-                          origin={{ lat: l.origin_lat, lon: l.origin_lon }}
-                          dest={{ lat: l.dest_lat, lon: l.dest_lon }}
-                          current={current}
-                          progress={derivedProgress}
-                        />
+                        <RouteThumb origin={{ lat: l.origin_lat, lon: l.origin_lon }} dest={{ lat: l.dest_lat, lon: l.dest_lon }} current={current} progress={derivedProgress} />
                       ) : null}
                     </div>
 
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 8,
-                        alignItems: "center",
-                        flexWrap: "wrap",
-                        justifyContent: "flex-end",
-                      }}
-                    >
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                       <div className="metaPill">
                         {statusEmoji} <strong>{statusLabel}</strong>
                       </div>
 
-                      <div
-                        className={`metaPill ${shouldPulseBadge ? "badgePop" : ""}`}
-                        title="Badges earned so far"
-                      >
+                      <div className={`metaPill ${shouldPulseBadge ? "badgePop" : ""}`} title="Badges earned so far">
                         🏅 <strong>{badgeCount}</strong>&nbsp;{badgeCount === 1 ? "Badge" : "Badges"}
                       </div>
 

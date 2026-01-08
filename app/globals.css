@@ -1900,3 +1900,32 @@ body {
   display: block;
   object-fit: contain;  /* keeps 800x800 perfectly proportional */
 }
+
+.topBrand {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0 14px;
+}
+
+.topBrandLink {
+  display: inline-flex;
+  padding: 6px;
+  border-radius: 12px;
+}
+
+.topBrandLogo {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  display: block;
+}
+
+@media (max-width: 480px) {
+  .topBrand {
+    margin: 8px 0 12px;
+  }
+  .topBrandLogo {
+    width: 44px;
+    height: 44px;
+  }
+}
