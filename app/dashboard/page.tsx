@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Direction = "sent" | "incoming" | "both";
 
@@ -28,7 +28,7 @@ type DashboardLetter = {
   eta_at: string;
 
   delivered: boolean;
-  progress: number; // 0..1 (server-provided; we won't trust it for UI)
+  progress: number;
 
   current_lat: number | null;
   current_lon: number | null;
@@ -48,7 +48,6 @@ type DashboardLetter = {
   canceled_at?: string | null;
   canceled?: boolean;
 
-  // NEW (API sets this)
   direction?: "sent" | "incoming";
 };
 
@@ -85,7 +84,6 @@ function emailLooksValid(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
-/** Fallback formatter (only used if server text fields missing) */
 function formatUtcFallback(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
@@ -115,10 +113,6 @@ async function copyToClipboard(text: string) {
   document.body.removeChild(ta);
 }
 
-/**
- * ✅ Single source of truth for progress in the dashboard:
- * Uses the SAME ETA you use for countdown (eta_utc_iso first).
- */
 function progressFromTimes(opts: {
   nowMs: number;
   sentISO: string;
@@ -145,7 +139,7 @@ function RouteThumb(props: {
   origin: { lat: number; lon: number };
   dest: { lat: number; lon: number };
   current?: { lat: number; lon: number } | null;
-  progress: number; // 0..1
+  progress: number;
 }) {
   const W = 160;
   const H = 74;
@@ -225,7 +219,6 @@ function RouteThumb(props: {
   );
 }
 
-/** Dedupes by public_token, keeps the first occurrence (sorted order should already be applied). */
 function dedupeByToken(list: DashboardLetter[]) {
   const seen = new Set<string>();
   const out: DashboardLetter[] = [];
@@ -243,7 +236,6 @@ export default function DashboardPage() {
   const [email, setEmail] = useState("");
   const [q, setQ] = useState("");
 
-  // ✅ keep sent/incoming separate
   const [sentLetters, setSentLetters] = useState<DashboardLetter[]>([]);
   const [incomingLetters, setIncomingLetters] = useState<DashboardLetter[]>([]);
 
@@ -251,13 +243,18 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [now, setNow] = useState(new Date());
 
-  const [tab, setTab] = useState<Tab>("sent"); // ✅ default to Sent
+  const [tab, setTab] = useState<Tab>("sent");
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<Sort>("newest");
 
   const [toast, setToast] = useState<string | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [cancelingId, setCancelingId] = useState<string | null>(null);
+
+  // ✅ Tab animation + micro-reward state
+  const [tabBump, setTabBump] = useState(0);
+  const [badgePulseKey, setBadgePulseKey] = useState<string | null>(null);
+  const prevBadgesRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -283,6 +280,38 @@ export default function DashboardPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  // ✅ Badge micro-reward: detect increments across both lists
+  useEffect(() => {
+    const nextMap: Record<string, number> = {};
+
+    const all = [...sentLetters, ...incomingLetters];
+    for (const l of all) {
+      const key = l.public_token;
+      if (!key) continue;
+      nextMap[key] = Math.max(0, Number(l.badges_count ?? 0));
+    }
+
+    const prev = prevBadgesRef.current;
+    let poppedKey: string | null = null;
+
+    for (const [token, nextCount] of Object.entries(nextMap)) {
+      const prevCount = Math.max(0, Number(prev[token] ?? 0));
+      if (nextCount > prevCount) {
+        poppedKey = token;
+        break;
+      }
+    }
+
+    prevBadgesRef.current = nextMap;
+
+    if (poppedKey) {
+      setBadgePulseKey(poppedKey);
+      setToast("New badge earned 🏅");
+      const t = setTimeout(() => setBadgePulseKey(null), 900);
+      return () => clearTimeout(t);
+    }
+  }, [sentLetters, incomingLetters]);
+
   async function load(emailOverride?: string, qOverride?: string) {
     const e = (emailOverride ?? email).trim().toLowerCase();
     const qs = (qOverride ?? q).trim();
@@ -306,7 +335,6 @@ export default function DashboardPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to load");
 
-      // ✅ IMPORTANT: REPLACE arrays (never append)
       const sent = (data.sentLetters ?? data.letters ?? []) as DashboardLetter[];
       const incoming = (data.incomingLetters ?? []) as DashboardLetter[];
 
@@ -331,7 +359,6 @@ export default function DashboardPage() {
 
     setArchivingId(letter.id);
 
-    // optimistic remove
     const prevSent = sentLetters;
     setSentLetters((cur) => cur.filter((x) => x.id !== letter.id));
 
@@ -421,11 +448,14 @@ export default function DashboardPage() {
 
     return {
       sent: { total: sentTotal, delivered: sentDelivered, inflight: sentTotal - sentDelivered },
-      incoming: { total: incomingTotal, delivered: incomingDelivered, inflight: incomingTotal - incomingDelivered },
+      incoming: {
+        total: incomingTotal,
+        delivered: incomingDelivered,
+        inflight: incomingTotal - incomingDelivered,
+      },
     };
   }, [sentLetters, incomingLetters]);
 
-  // ✅ Build the active list for the tab
   const activeList = useMemo(() => {
     if (tab === "sent") return [...sentLetters];
     if (tab === "incoming") return [...incomingLetters];
@@ -451,7 +481,6 @@ export default function DashboardPage() {
     });
 
     if (tab === "all") list = dedupeByToken(list);
-
     return list;
   }, [activeList, filter, sort, tab]);
 
@@ -461,6 +490,15 @@ export default function DashboardPage() {
       void load();
     }
   }
+
+  function switchTab(next: Tab) {
+    setTab(next);
+    // subtle “breathe” animation on tab change
+    setTabBump((n) => n + 1);
+  }
+
+  const hasAny = sentLetters.length > 0 || incomingLetters.length > 0;
+  const isEmptyAfterLoad = hasAny && filteredSorted.length === 0 && !loading;
 
   return (
     <main className="pageBg">
@@ -475,73 +513,87 @@ export default function DashboardPage() {
               </p>
             </div>
 
-            {/* ✅ unify route */}
-            <a href="/write" className="linkPill">
+            <a href="/new" className="linkPill">
               + Write a letter
             </a>
           </div>
 
-          {/* ✅ ALWAYS SHOW the tabs row (even at 0) */}
-          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <div className="metaPill" style={{ gap: 8 }}>
-              <button type="button" className="btnGhost" onClick={() => setTab("sent")} aria-pressed={tab === "sent"}>
-                Sent ({counts.sent.total})
-              </button>
-              <button
-                type="button"
-                className="btnGhost"
-                onClick={() => setTab("incoming")}
-                aria-pressed={tab === "incoming"}
-              >
-                Incoming ({counts.incoming.total})
-              </button>
-              <button type="button" className="btnGhost" onClick={() => setTab("all")} aria-pressed={tab === "all"}>
-                All
-              </button>
-            </div>
+          {hasAny && (
+            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              {/* Tabs */}
+              <div className="metaPill tabsPill" style={{ gap: 6 }}>
+                <button
+                  type="button"
+                  className={`tabBtn ${tab === "sent" ? "on" : ""}`}
+                  onClick={() => switchTab("sent")}
+                  aria-pressed={tab === "sent"}
+                >
+                  Sent <span className="tabCount">({counts.sent.total})</span>
+                </button>
 
-            <div className="metaPill">
-              In flight:{" "}
-              <strong>
-                {tab === "incoming"
-                  ? counts.incoming.inflight
-                  : tab === "sent"
-                  ? counts.sent.inflight
-                  : counts.sent.inflight + counts.incoming.inflight}
-              </strong>
-            </div>
+                <button
+                  type="button"
+                  className={`tabBtn ${tab === "incoming" ? "on" : ""}`}
+                  onClick={() => switchTab("incoming")}
+                  aria-pressed={tab === "incoming"}
+                >
+                  Incoming <span className="tabCount">({counts.incoming.total})</span>
+                </button>
 
-            <div className="metaPill">
-              Delivered:{" "}
-              <strong>
-                {tab === "incoming"
-                  ? counts.incoming.delivered
-                  : tab === "sent"
-                  ? counts.sent.delivered
-                  : counts.sent.delivered + counts.incoming.delivered}
-              </strong>
-            </div>
+                <button
+                  type="button"
+                  className={`tabBtn ${tab === "all" ? "on" : ""}`}
+                  onClick={() => switchTab("all")}
+                  aria-pressed={tab === "all"}
+                  title="Combined view (dedupes by token)"
+                >
+                  All
+                </button>
+              </div>
 
-            <div style={{ flex: "1 1 auto" }} />
+              <div className="metaPill">
+                In flight:{" "}
+                <strong>
+                  {tab === "incoming"
+                    ? counts.incoming.inflight
+                    : tab === "sent"
+                    ? counts.sent.inflight
+                    : counts.sent.inflight + counts.incoming.inflight}
+                </strong>
+              </div>
 
-            <div className="metaPill" style={{ gap: 10 }}>
-              <span style={{ opacity: 0.7 }}>Filter</span>
-              <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)} className="dashSelect">
-                <option value="all">All</option>
-                <option value="inflight">In flight</option>
-                <option value="delivered">Delivered</option>
-              </select>
-            </div>
+              <div className="metaPill">
+                Delivered:{" "}
+                <strong>
+                  {tab === "incoming"
+                    ? counts.incoming.delivered
+                    : tab === "sent"
+                    ? counts.sent.delivered
+                    : counts.sent.delivered + counts.incoming.delivered}
+                </strong>
+              </div>
 
-            <div className="metaPill" style={{ gap: 10 }}>
-              <span style={{ opacity: 0.7 }}>Sort</span>
-              <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="dashSelect">
-                <option value="newest">Newest</option>
-                <option value="etaSoonest">ETA soonest</option>
-                <option value="oldest">Oldest</option>
-              </select>
+              <div style={{ flex: "1 1 auto" }} />
+
+              <div className="metaPill" style={{ gap: 10 }}>
+                <span style={{ opacity: 0.7 }}>Filter</span>
+                <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)} className="dashSelect">
+                  <option value="all">All</option>
+                  <option value="inflight">In flight</option>
+                  <option value="delivered">Delivered</option>
+                </select>
+              </div>
+
+              <div className="metaPill" style={{ gap: 10 }}>
+                <span style={{ opacity: 0.7 }}>Sort</span>
+                <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="dashSelect">
+                  <option value="newest">Newest</option>
+                  <option value="etaSoonest">ETA soonest</option>
+                  <option value="oldest">Oldest</option>
+                </select>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="card" style={{ marginTop: 14 }}>
@@ -610,210 +662,269 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* rest of your rendering remains exactly the same */}
-        <div style={{ marginTop: 14 }} className="stack">
-          {filteredSorted.length === 0 && !loading ? (
-            <div className="card">
-              <div className="muted">
-                {sentLetters.length === 0 && incomingLetters.length === 0
-                  ? "No letters loaded yet. Enter your email and hit “Load letters”."
-                  : "No letters match your tab/filter/search."}
+        {/* ✅ Tab switch animation wrapper */}
+        <div key={`${tab}-${tabBump}`} className="tabStage" style={{ marginTop: 14 }}>
+          <div className="stack">
+            {filteredSorted.length === 0 && !loading ? (
+              <div className="card">
+                <div className="soft">
+                  {/* ✅ Incoming empty-state copy */}
+                  {tab === "incoming" ? (
+                    <>
+                      <div style={{ fontWeight: 800, marginBottom: 6 }}>Nothing incoming yet.</div>
+                      <div className="muted">
+                        Your inbox is quiet… in a “peaceful forest” way, not a “broken app” way. 🌿
+                        <br />
+                        Send a letter to yourself to test, or share your address with a friend.
+                      </div>
+                    </>
+                  ) : tab === "sent" ? (
+                    <>
+                      <div className="muted">
+                        {sentLetters.length === 0 && incomingLetters.length === 0
+                          ? "No letters loaded yet. Enter your email and hit “Load letters”."
+                          : "No sent letters match your filter/search."}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="muted">
+                      {sentLetters.length === 0 && incomingLetters.length === 0
+                        ? "No letters loaded yet. Enter your email and hit “Load letters”."
+                        : "No letters match your filter/search."}
+                    </div>
+                  )}
+
+                  {isEmptyAfterLoad && (
+                    <div className="muted" style={{ marginTop: 10, opacity: 0.75 }}>
+                      (Try switching tabs or clearing search.)
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ) : (
-            filteredSorted.map((l) => {
-              const isCanceled = !!(l.canceled || (l.canceled_at && String(l.canceled_at).trim()));
-              const etaIsoResolved = l.eta_utc_iso || l.eta_at;
+            ) : (
+              filteredSorted.map((l) => {
+                const isCanceled = !!(l.canceled || (l.canceled_at && String(l.canceled_at).trim()));
+                const etaIsoResolved = l.eta_utc_iso || l.eta_at;
 
-              const derivedProgress = progressFromTimes({
-                nowMs: now.getTime(),
-                sentISO: l.sent_at,
-                etaISO: etaIsoResolved,
-                delivered: !!l.delivered,
-                canceled: isCanceled,
-              });
+                const derivedProgress = progressFromTimes({
+                  nowMs: now.getTime(),
+                  sentISO: l.sent_at,
+                  etaISO: etaIsoResolved,
+                  delivered: !!l.delivered,
+                  canceled: isCanceled,
+                });
 
-              const pct = Math.round(derivedProgress * 100);
+                const pct = Math.round(derivedProgress * 100);
 
-              const etaAbsMs = parseMs(etaIsoResolved);
-              const msLeft = etaAbsMs == null ? null : etaAbsMs - now.getTime();
-              const countdown = formatCountdown(msLeft);
+                const etaAbsMs = parseMs(etaIsoResolved);
+                const msLeft = etaAbsMs == null ? null : etaAbsMs - now.getTime();
+                const countdown = formatCountdown(msLeft);
 
-              const isSleeping = !!l.sleeping && !l.delivered && !isCanceled;
+                const isSleeping = !!l.sleeping && !l.delivered && !isCanceled;
 
-              const statusLabel = isCanceled ? "Canceled" : l.delivered ? "Delivered" : isSleeping ? "Sleeping" : "In Flight";
-              const statusEmoji = isCanceled ? "🛑" : l.delivered ? "✅" : isSleeping ? "😴" : "🕊️";
+                const statusLabel = isCanceled
+                  ? "Canceled"
+                  : l.delivered
+                  ? "Delivered"
+                  : isSleeping
+                  ? "Sleeping"
+                  : "In Flight";
+                const statusEmoji = isCanceled ? "🛑" : l.delivered ? "✅" : isSleeping ? "😴" : "🕊️";
 
-              const statusPath = `/l/${l.public_token}`;
-              const statusUrl = typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
+                const statusPath = `/l/${l.public_token}`;
+                const statusUrl =
+                  typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
 
-              const canThumb =
-                Number.isFinite(l.origin_lat) &&
-                Number.isFinite(l.origin_lon) &&
-                Number.isFinite(l.dest_lat) &&
-                Number.isFinite(l.dest_lon);
+                const canThumb =
+                  Number.isFinite(l.origin_lat) &&
+                  Number.isFinite(l.origin_lon) &&
+                  Number.isFinite(l.dest_lat) &&
+                  Number.isFinite(l.dest_lon);
 
-              const current =
-                l.current_lat != null && l.current_lon != null ? { lat: l.current_lat, lon: l.current_lon } : null;
+                const current =
+                  l.current_lat != null && l.current_lon != null
+                    ? { lat: l.current_lat, lon: l.current_lon }
+                    : null;
 
-              const geoText = isCanceled
-                ? "Canceled"
-                : l.delivered
-                ? "Delivered"
-                : (l.current_over_text && l.current_over_text.trim()) || "somewhere over the U.S.";
+                const geoText = isCanceled
+                  ? "Canceled"
+                  : l.delivered
+                  ? "Delivered"
+                  : (l.current_over_text && l.current_over_text.trim()) || "somewhere over the U.S.";
 
-              const sentUtc = (l.sent_utc_text && l.sent_utc_text.trim()) || formatUtcFallback(l.sent_at);
-              const etaUtc = (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(etaIsoResolved);
+                const sentUtc = (l.sent_utc_text && l.sent_utc_text.trim()) || formatUtcFallback(l.sent_at);
+                const etaUtc = (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(etaIsoResolved);
 
-              const badgeCount = Math.max(0, Number(l.badges_count ?? 0));
-              const isArchivingThis = archivingId === l.id;
-              const isCancelingThis = cancelingId === l.id;
+                const badgeCount = Math.max(0, Number(l.badges_count ?? 0));
+                const isArchivingThis = archivingId === l.id;
+                const isCancelingThis = cancelingId === l.id;
 
-              const disableActions = isArchivingThis || isCancelingThis;
+                const birdLabel =
+                  l.bird === "snipe"
+                    ? "Snipe"
+                    : l.bird === "goose"
+                    ? "Goose"
+                    : l.bird === "pigeon"
+                    ? "Pigeon"
+                    : null;
 
-              const dirTag: Direction =
-                tab === "all"
-                  ? l.from_email && l.to_email && l.from_email.toLowerCase() === l.to_email.toLowerCase()
-                    ? "both"
-                    : (l.direction as any) || "sent"
-                  : (tab as any);
+                const disableActions = isArchivingThis || isCancelingThis;
 
-              const dirLabel = dirTag === "incoming" ? "INCOMING" : dirTag === "both" ? "SENT + INCOMING" : "SENT";
+                const dirTag: Direction =
+                  tab === "all"
+                    ? l.from_email && l.to_email && l.from_email.toLowerCase() === l.to_email.toLowerCase()
+                      ? "both"
+                      : (l.direction as any) || "sent"
+                    : (tab as any);
 
-              return (
-                <div key={`${l.public_token}-${l.direction ?? "x"}`} className="card">
-                  <div className="dashRowTop" style={{ marginBottom: 10 }}>
-                    <div className="dashRowMain">
-                      <div className="kicker">{dirLabel}</div>
-                      <div className="h2">{l.subject?.trim() ? l.subject : "(No subject)"}</div>
+                const dirLabel = dirTag === "incoming" ? "INCOMING" : dirTag === "both" ? "SENT + INCOMING" : "SENT";
 
-                      <div className="muted" style={{ marginTop: 6 }}>
-                        {dirLabel === "INCOMING" ? (
-                          <>
-                            From: <strong>{l.from_name || "Sender"}</strong>{" "}
-                          </>
-                        ) : (
-                          <>
-                            To: <strong>{l.to_name || "Recipient"}</strong>{" "}
-                          </>
-                        )}
-                        <span style={{ opacity: 0.65 }}>
-                          • {l.origin_name} → {l.dest_name}
-                        </span>
-                      </div>
+                // ✅ Badge pill pulse if this token just gained a badge
+                const shouldPulseBadge = badgePulseKey === l.public_token;
 
-                      <div className="muted" style={{ marginTop: 6 }}>
-                        📍 <strong>{geoText}</strong>
-                      </div>
+                return (
+                  <div key={`${l.public_token}-${l.direction ?? "x"}`} className="card">
+                    <div className="dashRowTop" style={{ marginBottom: 10 }}>
+                      <div className="dashRowMain">
+                        <div className="kicker">{dirLabel}</div>
+                        <div className="h2">{l.subject?.trim() ? l.subject : "(No subject)"}</div>
 
-                      {isCanceled && (
-                        <div className="muted" style={{ marginTop: 6, opacity: 0.8 }}>
-                          This letter was recalled and will not be delivered.
+                        <div className="muted" style={{ marginTop: 6 }}>
+                          {dirLabel === "INCOMING" ? (
+                            <>
+                              From: <strong>{l.from_name || "Sender"}</strong>{" "}
+                            </>
+                          ) : (
+                            <>
+                              To: <strong>{l.to_name || "Recipient"}</strong>{" "}
+                            </>
+                          )}
+                          <span style={{ opacity: 0.65 }}>
+                            • {l.origin_name} → {l.dest_name}
+                          </span>
                         </div>
+
+                        {birdLabel && (
+                          <div className="muted" style={{ marginTop: 6, opacity: 0.75 }}>
+                            Bird: <strong>{birdLabel}</strong>
+                          </div>
+                        )}
+
+                        <div className="muted" style={{ marginTop: 6 }}>
+                          📍 <strong>{geoText}</strong>
+                        </div>
+
+                        {isCanceled && (
+                          <div className="muted" style={{ marginTop: 6, opacity: 0.8 }}>
+                            This letter was recalled and will not be delivered.
+                          </div>
+                        )}
+                      </div>
+
+                      {canThumb ? (
+                        <RouteThumb
+                          origin={{ lat: l.origin_lat, lon: l.origin_lon }}
+                          dest={{ lat: l.dest_lat, lon: l.dest_lon }}
+                          current={current}
+                          progress={derivedProgress}
+                        />
+                      ) : null}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        justifyContent: "flex-end",
+                      }}
+                    >
+                      <div className="metaPill">
+                        {statusEmoji} <strong>{statusLabel}</strong>
+                      </div>
+
+                      <div
+                        className={`metaPill ${shouldPulseBadge ? "badgePop" : ""}`}
+                        title="Badges earned so far"
+                      >
+                        🏅 <strong>{badgeCount}</strong>&nbsp;{badgeCount === 1 ? "Badge" : "Badges"}
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btnGhost"
+                        onClick={async () => {
+                          await copyToClipboard(statusUrl);
+                          setToast("Link copied 🕊️");
+                        }}
+                        title="Copy status link"
+                        disabled={disableActions}
+                      >
+                        Copy link
+                      </button>
+
+                      {dirLabel !== "INCOMING" && (
+                        <>
+                          <button
+                            type="button"
+                            className="btnGhost"
+                            onClick={() => void cancelLetter(l)}
+                            title="Cancel (recall) letter"
+                            disabled={disableActions || l.delivered || isCanceled}
+                          >
+                            {isCancelingThis ? "Canceling…" : isCanceled ? "Canceled" : "Cancel"}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btnGhost"
+                            onClick={() => void archiveLetter(l)}
+                            title="Archive letter (soft delete)"
+                            disabled={disableActions || isCanceled}
+                          >
+                            {isArchivingThis ? "Archiving…" : "Archive"}
+                          </button>
+                        </>
                       )}
                     </div>
 
-                    {canThumb ? (
-                      <RouteThumb
-                        origin={{ lat: l.origin_lat, lon: l.origin_lon }}
-                        dest={{ lat: l.dest_lat, lon: l.dest_lon }}
-                        current={current}
-                        progress={derivedProgress}
-                      />
-                    ) : null}
-                  </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                      justifyContent: "flex-end",
-                    }}
-                  >
-                    <div className="metaPill">
-                      {statusEmoji} <strong>{statusLabel}</strong>
+                    <div className="muted" style={{ marginTop: 10 }}>
+                      Sent (UTC): {sentUtc} • <strong>ETA (UTC):</strong> {etaUtc}
+                      {!l.delivered && !isCanceled && <> • (T-minus {countdown})</>}
                     </div>
 
-                    <div className="metaPill" title="Badges earned so far">
-                      🏅 <strong>{badgeCount}</strong>&nbsp;{badgeCount === 1 ? "Badge" : "Badges"}
-                    </div>
-
-                    <button
-                      type="button"
-                      className="btnGhost"
-                      onClick={async () => {
-                        await copyToClipboard(statusUrl);
-                        setToast("Link copied 🕊️");
-                      }}
-                      title="Copy status link"
-                      disabled={disableActions}
-                    >
-                      Copy link
-                    </button>
-
-                    {dirLabel !== "INCOMING" && (
-                      <>
-                        <button
-                          type="button"
-                          className="btnGhost"
-                          onClick={() => void cancelLetter(l)}
-                          title="Cancel (recall) letter"
-                          disabled={disableActions || l.delivered || isCanceled}
-                        >
-                          {isCancelingThis ? "Canceling…" : isCanceled ? "Canceled" : "Cancel"}
-                        </button>
-
-                        <button
-                          type="button"
-                          className="btnGhost"
-                          onClick={() => void archiveLetter(l)}
-                          title="Archive letter (soft delete)"
-                          disabled={disableActions || isCanceled}
-                        >
-                          {isArchivingThis ? "Archiving…" : "Archive"}
-                        </button>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="muted" style={{ marginTop: 10 }}>
-                    Sent (UTC): {sentUtc} • <strong>ETA (UTC):</strong> {etaUtc}
-                    {!l.delivered && !isCanceled && <> • (T-minus {countdown})</>}
-                  </div>
-
-                  <div style={{ marginTop: 12 }}>
-                    <div className="bar">
-                      <div className="barFill" style={{ width: `${pct}%` }} />
-                      {[25, 50, 75].map((p) => (
-                        <span key={p} className="barTick" style={{ left: `${p}%` }} />
-                      ))}
-                    </div>
-
-                    <div className="barMeta">
-                      <div className="mutedStrong">
-                        Progress: <strong>{pct}%</strong>
+                    <div style={{ marginTop: 12 }}>
+                      <div className="bar">
+                        <div className="barFill" style={{ width: `${pct}%` }} />
+                        {[25, 50, 75].map((p) => (
+                          <span key={p} className="barTick" style={{ left: `${p}%` }} />
+                        ))}
                       </div>
-                      <div className="muted">Token: {l.public_token.slice(0, 8)}…</div>
+
+                      <div className="barMeta">
+                        <div className="mutedStrong">
+                          Progress: <strong>{pct}%</strong>
+                        </div>
+                        <div className="muted">Token: {l.public_token.slice(0, 8)}…</div>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                      <a href={statusPath} className="link">
+                        View status
+                      </a>
+                      <a href="/write" className="link">
+                        Write another
+                      </a>
                     </div>
                   </div>
-
-                  <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
-                    <a href={statusPath} className="link">
-                      View status
-                    </a>
-                    <a href="/write" className="link">
-                      Write another
-                    </a>
-                  </div>
-                </div>
-              );
-            })
-          )}
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
     </main>
   );
 }
-
