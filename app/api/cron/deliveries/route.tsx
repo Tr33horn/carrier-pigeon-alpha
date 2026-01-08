@@ -64,7 +64,12 @@ function getBaseUrl(req: Request) {
   return "http://localhost:3000";
 }
 
-/** ✅ Cron auth: Vercel will send Authorization: Bearer <CRON_SECRET> on cron runs (when CRON_SECRET is set). */
+/** Tiny helper: treat non-empty strings as true */
+function bool(x: any) {
+  return !!(x && String(x).trim());
+}
+
+/** ✅ Cron auth: supports Authorization: Bearer <secret>, x-cron-secret: <secret>, or ?secret=<secret> */
 function isCronAuthorized(req: Request) {
   const secret = process.env.CRON_SECRET?.trim();
   if (!secret) return { ok: false, reason: "CRON_SECRET not set" as const };
@@ -78,10 +83,7 @@ function isCronAuthorized(req: Request) {
 
   const expected = `Bearer ${secret}`;
 
-  const ok =
-    auth === expected ||
-    xSecret === secret ||
-    qSecret === secret;
+  const ok = auth === expected || xSecret === secret || qSecret === secret;
 
   return { ok, reason: ok ? null : ("Unauthorized" as const) };
 }
@@ -96,6 +98,9 @@ export async function GET(req: Request) {
       { status: authCheck.reason === "CRON_SECRET not set" ? 500 : 401 }
     );
   }
+
+  const url = new URL(req.url);
+  const debug = url.searchParams.get("debug") === "1";
 
   const baseUrl = getBaseUrl(req);
   const nowISO = new Date().toISOString();
@@ -128,9 +133,7 @@ export async function GET(req: Request) {
     if (letter.to_email) {
       await sendEmail({
         to: letter.to_email,
-        subject: letter.subject?.trim()
-          ? `Delivered: ${letter.subject.trim()}`
-          : "Your letter has arrived",
+        subject: letter.subject?.trim() ? `Delivered: ${letter.subject.trim()}` : "Your letter has arrived",
         react: (
           <LetterDeliveredEmail
             toName={letter.to_name}
@@ -149,7 +152,7 @@ export async function GET(req: Request) {
     // Always mark delivered_notified_at (even if no to_email)
     await supabaseServer.from("letters").update({ delivered_notified_at: nowISO }).eq("id", letter.id);
 
-    // Sender receipt (template) — ✅ already absolute, keep it
+    // Sender receipt (template) — ✅ absolute, keep it
     if (letter.from_email && !letter.sender_receipt_sent_at) {
       const deliveredAtUtc = formatUtc(nowISO);
 
@@ -187,6 +190,21 @@ export async function GET(req: Request) {
   if (inflightErr) {
     return NextResponse.json({ error: inflightErr.message }, { status: 500 });
   }
+
+  // ✅ Optional debug: see why “eligible” letters didn’t trigger milestone sends
+  const debug_inflight = (inFlight ?? []).map((l) => {
+    const pct = progressPct(l.sent_at, l.eta_at);
+    return {
+      token: (l.public_token || "").slice(0, 8),
+      pct,
+      sent_at: l.sent_at,
+      eta_at: l.eta_at,
+      has_to_email: !!l.to_email,
+      p25: bool((l as any).progress_25_sent_at),
+      p50: bool((l as any).progress_50_sent_at),
+      p75: bool((l as any).progress_75_sent_at),
+    };
+  });
 
   let midflight_25 = 0;
   let midflight_50 = 0;
@@ -231,7 +249,7 @@ export async function GET(req: Request) {
             milestone={milestone}
             pct={pct}
             fromName={letter.from_name}
-            statusUrl={absoluteStatusUrl}   // ✅ absolute URL
+            statusUrl={absoluteStatusUrl} // ✅ absolute URL
             etaTextUtc={etaUtcText}
             funLine={funLine}
             bird={bird}
@@ -276,5 +294,6 @@ export async function GET(req: Request) {
       sent_75: midflight_75,
       skipped_no_email: midflight_skipped_no_email,
     },
+    ...(debug ? { debug_inflight } : {}),
   });
 }
