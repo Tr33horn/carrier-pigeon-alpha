@@ -58,7 +58,7 @@ export default function Home() {
             <div className="homeHeroInner">
               <div className="muted" style={{ fontSize: 12 }}>
                 <img
-                  src="/hero/floklogo.png"
+                  src="/hero/og.png"
                   alt=""
                   style={{
                     width: "100%",
