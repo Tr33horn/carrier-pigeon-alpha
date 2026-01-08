@@ -80,3 +80,17 @@ export function LetterProgressUpdateEmail({
     </EmailLayout>
   );
 }
+
+export default function Preview() {
+  return (
+    <LetterProgressUpdateEmail
+      milestone={50}
+      pct={50}
+      fromName="Greggor"
+      statusUrl="/l/demo-token"
+      etaTextUtc="2026-01-08 02:30 UTC"
+      funLine="The bird stopped briefly for a dramatic skyline moment."
+      bird="goose"
+    />
+  );
+}

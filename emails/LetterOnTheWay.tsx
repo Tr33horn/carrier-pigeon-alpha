@@ -74,3 +74,17 @@ export function LetterOnTheWayEmail({
     </EmailLayout>
   );
 }
+
+export default function Preview() {
+  return (
+    <LetterOnTheWayEmail
+      toName="Greggor"
+      fromName="Mystery Sender"
+      statusUrl="/l/demo-token"
+      originName="Snoqualmie, WA"
+      destName="Austin, TX"
+      etaTextUtc="2026-01-08 02:30 UTC"
+      bird="snipe"
+    />
+  );
+}

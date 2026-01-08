@@ -42,7 +42,7 @@ export function LetterStatusLinkResentEmail({
       </Text>
 
       <Text style={{ margin: "0 0 14px", textAlign: "center" }}>
-        You asked nicely. We complied undermost protest from the pigeons.
+        You asked nicely. We complied.
       </Text>
 
       <Text style={{ margin: "0 0 14px", fontWeight: 800, textAlign: "center" }}>
@@ -63,5 +63,16 @@ export function LetterStatusLinkResentEmail({
         We found your link and slapped a stamp on it.
       </Text>
     </EmailLayout>
+  );
+}
+
+export default function Preview() {
+  return (
+    <LetterStatusLinkResentEmail
+      subject="Your secret letter"
+      originName="Seattle, WA"
+      destName="Portland, OR"
+      statusUrl="/l/demo-token"
+    />
   );
 }

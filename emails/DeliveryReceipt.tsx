@@ -53,3 +53,14 @@ export function DeliveryReceiptEmail({
     </EmailLayout>
   );
 }
+
+export default function Preview() {
+  return (
+    <DeliveryReceiptEmail
+      toName="Greggor"
+      statusUrl="http://localhost:3000/l/demo-token"
+      deliveredAtUtc="2026-01-08 02:30 UTC"
+      bird="snipe"
+    />
+  );
+}

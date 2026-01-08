@@ -68,3 +68,17 @@ export function LetterDeliveredEmail({
     </EmailLayout>
   );
 }
+
+/** ✅ Required for React Email preview sidebar */
+export default function Preview() {
+  return (
+    <LetterDeliveredEmail
+      toName="Greggor"
+      fromName="The Flock"
+      statusUrl="/l/demo-token"
+      originName="Seattle, WA"
+      destName="New York, NY"
+      bird="pigeon"
+    />
+  );
+}
