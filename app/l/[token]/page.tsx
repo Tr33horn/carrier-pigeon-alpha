@@ -129,7 +129,19 @@ function formatCountdown(ms: number) {
 function formatUtcFallback(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
-  return `${d.toISOString().replace("T", " ").replace("Z", "")} UTC`;
+
+  // Example: "1/8/2026, 4:56:01 PM UTC"
+  return (
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(d) + " UTC"
+  );
 }
 
 function dayLabelLocal(iso: string) {
