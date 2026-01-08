@@ -64,18 +64,37 @@ function getBaseUrl(req: Request) {
   return "http://localhost:3000";
 }
 
+/** ✅ Cron auth: Vercel will send Authorization: Bearer <CRON_SECRET> on cron runs (when CRON_SECRET is set). */
+function isCronAuthorized(req: Request) {
+  const secret = process.env.CRON_SECRET?.trim();
+  if (!secret) return { ok: false, reason: "CRON_SECRET not set" as const };
+
+  const auth = req.headers.get("authorization") || "";
+  const xSecret = req.headers.get("x-cron-secret") || "";
+
+  // Optional manual trigger via query param (still secret-gated)
+  const url = new URL(req.url);
+  const qSecret = url.searchParams.get("secret") || "";
+
+  const expected = `Bearer ${secret}`;
+
+  const ok =
+    auth === expected ||
+    xSecret === secret ||
+    qSecret === secret;
+
+  return { ok, reason: ok ? null : ("Unauthorized" as const) };
+}
+
 export async function GET(req: Request) {
-  // --- auth (robust) ---
-  const secret = (process.env.CRON_SECRET ?? "").trim();
-  const authRaw = (req.headers.get("authorization") ?? "").trim();
-
-  // Expect: "Bearer <token>"
-  const token = authRaw.toLowerCase().startsWith("bearer ")
-    ? authRaw.slice(7).trim()
-    : "";
-
-  if (!secret || token !== secret) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // --- auth ---
+  const authCheck = isCronAuthorized(req);
+  if (!authCheck.ok) {
+    // If CRON_SECRET isn't set, cron invocations will *always* 401 — super common setup gotcha.
+    return NextResponse.json(
+      { error: authCheck.reason },
+      { status: authCheck.reason === "CRON_SECRET not set" ? 500 : 401 }
+    );
   }
 
   const baseUrl = getBaseUrl(req);
@@ -102,9 +121,10 @@ export async function GET(req: Request) {
 
   for (const letter of lettersToDeliver ?? []) {
     const statusPath = `/l/${letter.public_token}`;
+    const absoluteStatusUrl = joinUrl(baseUrl, statusPath);
     const bird = normalizeBird((letter as any).bird);
 
-    // Recipient delivered email (template)
+    // Recipient delivered email (template) — ✅ absolute URL
     if (letter.to_email) {
       await sendEmail({
         to: letter.to_email,
@@ -115,7 +135,7 @@ export async function GET(req: Request) {
           <LetterDeliveredEmail
             toName={letter.to_name}
             fromName={letter.from_name}
-            statusUrl={statusPath}
+            statusUrl={absoluteStatusUrl}
             originName={letter.origin_name || "Origin"}
             destName={letter.dest_name || "Destination"}
             bird={bird}
@@ -129,10 +149,9 @@ export async function GET(req: Request) {
     // Always mark delivered_notified_at (even if no to_email)
     await supabaseServer.from("letters").update({ delivered_notified_at: nowISO }).eq("id", letter.id);
 
-    // ✅ Sender receipt (template) — MUST be absolute
+    // Sender receipt (template) — ✅ already absolute, keep it
     if (letter.from_email && !letter.sender_receipt_sent_at) {
       const deliveredAtUtc = formatUtc(nowISO);
-      const absoluteStatusUrl = joinUrl(baseUrl, statusPath);
 
       await sendEmail({
         to: letter.from_email,
@@ -182,6 +201,7 @@ export async function GET(req: Request) {
 
     const pct = progressPct(letter.sent_at, letter.eta_at);
     const statusPath = `/l/${letter.public_token}`;
+    const absoluteStatusUrl = joinUrl(baseUrl, statusPath);
     const etaUtcText = formatUtc(letter.eta_at);
     const bird = normalizeBird((letter as any).bird);
 
@@ -211,7 +231,7 @@ export async function GET(req: Request) {
             milestone={milestone}
             pct={pct}
             fromName={letter.from_name}
-            statusUrl={statusPath}
+            statusUrl={absoluteStatusUrl}   // ✅ absolute URL
             etaTextUtc={etaUtcText}
             funLine={funLine}
             bird={bird}
