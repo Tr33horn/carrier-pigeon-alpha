@@ -137,7 +137,7 @@ function formatCountdown(ms: number) {
   return `${h}:${pad(m)}:${pad(s)}`;
 }
 
-/** Local time formatter for display (user-friendly) */
+/** Local time formatter for display (full) */
 function formatLocal(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
@@ -151,7 +151,7 @@ function formatLocal(iso: string) {
   }).format(d);
 }
 
-/** UTC formatter for display (explicit UTC) */
+/** UTC formatter for display (full, explicit UTC) */
 function formatUtc(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
@@ -188,6 +188,49 @@ function timeLabelLocal(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
   return d.toLocaleString();
+}
+
+/** ✅ Short, nice-looking “Opens at …” line:
+ * - Same-day: "8:56 AM (4:56 PM UTC)"
+ * - Different-day: "Jan 8, 8:56 AM (Jan 8, 4:56 PM UTC)"
+ */
+function formatOpensShort(etaIso: string) {
+  const dLocal = new Date(etaIso);
+  const dUtc = new Date(etaIso);
+  if (!Number.isFinite(dLocal.getTime())) return "";
+
+  const now = new Date();
+
+  const sameDayLocal =
+    dLocal.getFullYear() === now.getFullYear() &&
+    dLocal.getMonth() === now.getMonth() &&
+    dLocal.getDate() === now.getDate();
+
+  const timeLocal = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(dLocal);
+
+  const timeUtc = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(dUtc);
+
+  if (sameDayLocal) return `${timeLocal} (${timeUtc} UTC)`;
+
+  const dateLocal = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+  }).format(dLocal);
+
+  const dateUtc = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+  }).format(dUtc);
+
+  return `${dateLocal}, ${timeLocal} (${dateUtc}, ${timeUtc} UTC)`;
 }
 
 /* ---------- tiny icon system (inline SVG) ---------- */
@@ -321,14 +364,21 @@ function BirdStatusCard({
 }
 
 /* ---------- wax seal overlay ---------- */
-function WaxSealOverlay({ etaText, cracking, canceled }: { etaText: string; cracking?: boolean; canceled?: boolean }) {
+function WaxSealOverlay({
+  opensShort,
+  cracking,
+  canceled,
+}: {
+  opensShort: string;
+  cracking?: boolean;
+  canceled?: boolean;
+}) {
   return (
     <div className={cracking ? "seal crack" : "seal"} style={{ position: "relative" }}>
       <div className="sealCard">
         <div className="sealVeil" />
 
         <div className="sealRow">
-          {/* ✅ Only the image lives here now (no old nested seal / initials) */}
           <div className="wax" aria-label="Wax seal" title="Sealed until delivery">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -346,7 +396,9 @@ function WaxSealOverlay({ etaText, cracking, canceled }: { etaText: string; crac
 
           <div>
             <div className="sealTitle">{canceled ? "Canceled" : "Sealed until delivery"}</div>
-            <div className="sealSub">{canceled ? "This letter will not be delivered." : `Opens at ${etaText}`}</div>
+            <div className="sealSub">
+              {canceled ? "This letter will not be delivered." : `Opens at ${opensShort}`}
+            </div>
             <div className="sealHint">{canceled ? "The bird was recalled to HQ." : "No peeking. The bird is watching."}</div>
           </div>
         </div>
@@ -390,7 +442,7 @@ function RailTimeline({
 
     for (const it of items) {
       if (it.kind === "day") continue;
-      const isPast = final || new Date(it.at).getTime() <= now.getTime(); // ✅ Final forces past
+      const isPast = final || new Date(it.at).getTime() <= now.getTime();
       if (isPast && !popped[it.key]) {
         updates[it.key] = true;
         changed = true;
@@ -461,15 +513,9 @@ function RailTimeline({
                 className={`railCard ${isPast ? "past" : ""} ${isCurrent ? "current" : ""}`}
                 style={
                   isSleep
-                    ? {
-                        background: "rgba(88,80,236,0.08)",
-                        borderColor: "rgba(88,80,236,0.35)",
-                      }
+                    ? { background: "rgba(88,80,236,0.08)", borderColor: "rgba(88,80,236,0.35)" }
                     : isDeliveredRow
-                    ? {
-                        background: "rgba(34,197,94,0.10)",
-                        borderColor: "rgba(34,197,94,0.40)",
-                      }
+                    ? { background: "rgba(34,197,94,0.10)", borderColor: "rgba(34,197,94,0.40)" }
                     : undefined
                 }
               >
@@ -509,7 +555,6 @@ function isSleepCheckpoint(cp: Checkpoint) {
 export default function LetterStatusPage() {
   const params = useParams() as Record<string, string | string[] | undefined>;
 
-  // ✅ robust param: supports [token], [public_token], [id]
   const raw = params?.token ?? params?.public_token ?? params?.id;
   const token = Array.isArray(raw) ? raw[0] : raw;
 
@@ -580,10 +625,8 @@ export default function LetterStatusPage() {
     return () => clearInterval(t);
   }, [archived, canceled, serverNowISO]);
 
-  // ✅ shared loader via ref so polling can call it
   const loadRef = useRef<(() => Promise<void>) | null>(null);
 
-  // ✅ effect A: define + run loader once per token
   useEffect(() => {
     if (!token) return;
 
@@ -595,7 +638,6 @@ export default function LetterStatusPage() {
 
         const res = await fetch(`/api/letters/${encodeURIComponent(token)}`, { cache: "no-store" });
 
-        // ✅ tolerate non-JSON server errors
         let data: any = null;
         try {
           data = await res.json();
@@ -655,7 +697,6 @@ export default function LetterStatusPage() {
     };
   }, [token]);
 
-  // ✅ effect B: poll ONLY when not archived/canceled
   useEffect(() => {
     if (!token) return;
     if (archived) return;
@@ -671,7 +712,6 @@ export default function LetterStatusPage() {
     return () => clearInterval(interval);
   }, [token, archived, canceled]);
 
-  // Always use adjusted ETA for display + countdown
   const effectiveEtaISO = useMemo(() => {
     if (!letter) return "";
     return (letter.eta_at_adjusted && letter.eta_at_adjusted.trim()) || letter.eta_at;
@@ -680,13 +720,6 @@ export default function LetterStatusPage() {
   const sentMs = useMemo(() => parseMs(letter?.sent_at) ?? null, [letter?.sent_at]);
   const etaMs = useMemo(() => parseMs(effectiveEtaISO) ?? null, [effectiveEtaISO]);
 
-  /**
-   * ✅ Fix for “ETA vs last flight-log card time”:
-   * If checkpoints drift past ETA (server data can do this), clamp checkpoint timestamps
-   * into [sent_at, effectiveEtaISO] for *display + ordering*.
-   *
-   * This prevents a “Final descent 11:15 AM” card when ETA says “8:56 AM”.
-   */
   const checkpointsAdjusted = useMemo(() => {
     if (!checkpoints.length) return [];
     if (sentMs == null || etaMs == null) return checkpoints.map((c) => ({ ...c, _atAdj: c.at }));
@@ -704,13 +737,11 @@ export default function LetterStatusPage() {
 
   const sleeping = !!flight?.sleeping;
 
-  // ✅ delivered is server truth; canceled always overrides
   const uiDelivered = useMemo(() => {
     if (canceled) return false;
     return !!delivered;
   }, [canceled, delivered]);
 
-  // ✅ progress: prefer server sleep-aware progress (it freezes when canceled)
   const progress = useMemo(() => {
     if (flight && Number.isFinite(flight.progress)) return clamp01(flight.progress);
 
@@ -728,7 +759,6 @@ export default function LetterStatusPage() {
     return formatCountdown(msLeft);
   }, [letter, effectiveEtaISO, now]);
 
-  // ✅ server-provided speed wins
   const currentSpeedKmh = useMemo(() => {
     if (canceled) return 0;
 
@@ -799,10 +829,8 @@ export default function LetterStatusPage() {
 
   const showLive = !archived && !canceled && !uiDelivered;
 
-  // ✅ NEW: final timeline state
   const timelineFinal = uiDelivered || archived || canceled;
 
-  // ✅ Build timeline + add Delivered card
   const timelineItems = useMemo(() => {
     const base: TimelineItem[] = (checkpointsByTime as any[]).map((cp) => {
       const atISO = cp._atAdj || cp.at;
@@ -814,7 +842,6 @@ export default function LetterStatusPage() {
       };
     });
 
-    // ✅ Add a final delivered row (distinct tint)
     if (uiDelivered && !canceled) {
       base.push({
         key: "delivered",
@@ -830,12 +857,7 @@ export default function LetterStatusPage() {
     for (const it of base) {
       const d = dayLabelLocal(it.at);
       if (d && d !== lastDay) {
-        grouped.push({
-          key: `day-${d}`,
-          name: d,
-          at: it.at,
-          kind: "day",
-        });
+        grouped.push({ key: `day-${d}`, name: d, at: it.at, kind: "day" });
         lastDay = d;
       }
       grouped.push(it);
@@ -865,7 +887,6 @@ export default function LetterStatusPage() {
     return bestKey ?? realItems[0].key;
   }, [timelineItems, now, uiDelivered, canceled]);
 
-  // ✅ show both local and UTC so it’s not confusing
   const etaTextUTC = useMemo(() => {
     if (!letter) return "";
     return (letter.eta_utc_text && letter.eta_utc_text.trim()) || formatUtcFallback(effectiveEtaISO);
@@ -876,6 +897,12 @@ export default function LetterStatusPage() {
     return formatLocal(effectiveEtaISO);
   }, [letter, effectiveEtaISO]);
 
+  // ✅ This is what the seal uses (short + sweet)
+  const opensShort = useMemo(() => {
+    if (!effectiveEtaISO) return "";
+    return formatOpensShort(effectiveEtaISO);
+  }, [effectiveEtaISO]);
+
   const badgesSorted = useMemo(() => {
     const b = items.badges ?? [];
     return [...b].sort((a, c) => {
@@ -885,14 +912,12 @@ export default function LetterStatusPage() {
     });
   }, [items.badges]);
 
-  // ✅ marker mode: force canceled if canceled
   const markerMode: Flight["marker_mode"] = useMemo(() => {
     if (canceled) return "canceled";
     if (flight?.marker_mode) return flight.marker_mode;
     return uiDelivered ? "delivered" : sleeping ? "sleeping" : "flying";
   }, [canceled, flight?.marker_mode, uiDelivered, sleeping]);
 
-  // ✅ confetti/reveal: only for real delivery (never canceled)
   useEffect(() => {
     if (canceled) return;
 
@@ -1024,7 +1049,7 @@ export default function LetterStatusPage() {
               </div>
             </div>
 
-            {/* ✅ ETA now shows Local + UTC */}
+            {/* ✅ ETA shows Local + UTC */}
             <div className="etaBox">
               <div className="kicker">ETA</div>
               <div className="etaTime">{etaTextLocal}</div>
@@ -1104,7 +1129,7 @@ export default function LetterStatusPage() {
 
               {uiDelivered && !canceled && revealStage === "open" ? null : (
                 <div style={{ position: uiDelivered && !canceled ? "absolute" : "relative", inset: 0 }}>
-                  <WaxSealOverlay etaText={etaTextUTC} cracking={uiDelivered && revealStage === "crack"} canceled={canceled} />
+                  <WaxSealOverlay opensShort={opensShort} cracking={uiDelivered && revealStage === "crack"} canceled={canceled} />
                 </div>
               )}
             </div>
@@ -1119,11 +1144,21 @@ export default function LetterStatusPage() {
               <div className="kicker">Map</div>
 
               <div className="mapStyleRow" role="group" aria-label="Map style">
-                <button type="button" className={`mapStyleBtn ${mapStyle === "carto-positron" ? "on" : ""}`} onClick={() => setMapStyle("carto-positron")} aria-pressed={mapStyle === "carto-positron"}>
+                <button
+                  type="button"
+                  className={`mapStyleBtn ${mapStyle === "carto-positron" ? "on" : ""}`}
+                  onClick={() => setMapStyle("carto-positron")}
+                  aria-pressed={mapStyle === "carto-positron"}
+                >
                   Light
                 </button>
 
-                <button type="button" className={`mapStyleBtn ${mapStyle === "carto-voyager" ? "on" : ""}`} onClick={() => setMapStyle("carto-voyager")} aria-pressed={mapStyle === "carto-voyager"}>
+                <button
+                  type="button"
+                  className={`mapStyleBtn ${mapStyle === "carto-voyager" ? "on" : ""}`}
+                  onClick={() => setMapStyle("carto-voyager")}
+                  aria-pressed={mapStyle === "carto-voyager"}
+                >
                   Voyager
                 </button>
 
@@ -1139,7 +1174,14 @@ export default function LetterStatusPage() {
             </div>
 
             <div style={{ marginTop: 12 }}>
-              <MapView origin={{ lat: letter.origin_lat, lon: letter.origin_lon }} dest={{ lat: letter.dest_lat, lon: letter.dest_lon }} progress={progress} tooltipText={mapTooltip} mapStyle={mapStyle} markerMode={markerMode} />
+              <MapView
+                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+                progress={progress}
+                tooltipText={mapTooltip}
+                mapStyle={mapStyle}
+                markerMode={markerMode}
+              />
             </div>
 
             <div style={{ marginTop: 14 }}>
