@@ -50,69 +50,86 @@ export default function Home() {
               text-wrap: balance;
               margin-left: auto;
               margin-right: auto;
-              max-width: none; /* keep desktop as-is */
+              max-width: none;
             }
 
-            /* Hero card: same width behavior as other cards */
             .homeHero {
               width: 100%;
             }
 
             .homeHeroInner {
               padding: 18px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
             }
 
             .homeHeroImg {
               width: 100%;
               height: auto;
               display: block;
-              object-fit: contain; /* logo stays crisp */
-              max-height: 420px;   /* desktop comfort */
+              object-fit: contain;
+              max-height: 420px;
             }
 
             /* Mobile-only changes */
             @media (max-width: 520px) {
+              /* tighten vertical rhythm above hero */
+              .homeHeaderBlock {
+                margin-bottom: 6px !important;
+              }
+
               .homeTitle {
-                max-width: 18ch;  /* forces 2 lines */
+                max-width: 18ch;
                 line-height: 1.05;
+                margin-top: 6px;
               }
 
-              .homeHeroInner {
-                padding: 10px;    /* tighter padding around image */
-              }
-
-              .homeHeroImg {
-                max-height: 240px; /* stops hero from hogging screen */
-              }
-
-              /* Make hero feel less like a huge framed painting (mobile only) */
+              /* this is the big one: reduce spacing around the hero card itself */
               .homeHero {
+                margin-top: 10px !important;
+                margin-bottom: 10px !important;
                 border-radius: 18px;
                 box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+              }
+
+              /* real tight padding inside the frame */
+              .homeHeroInner {
+                padding: 6px;
+              }
+
+              /* force the image to stop being a full-page billboard */
+              .homeHeroImg {
+                max-height: 170px;
+              }
+
+              /* tighten space before the actions card */
+              .homeActionsCard {
+                margin-top: 10px !important;
               }
             }
           `}</style>
 
           {/* Header */}
-          <div style={{ textAlign: "center" }}>
+          <div className="homeHeaderBlock" style={{ textAlign: "center" }}>
             <div className="kicker">FLOK</div>
 
             <h1 className="h1 homeTitle">Made to wait. Meant to matter.</h1>
 
-            <p className="muted" style={{ marginTop: 10, fontSize: 14, opacity: 0.8 }}>
+            <p className="muted" style={{ marginTop: 8, fontSize: 14, opacity: 0.8 }}>
               Brought to you by Polaroid &amp; Maruchan Instant noodles
             </p>
           </div>
 
-          {/* Hero (now same width as other cards) */}
-          <div className="card homeHero" aria-hidden="true">
+          {/* Hero */}
+          <div className="card homeHero" aria-hidden="true" style={{ marginTop: 14 }}>
             <div className="homeHeroInner">
               <img src="/hero/og.png" alt="" className="homeHeroImg" />
             </div>
           </div>
 
           {/* Actions */}
-          <div className="card" style={{ width: "100%" }}>
+          <div className="card homeActionsCard" style={{ width: "100%", marginTop: 14 }}>
             <div className="stack" style={{ gap: 10 }}>
               <Link href="/new" className="btnPrimary" style={{ textAlign: "center" }}>
                 Write a Letter
