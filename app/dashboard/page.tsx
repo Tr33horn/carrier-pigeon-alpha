@@ -429,10 +429,6 @@ export default function DashboardPage() {
   const activeList = useMemo(() => {
     if (tab === "sent") return [...sentLetters];
     if (tab === "incoming") return [...incomingLetters];
-
-    // tab === "all"
-    // combine then dedupe by token so “send to self” doesn’t appear twice
-    // (we keep the first occurrence after sorting below)
     return [...sentLetters, ...incomingLetters];
   }, [tab, sentLetters, incomingLetters]);
 
@@ -442,7 +438,6 @@ export default function DashboardPage() {
     if (filter === "inflight") list = list.filter((l) => !l.delivered);
     if (filter === "delivered") list = list.filter((l) => l.delivered);
 
-    // Sort
     list.sort((a, b) => {
       const aSent = parseMs(a.sent_at) ?? 0;
       const bSent = parseMs(b.sent_at) ?? 0;
@@ -455,7 +450,6 @@ export default function DashboardPage() {
       return bSent - aSent;
     });
 
-    // ✅ Dedupe only in ALL tab (so a self-letter shows once)
     if (tab === "all") list = dedupeByToken(list);
 
     return list;
@@ -481,85 +475,73 @@ export default function DashboardPage() {
               </p>
             </div>
 
-            <a href="/new" className="linkPill">
+            {/* ✅ unify route */}
+            <a href="/write" className="linkPill">
               + Write a letter
             </a>
           </div>
 
-          {(sentLetters.length > 0 || incomingLetters.length > 0) && (
-            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              {/* Tabs */}
-              <div className="metaPill" style={{ gap: 8 }}>
-                <button
-                  type="button"
-                  className="btnGhost"
-                  onClick={() => setTab("sent")}
-                  aria-pressed={tab === "sent"}
-                >
-                  Sent ({counts.sent.total})
-                </button>
-                <button
-                  type="button"
-                  className="btnGhost"
-                  onClick={() => setTab("incoming")}
-                  aria-pressed={tab === "incoming"}
-                >
-                  Incoming ({counts.incoming.total})
-                </button>
-                <button
-                  type="button"
-                  className="btnGhost"
-                  onClick={() => setTab("all")}
-                  aria-pressed={tab === "all"}
-                  title="Combined view (dedupes by token)"
-                >
-                  All
-                </button>
-              </div>
-
-              <div className="metaPill">
-                In flight:{" "}
-                <strong>
-                  {tab === "incoming"
-                    ? counts.incoming.inflight
-                    : tab === "sent"
-                    ? counts.sent.inflight
-                    : counts.sent.inflight + counts.incoming.inflight}
-                </strong>
-              </div>
-
-              <div className="metaPill">
-                Delivered:{" "}
-                <strong>
-                  {tab === "incoming"
-                    ? counts.incoming.delivered
-                    : tab === "sent"
-                    ? counts.sent.delivered
-                    : counts.sent.delivered + counts.incoming.delivered}
-                </strong>
-              </div>
-
-              <div style={{ flex: "1 1 auto" }} />
-
-              <div className="metaPill" style={{ gap: 10 }}>
-                <span style={{ opacity: 0.7 }}>Filter</span>
-                <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)} className="dashSelect">
-                  <option value="all">All</option>
-                  <option value="inflight">In flight</option>
-                  <option value="delivered">Delivered</option>
-                </select>
-              </div>
-
-              <div className="metaPill" style={{ gap: 10 }}>
-                <span style={{ opacity: 0.7 }}>Sort</span>
-                <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="dashSelect">
-                  <option value="newest">Newest</option>
-                  <option value="etaSoonest">ETA soonest</option>
-                  <option value="oldest">Oldest</option>
-                </select>
-              </div>
+          {/* ✅ ALWAYS SHOW the tabs row (even at 0) */}
+          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <div className="metaPill" style={{ gap: 8 }}>
+              <button type="button" className="btnGhost" onClick={() => setTab("sent")} aria-pressed={tab === "sent"}>
+                Sent ({counts.sent.total})
+              </button>
+              <button
+                type="button"
+                className="btnGhost"
+                onClick={() => setTab("incoming")}
+                aria-pressed={tab === "incoming"}
+              >
+                Incoming ({counts.incoming.total})
+              </button>
+              <button type="button" className="btnGhost" onClick={() => setTab("all")} aria-pressed={tab === "all"}>
+                All
+              </button>
             </div>
-          )}
+
+            <div className="metaPill">
+              In flight:{" "}
+              <strong>
+                {tab === "incoming"
+                  ? counts.incoming.inflight
+                  : tab === "sent"
+                  ? counts.sent.inflight
+                  : counts.sent.inflight + counts.incoming.inflight}
+              </strong>
+            </div>
+
+            <div className="metaPill">
+              Delivered:{" "}
+              <strong>
+                {tab === "incoming"
+                  ? counts.incoming.delivered
+                  : tab === "sent"
+                  ? counts.sent.delivered
+                  : counts.sent.delivered + counts.incoming.delivered}
+              </strong>
+            </div>
+
+            <div style={{ flex: "1 1 auto" }} />
+
+            <div className="metaPill" style={{ gap: 10 }}>
+              <span style={{ opacity: 0.7 }}>Filter</span>
+              <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)} className="dashSelect">
+                <option value="all">All</option>
+                <option value="inflight">In flight</option>
+                <option value="delivered">Delivered</option>
+              </select>
+            </div>
+
+            <div className="metaPill" style={{ gap: 10 }}>
+              <span style={{ opacity: 0.7 }}>Sort</span>
+              <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="dashSelect">
+                <option value="newest">Newest</option>
+                <option value="etaSoonest">ETA soonest</option>
+                <option value="oldest">Oldest</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <div className="card" style={{ marginTop: 14 }}>
@@ -628,11 +610,12 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* rest of your rendering remains exactly the same */}
         <div style={{ marginTop: 14 }} className="stack">
           {filteredSorted.length === 0 && !loading ? (
             <div className="card">
               <div className="muted">
-                {(sentLetters.length === 0 && incomingLetters.length === 0)
+                {sentLetters.length === 0 && incomingLetters.length === 0
                   ? "No letters loaded yet. Enter your email and hit “Load letters”."
                   : "No letters match your tab/filter/search."}
               </div>
@@ -686,14 +669,13 @@ export default function DashboardPage() {
               const isArchivingThis = archivingId === l.id;
               const isCancelingThis = cancelingId === l.id;
 
-              const birdLabel =
-                l.bird === "snipe" ? "Snipe" : l.bird === "goose" ? "Goose" : l.bird === "pigeon" ? "Pigeon" : null;
-
               const disableActions = isArchivingThis || isCancelingThis;
 
               const dirTag: Direction =
                 tab === "all"
-                  ? (l.from_email && l.to_email && l.from_email.toLowerCase() === l.to_email.toLowerCase() ? "both" : (l.direction as any) || "sent")
+                  ? l.from_email && l.to_email && l.from_email.toLowerCase() === l.to_email.toLowerCase()
+                    ? "both"
+                    : (l.direction as any) || "sent"
                   : (tab as any);
 
               const dirLabel = dirTag === "incoming" ? "INCOMING" : dirTag === "both" ? "SENT + INCOMING" : "SENT";
@@ -719,12 +701,6 @@ export default function DashboardPage() {
                           • {l.origin_name} → {l.dest_name}
                         </span>
                       </div>
-
-                      {birdLabel && (
-                        <div className="muted" style={{ marginTop: 6, opacity: 0.75 }}>
-                          Bird: <strong>{birdLabel}</strong>
-                        </div>
-                      )}
 
                       <div className="muted" style={{ marginTop: 6 }}>
                         📍 <strong>{geoText}</strong>
@@ -777,7 +753,6 @@ export default function DashboardPage() {
                       Copy link
                     </button>
 
-                    {/* ✅ Only Sent letters can be canceled/archived by sender in this UI */}
                     {dirLabel !== "INCOMING" && (
                       <>
                         <button
