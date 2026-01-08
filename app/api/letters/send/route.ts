@@ -374,4 +374,4 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ public_token: publicToken, eta_at: letter.eta_at });
-}
+} 
