@@ -505,13 +505,28 @@ export default function DashboardPage() {
       <div className="wrap">
         <div className="card">
           <div className="cardHead">
-            <div>
-              <div className="kicker">Mailbox</div>
-              <h1 className="h1">Dashboard</h1>
-              <p className="muted" style={{ marginTop: 6 }}>
-                Load your mailbox by entering your email. Sent + Incoming are separate tabs now (no more déjà vu).
-              </p>
-            </div>
+<div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+  <a
+    href="/"
+    aria-label="FLOK home"
+    className="flokMarkLink"
+    title="Home"
+  >
+    <img
+      src="/brand/flok-mark.png"
+      alt="FLOK"
+      className="flokMark"
+    />
+  </a>
+
+  <div>
+    <div className="kicker">Mailbox</div>
+    <h1 className="h1">Dashboard</h1>
+    <p className="muted" style={{ marginTop: 6 }}>
+      Load your mailbox by entering your email. Sent + Incoming are separate tabs now (no more déjà vu).
+    </p>
+  </div>
+</div>
 
             <a href="/new" className="linkPill">
               + Write a letter

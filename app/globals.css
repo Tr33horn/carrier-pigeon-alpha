@@ -1825,3 +1825,33 @@ body {
 .badgePop {
   animation: badgePop 520ms ease;
 }
+
+/* --- Subtle FLOK mark --- */
+.flokMarkLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  padding: 6px;
+  transition: transform 180ms ease, background 180ms ease;
+}
+
+.flokMarkLink:hover {
+  background: rgba(0,0,0,0.04);
+  transform: translateY(-1px);
+}
+
+.flokMark {
+  display: block;
+  height: 22px;
+  width: auto;
+  opacity: 0.85;
+}
+
+@media (min-width: 640px) {
+  .flokMark {
+    height: 24px;
+  }
+}
+
+.flokMark { opacity: 0.75; }

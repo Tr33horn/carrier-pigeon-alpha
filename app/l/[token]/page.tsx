@@ -883,7 +883,33 @@ export default function LetterStatusPage() {
         <section className="routeBanner">
           <div className="bannerTop">
             <div>
-              <div className="kicker">Flight status</div>
+              <div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 6,
+  }}
+>
+  <a
+    href="/"
+    aria-label="FLOK home"
+    title="Home"
+    className="flokMarkLink"
+    style={{ padding: 4 }}
+  >
+    {/* eslint-disable-next-line @next/next/no-img-element */}
+    <img
+      src="/brand/flok-mark.png"
+      alt="FLOK"
+      className="flokMark"
+    />
+  </a>
+
+  <div className="kicker" style={{ margin: 0 }}>
+    Flight status
+  </div>
+</div>
 
               <div className="routeHeadline">
                 {letter.origin_name} <span className="arrow">→</span> {letter.dest_name}
