@@ -42,39 +42,80 @@ export default function Home() {
     <main className="pageBg">
       <div className="wrap">
         <div className="homeCenter">
+          {/* Page-only tweaks */}
+          <style>{`
+            /* Make the headline behave like a “2-line hero” on phones */
+            .homeTitle {
+              margin-top: 8px;
+              text-wrap: balance;
+              max-width: 26ch; /* desktop-ish */
+              margin-left: auto;
+              margin-right: auto;
+            }
+
+            /* Hero card sizing */
+            .homeHero {
+              width: 100%;
+              max-width: 520px;
+              margin-left: auto;
+              margin-right: auto;
+            }
+
+            .homeHeroInner {
+              padding: 18px;
+            }
+
+            .homeHeroImg {
+              width: 100%;
+              height: auto;
+              display: block;
+              object-fit: contain; /* logo stays crisp, no weird cropping */
+              max-height: 360px;
+            }
+
+            @media (max-width: 520px) {
+              .homeTitle {
+                max-width: 18ch;  /* forces “Made to wait.” / “Meant to matter.” */
+                line-height: 1.05;
+              }
+
+              .homeHeroInner {
+                padding: 10px; /* tighter padding around the image */
+              }
+
+              .homeHeroImg {
+                max-height: 240px; /* stops it from eating the screen */
+              }
+            }
+          `}</style>
+
           {/* Header */}
           <div style={{ textAlign: "center" }}>
             <div className="kicker">FLOK</div>
-            <h1 className="h1" style={{ marginTop: 8 }}>
+
+            <h1 className="h1 homeTitle">
               Made to wait. Meant to matter.
             </h1>
+
             <p className="muted" style={{ marginTop: 10, fontSize: 14, opacity: 0.8 }}>
               Brought to you by Polaroid &amp; Maruchan Instant noodles
             </p>
           </div>
 
-          {/* Hero placeholder */}
+          {/* Hero */}
           <div className="card homeHero" aria-hidden="true">
             <div className="homeHeroInner">
-              <div className="muted" style={{ fontSize: 12 }}>
-                <img
-                  src="/hero/og.png"
-                  alt=""
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    display: "block",
-                  }}
-                />
-              </div>
+              <img
+                src="/hero/og.png"
+                alt=""
+                className="homeHeroImg"
+              />
             </div>
           </div>
 
           {/* Actions */}
           <div className="card" style={{ width: "100%" }}>
             <div className="stack" style={{ gap: 10 }}>
-
               <Link href="/new" className="btnPrimary" style={{ textAlign: "center" }}>
                 Write a Letter
               </Link>
@@ -82,7 +123,8 @@ export default function Home() {
               <Link href="/dashboard" className="btnGhost" style={{ textAlign: "center" }}>
                 Go to Dashboard
               </Link>
-                            <Link href="/about" className="btnGhost" style={{ textAlign: "center" }}>
+
+              <Link href="/about" className="btnGhost" style={{ textAlign: "center" }}>
                 About FLOK
               </Link>
             </div>
@@ -98,11 +140,7 @@ export default function Home() {
                     height: 10,
                     borderRadius: 999,
                     background:
-                      ok === null
-                        ? "rgba(0,0,0,0.35)"
-                        : ok
-                        ? "var(--ok-green)"
-                        : "#d92d20",
+                      ok === null ? "rgba(0,0,0,0.35)" : ok ? "var(--ok-green)" : "#d92d20",
                   }}
                 />
                 <span style={{ fontWeight: 900 }}>
