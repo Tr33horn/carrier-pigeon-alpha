@@ -11,6 +11,17 @@ function joinUrl(base: string, pathOrUrl: string) {
   return `${b}${p}`;
 }
 
+const BUTTON = {
+  backgroundColor: "#111",
+  color: "#fff",
+  padding: "12px 18px",
+  borderRadius: 14,
+  display: "inline-block",
+  textDecoration: "none",
+  fontWeight: 700,
+  letterSpacing: "-0.01em",
+} as const;
+
 export function LetterStatusLinkResentEmail({
   subject,
   originName,
@@ -26,76 +37,31 @@ export function LetterStatusLinkResentEmail({
 
   return (
     <EmailLayout preview="Your flight status link">
-      <Text
-        style={{
-          fontSize: 18,
-          fontWeight: 800,
-          margin: "0 0 10px",
-          textAlign: "center",
-        }}
-      >
+      <Text style={{ fontSize: 18, fontWeight: 800, margin: "0 0 10px", textAlign: "center" }}>
         Status link re-sent
       </Text>
 
-      <Text style={{ margin: "0 0 10px", textAlign: "center" }}>
-        You asked nicely. We complied.
+      <Text style={{ margin: "0 0 14px", textAlign: "center" }}>
+        You asked nicely. We complied undermost protest from the pigeons.
       </Text>
 
-      <Text
-        style={{
-          margin: "0 0 12px",
-          fontWeight: 800,
-          textAlign: "center",
-        }}
-      >
+      <Text style={{ margin: "0 0 14px", fontWeight: 800, textAlign: "center" }}>
         {subject || "(No subject)"}
       </Text>
 
-      <Text style={{ margin: "0 0 18px", color: "#444", textAlign: "center" }}>
+      <Text style={{ margin: "0 0 14px", color: "#444", textAlign: "center" }}>
         Route: <strong>{originName}</strong> → <strong>{destName}</strong>
       </Text>
 
-      <Section style={{ textAlign: "center", marginTop: 8 }}>
-        <Button
-          href={href}
-          style={{
-            backgroundColor: "#111",
-            color: "#fff",
-            padding: "12px 18px",
-            borderRadius: 10,
-            display: "inline-block",
-            textDecoration: "none",
-            fontWeight: 700,
-          }}
-        >
+      <Section style={{ textAlign: "center", marginTop: 10 }}>
+        <Button href={href} style={BUTTON}>
           View flight status
         </Button>
       </Section>
 
-      <Text
-        style={{
-          fontSize: 12,
-          color: "#666",
-          marginTop: 18,
-          textAlign: "center",
-        }}
-      >
+      <Text style={{ fontSize: 12, color: "#666", marginTop: 18, textAlign: "center" }}>
         We found your link and slapped a stamp on it.
       </Text>
     </EmailLayout>
-  );
-}
-
-/**
- * ✅ Required preview for React Email sidebar
- */
-export default function Preview() {
-  return (
-    <LetterStatusLinkResentEmail
-      subject="SNIPE TEST"
-      originName="Seattle, WA"
-      destName="New York, NY"
-      statusUrl="https://carrier-pigeon-alpha.vercel.app/l/demo-token"
-    />
   );
 }

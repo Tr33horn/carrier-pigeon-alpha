@@ -12,6 +12,17 @@ function joinUrl(base: string, pathOrUrl: string) {
   return `${b}${p}`;
 }
 
+const BUTTON = {
+  backgroundColor: "#111",
+  color: "#fff",
+  padding: "12px 18px",
+  borderRadius: 14,
+  display: "inline-block",
+  textDecoration: "none",
+  fontWeight: 700,
+  letterSpacing: "-0.01em",
+} as const;
+
 export function LetterOnTheWayEmail({
   toName,
   fromName,
@@ -33,80 +44,33 @@ export function LetterOnTheWayEmail({
 
   return (
     <EmailLayout preview="A letter is on the way.">
-      {/* Bird */}
-      <Section style={{ textAlign: "center", margin: "12px 0 16px" }}>
-        <div style={{ maxWidth: 220, margin: "0 auto" }}>
-          <BirdStateImage bird={bird ?? undefined} state="fly" alt="Courier in flight" />
-        </div>
-      </Section>
+      <BirdStateImage bird={bird ?? undefined} state="fly" alt="Courier in flight" />
 
-      <Text
-        style={{
-          fontSize: 18,
-          fontWeight: 800,
-          margin: "0 0 10px",
-          textAlign: "center",
-        }}
-      >
+      <Text style={{ fontSize: 18, fontWeight: 800, margin: "0 0 10px", textAlign: "center" }}>
         A letter is on the way.
       </Text>
 
-      <Text style={{ margin: "0 0 10px", textAlign: "center" }}>
-        Hey {toName || "there"} — <strong>{fromName || "someone"}</strong> sent you a letter. It stays sealed until
-        delivery.
+      <Text style={{ margin: "0 0 14px", textAlign: "center" }}>
+        Hey {toName || "there"} — <strong>{fromName || "someone"}</strong> sent you a letter.
+        <br />
+        It stays sealed until delivery.
       </Text>
 
-      <Text style={{ margin: "0 0 18px", color: "#444", textAlign: "center" }}>
+      <Text style={{ margin: "0 0 14px", color: "#444", textAlign: "center" }}>
         Route: <strong>{originName}</strong> → <strong>{destName}</strong>
         <br />
         ETA (UTC): <strong>{etaTextUtc}</strong>
       </Text>
 
-      {/* CTA */}
-      <Section style={{ textAlign: "center", marginTop: 8 }}>
-        <Button
-          href={href}
-          style={{
-            backgroundColor: "#111",
-            color: "#fff",
-            padding: "12px 18px",
-            borderRadius: 10,
-            display: "inline-block",
-            textDecoration: "none",
-            fontWeight: 700,
-          }}
-        >
+      <Section style={{ textAlign: "center", marginTop: 10 }}>
+        <Button href={href} style={BUTTON}>
           Track the flight
         </Button>
       </Section>
 
-      <Text
-        style={{
-          fontSize: 12,
-          color: "#666",
-          marginTop: 18,
-          textAlign: "center",
-        }}
-      >
+      <Text style={{ fontSize: 12, color: "#666", marginTop: 18, textAlign: "center" }}>
         No peeking. The bird has a union.
       </Text>
     </EmailLayout>
-  );
-}
-
-/**
- * ✅ Required preview for React Email sidebar
- */
-export default function Preview() {
-  return (
-    <LetterOnTheWayEmail
-      toName="Greggor"
-      fromName="The Pigeon Union"
-      statusUrl="https://carrier-pigeon-alpha.vercel.app/l/demo-token"
-      originName="Seattle, WA"
-      destName="New York, NY"
-      etaTextUtc="1/7/2026, 10:18:24 PM UTC"
-      bird="pigeon"
-    />
   );
 }

@@ -12,6 +12,17 @@ function joinUrl(base: string, pathOrUrl: string) {
   return `${b}${p}`;
 }
 
+const BUTTON = {
+  backgroundColor: "#111",
+  color: "#fff",
+  padding: "12px 18px",
+  borderRadius: 14,
+  display: "inline-block",
+  textDecoration: "none",
+  fontWeight: 700,
+  letterSpacing: "-0.01em",
+} as const;
+
 export function LetterDeliveredEmail({
   toName,
   fromName,
@@ -31,41 +42,22 @@ export function LetterDeliveredEmail({
 
   return (
     <EmailLayout preview="Your letter has arrived.">
-      {/* Bird (centered + smaller via BirdStateImage maxWidth=220 already) */}
       <BirdStateImage bird={bird ?? undefined} state="landed" alt="Courier landed" />
 
-      <Text
-        style={{
-          fontSize: 18,
-          fontWeight: 800,
-          margin: "0 0 10px",
-          textAlign: "center",
-        }}
-      >
+      <Text style={{ fontSize: 18, fontWeight: 800, margin: "0 0 10px", textAlign: "center" }}>
         Delivered ✅
       </Text>
 
-      <Text style={{ margin: "0 0 10px", textAlign: "center" }}>
+      <Text style={{ margin: "0 0 14px", textAlign: "center" }}>
         Hey {toName || "there"} — your letter from <strong>{fromName || "someone"}</strong> has landed.
       </Text>
 
-      <Text style={{ margin: "0 0 18px", color: "#444", textAlign: "center" }}>
+      <Text style={{ margin: "0 0 14px", color: "#444", textAlign: "center" }}>
         Route: <strong>{originName}</strong> → <strong>{destName}</strong>
       </Text>
 
-      <Section style={{ textAlign: "center", marginTop: 8 }}>
-        <Button
-          href={href}
-          style={{
-            backgroundColor: "#111",
-            color: "#fff",
-            padding: "12px 18px",
-            borderRadius: 10,
-            display: "inline-block",
-            textDecoration: "none",
-            fontWeight: 700,
-          }}
-        >
+      <Section style={{ textAlign: "center", marginTop: 10 }}>
+        <Button href={href} style={BUTTON}>
           Open the letter
         </Button>
       </Section>
@@ -74,22 +66,5 @@ export function LetterDeliveredEmail({
         The long way home.
       </Text>
     </EmailLayout>
-  );
-}
-
-/**
- * ✅ React Email Preview needs a default export to show in the sidebar.
- * This does NOT affect your production email sending code.
- */
-export default function Preview() {
-  return (
-    <LetterDeliveredEmail
-      toName="Greggor"
-      fromName="The Flock"
-      statusUrl="/l/demo-token"
-      originName="Seattle, WA"
-      destName="New York, NY"
-      bird="pigeon"
-    />
   );
 }
