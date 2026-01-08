@@ -10,6 +10,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Call deliveries endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -sS -X GET "https://pigeon.humanrobotalliance.com/api/cron/deliveries" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          set -euo pipefail
+
+          URL="https://pigeon.humanrobotalliance.com/api/cron/deliveries"
+
+          echo "Hitting: $URL"
+          echo "UTC now: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+          # -f: fail on 4xx/5xx
+          # --max-time: don't hang forever
+          # -D -: print response headers
+          curl -fSsS --max-time 30 -D - \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "$URL" | tee response.json
+
+          echo ""
+          echo "Response saved to response.json"
