@@ -65,9 +65,16 @@ function getBaseUrl(req: Request) {
 }
 
 export async function GET(req: Request) {
-  // --- auth ---
-  const auth = req.headers.get("authorization");
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  // --- auth (robust) ---
+  const secret = (process.env.CRON_SECRET ?? "").trim();
+  const authRaw = (req.headers.get("authorization") ?? "").trim();
+
+  // Expect: "Bearer <token>"
+  const token = authRaw.toLowerCase().startsWith("bearer ")
+    ? authRaw.slice(7).trim()
+    : "";
+
+  if (!secret || token !== secret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
