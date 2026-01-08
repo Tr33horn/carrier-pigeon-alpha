@@ -36,23 +36,18 @@ export function BirdStateImage({
   const src = joinUrl(APP_URL, `/birds/${birdFilename(safeBird, state)}`);
 
   return (
-    <Section
-      style={{
-        margin: "16px 0 18px",
-        textAlign: "center",
-      }}
-    >
+    <Section style={{ margin: "10px 0 18px", textAlign: "center" }}>
       <Img
         src={src}
-        alt={alt || `${safeBird} ${state}`}
         width="220"
+        height="220"
+        alt={alt || `${safeBird} ${state}`}
         style={{
-          display: "block",
           margin: "0 auto",
-          width: "220px",
-          maxWidth: "220px",
-          height: "auto",
-          borderRadius: 12,
+          display: "block",
+          borderRadius: 18,
+          border: "1px solid rgba(0,0,0,0.06)",
+          backgroundColor: "#fbfaf7",
         }}
       />
     </Section>
