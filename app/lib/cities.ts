@@ -71,10 +71,10 @@ export const CITIES: City[] = [
   // Maryland
   { name: "Baltimore, MD", lat: 39.2904, lon: -76.6122 },
 
-  // Massachusetts (multiple)
+  // Massachusetts
   { name: "Boston, MA", lat: 42.3601, lon: -71.0589 },
 
-  // Michigan (multiple)
+  // Michigan
   { name: "Detroit, MI", lat: 42.3314, lon: -83.0458 },
   { name: "Grand Rapids, MI", lat: 42.9634, lon: -85.6681 },
 
@@ -84,7 +84,7 @@ export const CITIES: City[] = [
   // Mississippi
   { name: "Jackson, MS", lat: 32.2988, lon: -90.1848 },
 
-  // Missouri (multiple)
+  // Missouri
   { name: "St. Louis, MO", lat: 38.6270, lon: -90.1994 },
   { name: "Kansas City, MO", lat: 39.0997, lon: -94.5786 },
 
@@ -101,26 +101,26 @@ export const CITIES: City[] = [
   // New Hampshire
   { name: "Manchester, NH", lat: 42.9956, lon: -71.4548 },
 
-  // New Jersey (multiple)
+  // New Jersey
   { name: "Newark, NJ", lat: 40.7357, lon: -74.1724 },
   { name: "Jersey City, NJ", lat: 40.7178, lon: -74.0431 },
 
   // New Mexico
   { name: "Albuquerque, NM", lat: 35.0844, lon: -106.6504 },
 
-  // New York (multiple)
+  // New York
   { name: "New York, NY", lat: 40.7128, lon: -74.0060 },
   { name: "Buffalo, NY", lat: 42.8864, lon: -78.8784 },
   { name: "Rochester, NY", lat: 43.1566, lon: -77.6088 },
 
-  // North Carolina (multiple)
+  // North Carolina
   { name: "Charlotte, NC", lat: 35.2271, lon: -80.8431 },
   { name: "Raleigh, NC", lat: 35.7796, lon: -78.6382 },
 
   // North Dakota
   { name: "Fargo, ND", lat: 46.8772, lon: -96.7898 },
 
-  // Ohio (multiple)
+  // Ohio
   { name: "Columbus, OH", lat: 39.9612, lon: -82.9988 },
   { name: "Cleveland, OH", lat: 41.4993, lon: -81.6944 },
 
@@ -131,7 +131,7 @@ export const CITIES: City[] = [
   // Oregon
   { name: "Portland, OR", lat: 45.5152, lon: -122.6784 },
 
-  // Pennsylvania (multiple)
+  // Pennsylvania
   { name: "Philadelphia, PA", lat: 39.9526, lon: -75.1652 },
   { name: "Pittsburgh, PA", lat: 40.4406, lon: -79.9959 },
 
@@ -144,11 +144,11 @@ export const CITIES: City[] = [
   // South Dakota
   { name: "Sioux Falls, SD", lat: 43.5446, lon: -96.7311 },
 
-  // Tennessee (multiple)
+  // Tennessee
   { name: "Nashville, TN", lat: 36.1627, lon: -86.7816 },
   { name: "Memphis, TN", lat: 35.1495, lon: -90.0490 },
 
-  // Texas (multiple)
+  // Texas
   { name: "Houston, TX", lat: 29.7604, lon: -95.3698 },
   { name: "Dallas, TX", lat: 32.7767, lon: -96.7970 },
   { name: "Austin, TX", lat: 30.2672, lon: -97.7431 },
@@ -160,13 +160,18 @@ export const CITIES: City[] = [
   // Vermont
   { name: "Burlington, VT", lat: 44.4759, lon: -73.2121 },
 
-  // Virginia (multiple)
+  // Virginia
   { name: "Virginia Beach, VA", lat: 36.8529, lon: -75.9780 },
   { name: "Richmond, VA", lat: 37.5407, lon: -77.4360 },
 
   // Washington (multiple)
   { name: "Seattle, WA", lat: 47.6062, lon: -122.3321 },
   { name: "Spokane, WA", lat: 47.6588, lon: -117.4260 },
+
+  // ✅ Added
+  { name: "Snoqualmie, WA", lat: 47.5287, lon: -121.8254 },
+  { name: "Vashon, WA", lat: 47.4484, lon: -122.4590 },
+  { name: "Jonny Seamans Lair", lat: 47.4239, lon: -122.4314 },
 
   // West Virginia
   { name: "Charleston, WV", lat: 38.3498, lon: -81.6326 },
