@@ -84,7 +84,6 @@ type Flight = {
 
 type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
 
-// ✅ add delivered
 type TimelineKind = "checkpoint" | "sleep" | "day" | "delivered";
 
 type TimelineItem = {
@@ -95,6 +94,8 @@ type TimelineItem = {
 };
 
 type BirdType = "pigeon" | "snipe" | "goose";
+
+/* ------------------- helpers ------------------- */
 
 function inferBird(letter: Letter | null): BirdType {
   const raw = String((letter as any)?.bird || "").toLowerCase();
@@ -114,6 +115,16 @@ function birdLabel(b: BirdType) {
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
+}
+
+function parseMs(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : null;
+}
+
+function clampMs(t: number, a: number, b: number) {
+  return Math.max(a, Math.min(b, t));
 }
 
 function formatCountdown(ms: number) {
@@ -157,7 +168,7 @@ function formatUtc(iso: string) {
   );
 }
 
-/** Back-compat name (if anything else relies on this) */
+/** Back-compat name */
 function formatUtcFallback(iso: string) {
   return formatUtc(iso);
 }
@@ -200,53 +211,27 @@ function Ico({
     case "x":
       return (
         <svg {...common}>
-          <path
-            d="M18 6 6 18M6 6l12 12"
-            stroke="currentColor"
-            strokeWidth="2.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     case "moon":
       return (
         <svg {...common}>
-          <path
-            d="M21 14.2A7.5 7.5 0 0 1 9.8 3a6.6 6.6 0 1 0 11.2 11.2Z"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinejoin="round"
-          />
+          <path d="M21 14.2A7.5 7.5 0 0 1 9.8 3a6.6 6.6 0 1 0 11.2 11.2Z" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round" />
         </svg>
       );
     case "pin":
       return (
         <svg {...common}>
-          <path
-            d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z"
-            stroke="currentColor"
-            strokeWidth="2.4"
-          />
+          <path d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round" />
+          <path d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z" stroke="currentColor" strokeWidth="2.4" />
         </svg>
       );
     case "speed":
       return (
         <svg {...common}>
           <path d="M5 13a7 7 0 0 1 14 0" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-          <path
-            d="M12 13l4.5-4.5"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M12 13l4.5-4.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M4 13h2M18 13h2" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
         </svg>
       );
@@ -254,25 +239,13 @@ function Ico({
       return (
         <svg {...common}>
           <path d="M7 7h10M7 17h10" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-          <path
-            d="M9 9l-2-2 2-2M15 15l2 2-2 2"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M9 9l-2-2 2-2M15 15l2 2-2 2" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     case "check":
       return (
         <svg {...common}>
-          <path
-            d="M20 6 9 17l-5-5"
-            stroke="currentColor"
-            strokeWidth="2.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     case "mail":
@@ -348,15 +321,7 @@ function BirdStatusCard({
 }
 
 /* ---------- wax seal overlay ---------- */
-function WaxSealOverlay({
-  etaText,
-  cracking,
-  canceled,
-}: {
-  etaText: string;
-  cracking?: boolean;
-  canceled?: boolean;
-}) {
+function WaxSealOverlay({ etaText, cracking, canceled }: { etaText: string; cracking?: boolean; canceled?: boolean }) {
   return (
     <div className={cracking ? "seal crack" : "seal"} style={{ position: "relative" }}>
       <div className="sealCard">
@@ -463,7 +428,6 @@ function RailTimeline({
           const isDeliveredRow = it.kind === "delivered";
           const isSleep = it.kind === "sleep";
 
-          // ✅ delivered row is always past; final forces everything past
           const isPast = final || isDeliveredRow || new Date(it.at).getTime() <= now.getTime();
           const shouldPop = popped[it.key] && isPast;
           const isCurrent = currentKey === it.key;
@@ -713,6 +677,31 @@ export default function LetterStatusPage() {
     return (letter.eta_at_adjusted && letter.eta_at_adjusted.trim()) || letter.eta_at;
   }, [letter]);
 
+  const sentMs = useMemo(() => parseMs(letter?.sent_at) ?? null, [letter?.sent_at]);
+  const etaMs = useMemo(() => parseMs(effectiveEtaISO) ?? null, [effectiveEtaISO]);
+
+  /**
+   * ✅ Fix for “ETA vs last flight-log card time”:
+   * If checkpoints drift past ETA (server data can do this), clamp checkpoint timestamps
+   * into [sent_at, effectiveEtaISO] for *display + ordering*.
+   *
+   * This prevents a “Final descent 11:15 AM” card when ETA says “8:56 AM”.
+   */
+  const checkpointsAdjusted = useMemo(() => {
+    if (!checkpoints.length) return [];
+    if (sentMs == null || etaMs == null) return checkpoints.map((c) => ({ ...c, _atAdj: c.at }));
+
+    const lo = Math.min(sentMs, etaMs);
+    const hi = Math.max(sentMs, etaMs);
+
+    return checkpoints.map((c) => {
+      const t = parseMs(c.at);
+      if (t == null) return { ...c, _atAdj: c.at };
+      const clamped = clampMs(t, lo, hi);
+      return { ...c, _atAdj: new Date(clamped).toISOString() };
+    });
+  }, [checkpoints, sentMs, etaMs]);
+
   const sleeping = !!flight?.sleeping;
 
   // ✅ delivered is server truth; canceled always overrides
@@ -765,19 +754,22 @@ export default function LetterStatusPage() {
   }, [letter, progress]);
 
   const checkpointsByTime = useMemo(() => {
-    const cps = [...checkpoints];
-    cps.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+    const cps = [...checkpointsAdjusted];
+    cps.sort((a: any, b: any) => Date.parse(a._atAdj || a.at) - Date.parse(b._atAdj || b.at));
     return cps;
-  }, [checkpoints]);
+  }, [checkpointsAdjusted]);
 
   const currentCheckpoint = useMemo(() => {
     if (!checkpointsByTime.length || !letter) return null;
-    const t = now.getTime();
-    let current: Checkpoint | null = null;
-    for (const cp of checkpointsByTime) {
-      if (new Date(cp.at).getTime() <= t) current = cp;
+    const tNow = now.getTime();
+    let current: any = null;
+
+    for (const cp of checkpointsByTime as any[]) {
+      const atISO = cp._atAdj || cp.at;
+      if (new Date(atISO).getTime() <= tNow) current = cp;
     }
-    return current ?? checkpointsByTime[0];
+
+    return current ?? (checkpointsByTime as any[])[0];
   }, [checkpointsByTime, letter, now]);
 
   const secondsSinceFetch = useMemo(() => {
@@ -791,8 +783,8 @@ export default function LetterStatusPage() {
     if (currentOverText && currentOverText.trim()) return currentOverText;
 
     const fallback =
-      (currentCheckpoint?.geo_text && currentCheckpoint.geo_text.trim()) ||
-      (currentCheckpoint?.name && currentCheckpoint.name.trim()) ||
+      (currentCheckpoint?.geo_text && String(currentCheckpoint.geo_text).trim()) ||
+      (currentCheckpoint?.name && String(currentCheckpoint.name).trim()) ||
       "somewhere over the U.S.";
 
     return fallback;
@@ -812,12 +804,15 @@ export default function LetterStatusPage() {
 
   // ✅ Build timeline + add Delivered card
   const timelineItems = useMemo(() => {
-    const base: TimelineItem[] = checkpointsByTime.map((cp) => ({
-      key: `cp-${cp.id}`,
-      name: cp.name,
-      at: cp.at,
-      kind: isSleepCheckpoint(cp) ? "sleep" : "checkpoint",
-    }));
+    const base: TimelineItem[] = (checkpointsByTime as any[]).map((cp) => {
+      const atISO = cp._atAdj || cp.at;
+      return {
+        key: `cp-${cp.id}`,
+        name: cp.name,
+        at: atISO,
+        kind: isSleepCheckpoint(cp) ? "sleep" : "checkpoint",
+      };
+    });
 
     // ✅ Add a final delivered row (distinct tint)
     if (uiDelivered && !canceled) {
@@ -945,7 +940,6 @@ export default function LetterStatusPage() {
   const archivedLabel = archivedAtISO ? `Archived • ${new Date(archivedAtISO).toLocaleString()}` : "Archived";
   const canceledLabel = canceledAtISO ? `Canceled • ${new Date(canceledAtISO).toLocaleString()}` : "Canceled";
 
-  // ✅ pill label improved
   const timelineModeLabel = uiDelivered ? "Delivered" : canceled ? "Canceled" : archived ? "Archived" : "Auto";
 
   return (
@@ -954,21 +948,8 @@ export default function LetterStatusPage() {
         <section className="routeBanner">
           <div className="bannerTop">
             <div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  marginBottom: 6,
-                }}
-              >
-                <a
-                  href="/"
-                  aria-label="FLOK home"
-                  title="Home"
-                  className="flokMarkLink"
-                  style={{ padding: 4 }}
-                >
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                <a href="/" aria-label="FLOK home" title="Home" className="flokMarkLink" style={{ padding: 4 }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/brand/flok-mark.png" alt="FLOK" className="flokMark" />
                 </a>
@@ -999,9 +980,7 @@ export default function LetterStatusPage() {
                         <span className="liveText">{sleeping ? "SLEEPING" : "LIVE"}</span>
                       </div>
                       <div className="liveSub">
-                        {sleeping
-                          ? `Wakes at ${flight?.sleep_local_text || "soon"}`
-                          : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
+                        {sleeping ? `Wakes at ${flight?.sleep_local_text || "soon"}` : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
                       </div>
                     </div>
 
@@ -1015,13 +994,7 @@ export default function LetterStatusPage() {
                     </div>
                   </>
                 ) : canceled ? (
-                  <div
-                    className="metaPill"
-                    style={{
-                      borderColor: "rgba(220,38,38,0.35)",
-                      background: "rgba(220,38,38,0.06)",
-                    }}
-                  >
+                  <div className="metaPill" style={{ borderColor: "rgba(220,38,38,0.35)", background: "rgba(220,38,38,0.06)" }}>
                     <span className="ico" style={{ color: "rgb(220,38,38)" }}>
                       <Ico name="x" />
                     </span>
@@ -1125,10 +1098,7 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div
-                className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""}
-                style={{ opacity: uiDelivered && !canceled ? 1 : 0 }}
-              >
+              <div className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: uiDelivered && !canceled ? 1 : 0 }}>
                 <div className="body">{uiDelivered && !canceled ? (letter.body ?? "") : ""}</div>
               </div>
 
@@ -1149,21 +1119,11 @@ export default function LetterStatusPage() {
               <div className="kicker">Map</div>
 
               <div className="mapStyleRow" role="group" aria-label="Map style">
-                <button
-                  type="button"
-                  className={`mapStyleBtn ${mapStyle === "carto-positron" ? "on" : ""}`}
-                  onClick={() => setMapStyle("carto-positron")}
-                  aria-pressed={mapStyle === "carto-positron"}
-                >
+                <button type="button" className={`mapStyleBtn ${mapStyle === "carto-positron" ? "on" : ""}`} onClick={() => setMapStyle("carto-positron")} aria-pressed={mapStyle === "carto-positron"}>
                   Light
                 </button>
 
-                <button
-                  type="button"
-                  className={`mapStyleBtn ${mapStyle === "carto-voyager" ? "on" : ""}`}
-                  onClick={() => setMapStyle("carto-voyager")}
-                  aria-pressed={mapStyle === "carto-voyager"}
-                >
+                <button type="button" className={`mapStyleBtn ${mapStyle === "carto-voyager" ? "on" : ""}`} onClick={() => setMapStyle("carto-voyager")} aria-pressed={mapStyle === "carto-voyager"}>
                   Voyager
                 </button>
 
@@ -1179,14 +1139,7 @@ export default function LetterStatusPage() {
             </div>
 
             <div style={{ marginTop: 12 }}>
-              <MapView
-                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-                progress={progress}
-                tooltipText={mapTooltip}
-                mapStyle={mapStyle}
-                markerMode={markerMode}
-              />
+              <MapView origin={{ lat: letter.origin_lat, lon: letter.origin_lon }} dest={{ lat: letter.dest_lat, lon: letter.dest_lon }} progress={progress} tooltipText={mapTooltip} mapStyle={mapStyle} markerMode={markerMode} />
             </div>
 
             <div style={{ marginTop: 14 }}>
