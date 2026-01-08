@@ -214,6 +214,26 @@ function generateCheckpoints(
   });
 }
 
+/** ✅ Base URL helper for absolute links in emails */
+function getBaseUrl(req: Request) {
+  const envBase = process.env.APP_URL || process.env.APP_BASE_URL;
+  if (envBase && envBase.trim()) return envBase.trim();
+
+  // Works on Vercel + local + most hosts
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  const proto = req.headers.get("x-forwarded-proto") || "https";
+  if (host) return `${proto}://${host}`;
+
+  return "http://localhost:3000";
+}
+
+function joinUrl(base: string, pathOrUrl: string) {
+  if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
+  const b = base.endsWith("/") ? base.slice(0, -1) : base;
+  const p = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
+  return `${b}${p}`;
+}
+
 export async function POST(req: Request) {
   const body = await req.json();
 
@@ -293,7 +313,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: letterErr?.message ?? "Insert failed" }, { status: 500 });
   }
 
-  const checkpoints = generateCheckpoints(sentAt, etaAt, origin.lat, origin.lon, destination.lat, destination.lon);
+  const checkpoints = generateCheckpoints(
+    sentAt,
+    etaAt,
+    origin.lat,
+    origin.lon,
+    destination.lat,
+    destination.lon
+  );
 
   const { error: cpErr } = await supabaseServer
     .from("letter_checkpoints")
@@ -321,9 +348,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: cpErr.message }, { status: 500 });
   }
 
-  // ✅ Send “On the way” email using your template system
+  // ✅ Send “On the way” email using your template system (ABSOLUTE status URL)
   try {
+    const baseUrl = getBaseUrl(req);
     const statusPath = `/l/${publicToken}`;
+    const absoluteStatusUrl = joinUrl(baseUrl, statusPath);
+
     const etaTextUtc = formatUtc(letter.eta_at);
 
     await sendEmail({
@@ -335,8 +365,8 @@ export async function POST(req: Request) {
         originName: letter.origin_name || origin.name || "Origin",
         destName: letter.dest_name || destination.name || "Destination",
         etaTextUtc,
-        statusUrl: statusPath,
-        bird: (letter.bird as BirdType) || bird, // ✅ pass bird to template
+        statusUrl: absoluteStatusUrl, // ✅ FIX
+        bird: (letter.bird as BirdType) || bird,
       }),
     });
   } catch (e) {
