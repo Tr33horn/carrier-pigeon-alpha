@@ -512,11 +512,9 @@ export default function DashboardPage() {
     className="flokMarkLink"
     title="Home"
   >
-    <img
-      src="/brand/flok-mark.png"
-      alt="FLOK"
-      className="flokMark"
-    />
+<div className="dashBrand">
+  <img src="/brand/flok-mark.png" alt="FLOK" className="dashLogo" />
+</div>
   </a>
 
   <div>

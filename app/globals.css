@@ -568,6 +568,21 @@ body {
   border-radius: 999px;
 }
 
+.dashBrand {
+  flex: 0 0 auto;         /* don’t grow or shrink */
+  width: 64px;            /* pick the size you want */
+  height: 64px;
+  display: grid;
+  place-items: center;
+}
+
+.dashLogo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;    /* never squish, just scale */
+  display: block;
+}
+
 /* pulse ring animation inside thumbnail */
 .thumbPulse{
   transform-origin: center;
