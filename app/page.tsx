@@ -44,21 +44,18 @@ export default function Home() {
         <div className="homeCenter">
           {/* Page-only tweaks */}
           <style>{`
-            /* Make the headline behave like a “2-line hero” on phones */
+            /* Desktop/tablet: do NOT mess with layout widths */
             .homeTitle {
               margin-top: 8px;
               text-wrap: balance;
-              max-width: 26ch; /* desktop-ish */
               margin-left: auto;
               margin-right: auto;
+              max-width: none; /* keep desktop as-is */
             }
 
-            /* Hero card sizing */
+            /* Hero card: same width behavior as other cards */
             .homeHero {
               width: 100%;
-              max-width: 520px;
-              margin-left: auto;
-              margin-right: auto;
             }
 
             .homeHeroInner {
@@ -69,22 +66,29 @@ export default function Home() {
               width: 100%;
               height: auto;
               display: block;
-              object-fit: contain; /* logo stays crisp, no weird cropping */
-              max-height: 360px;
+              object-fit: contain; /* logo stays crisp */
+              max-height: 420px;   /* desktop comfort */
             }
 
+            /* Mobile-only changes */
             @media (max-width: 520px) {
               .homeTitle {
-                max-width: 18ch;  /* forces “Made to wait.” / “Meant to matter.” */
+                max-width: 18ch;  /* forces 2 lines */
                 line-height: 1.05;
               }
 
               .homeHeroInner {
-                padding: 10px; /* tighter padding around the image */
+                padding: 10px;    /* tighter padding around image */
               }
 
               .homeHeroImg {
-                max-height: 240px; /* stops it from eating the screen */
+                max-height: 240px; /* stops hero from hogging screen */
+              }
+
+              /* Make hero feel less like a huge framed painting (mobile only) */
+              .homeHero {
+                border-radius: 18px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.06);
               }
             }
           `}</style>
@@ -93,23 +97,17 @@ export default function Home() {
           <div style={{ textAlign: "center" }}>
             <div className="kicker">FLOK</div>
 
-            <h1 className="h1 homeTitle">
-              Made to wait. Meant to matter.
-            </h1>
+            <h1 className="h1 homeTitle">Made to wait. Meant to matter.</h1>
 
             <p className="muted" style={{ marginTop: 10, fontSize: 14, opacity: 0.8 }}>
               Brought to you by Polaroid &amp; Maruchan Instant noodles
             </p>
           </div>
 
-          {/* Hero */}
+          {/* Hero (now same width as other cards) */}
           <div className="card homeHero" aria-hidden="true">
             <div className="homeHeroInner">
-              <img
-                src="/hero/og.png"
-                alt=""
-                className="homeHeroImg"
-              />
+              <img src="/hero/og.png" alt="" className="homeHeroImg" />
             </div>
           </div>
 
@@ -139,13 +137,10 @@ export default function Home() {
                     width: 10,
                     height: 10,
                     borderRadius: 999,
-                    background:
-                      ok === null ? "rgba(0,0,0,0.35)" : ok ? "var(--ok-green)" : "#d92d20",
+                    background: ok === null ? "rgba(0,0,0,0.35)" : ok ? "var(--ok-green)" : "#d92d20",
                   }}
                 />
-                <span style={{ fontWeight: 900 }}>
-                  {ok === null ? "Checking" : ok ? "Connected" : "Issue"}
-                </span>
+                <span style={{ fontWeight: 900 }}>{ok === null ? "Checking" : ok ? "Connected" : "Issue"}</span>
                 <span style={{ opacity: 0.75, fontWeight: 900 }}>{status}</span>
               </div>
             </div>
