@@ -34,7 +34,7 @@ export default function AboutPage() {
                 width: 150,
                 height: "auto",
                 opacity: 0.96,
-                filter: "drop-shadow(0 10px 18px rgba(0,0,0,0.10))",
+                // no background, no wrapper — let the transparency breathe
               }}
             />
 
@@ -58,7 +58,7 @@ export default function AboutPage() {
               textAlign: "center",
               maxWidth: 560,
               margin: "0 auto",
-              paddingBottom: 26,
+              paddingBottom: 22,
             }}
           >
             <p>
@@ -81,9 +81,33 @@ export default function AboutPage() {
               No ads. No feeds. Just messages in flight.
             </p>
           </div>
+
+          {/* Footer */}
+          <div
+            style={{
+              textAlign: "center",
+              padding: "10px 16px 22px",
+              fontSize: 12,
+              opacity: 0.6,
+            }}
+          >
+            <div style={{ marginBottom: 6 }}>Made with care.</div>
+
+            <a
+              href="/"
+              style={{
+                textDecoration: "none",
+                fontSize: 13,
+                opacity: 0.85,
+                borderBottom: "1px dashed rgba(0,0,0,0.25)",
+                paddingBottom: 1,
+              }}
+            >
+              ← back home
+            </a>
+          </div>
         </div>
       </div>
     </main>
   );
 }
-
