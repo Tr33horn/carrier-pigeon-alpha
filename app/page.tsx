@@ -74,12 +74,16 @@ export default function Home() {
           {/* Actions */}
           <div className="card" style={{ width: "100%" }}>
             <div className="stack" style={{ gap: 10 }}>
+
               <Link href="/new" className="btnPrimary" style={{ textAlign: "center" }}>
                 Write a Letter
               </Link>
 
               <Link href="/dashboard" className="btnGhost" style={{ textAlign: "center" }}>
                 Go to Dashboard
+              </Link>
+                            <Link href="/about" className="btnGhost" style={{ textAlign: "center" }}>
+                About FLOK
               </Link>
             </div>
 
