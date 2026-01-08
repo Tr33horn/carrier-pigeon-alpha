@@ -306,21 +306,42 @@ function BirdStatusCard({
 }
 
 /* ---------- wax seal overlay ---------- */
-function WaxSealOverlay({ etaText, cracking, canceled }: { etaText: string; cracking?: boolean; canceled?: boolean }) {
+function WaxSealOverlay({
+  etaText,
+  cracking,
+  canceled,
+}: {
+  etaText: string;
+  cracking?: boolean;
+  canceled?: boolean;
+}) {
   return (
     <div className={cracking ? "seal crack" : "seal"} style={{ position: "relative" }}>
       <div className="sealCard">
         <div className="sealVeil" />
+
         <div className="sealRow">
           <div className="wax" aria-label="Wax seal" title="Sealed until delivery">
-            <div className="waxInner">AH</div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/waxseal.png"
+              alt="Wax seal"
+              className="waxImg"
+              style={{ width: 72, height: 72, display: "block" }}
+            />
           </div>
+
           <div>
             <div className="sealTitle">{canceled ? "Canceled" : "Sealed until delivery"}</div>
-            <div className="sealSub">{canceled ? "This letter will not be delivered." : `Opens at ${etaText}`}</div>
-            <div className="sealHint">{canceled ? "The bird was recalled to HQ." : "No peeking. The bird is watching."}</div>
+            <div className="sealSub">
+              {canceled ? "This letter will not be delivered." : `Opens at ${etaText}`}
+            </div>
+            <div className="sealHint">
+              {canceled ? "The bird was recalled to HQ." : "No peeking. The bird is watching."}
+            </div>
           </div>
         </div>
+
         <div className="sealNoise" />
       </div>
     </div>
