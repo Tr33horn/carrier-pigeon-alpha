@@ -31,27 +31,35 @@ export function LetterDeliveredEmail({
 
   return (
     <EmailLayout preview="Your letter has arrived.">
+      {/* Bird (centered + smaller via BirdStateImage maxWidth=220 already) */}
       <BirdStateImage bird={bird ?? undefined} state="landed" alt="Courier landed" />
 
-      <Text style={{ fontSize: 18, fontWeight: 800, margin: "6px 0 8px" }}>
+      <Text
+        style={{
+          fontSize: 18,
+          fontWeight: 800,
+          margin: "0 0 10px",
+          textAlign: "center",
+        }}
+      >
         Delivered ✅
       </Text>
 
-      <Text style={{ margin: "0 0 10px" }}>
+      <Text style={{ margin: "0 0 10px", textAlign: "center" }}>
         Hey {toName || "there"} — your letter from <strong>{fromName || "someone"}</strong> has landed.
       </Text>
 
-      <Text style={{ margin: "0 0 14px", color: "#444" }}>
+      <Text style={{ margin: "0 0 18px", color: "#444", textAlign: "center" }}>
         Route: <strong>{originName}</strong> → <strong>{destName}</strong>
       </Text>
 
-      <Section style={{ marginTop: 12 }}>
+      <Section style={{ textAlign: "center", marginTop: 8 }}>
         <Button
           href={href}
           style={{
             backgroundColor: "#111",
             color: "#fff",
-            padding: "12px 16px",
+            padding: "12px 18px",
             borderRadius: 10,
             display: "inline-block",
             textDecoration: "none",
@@ -62,9 +70,26 @@ export function LetterDeliveredEmail({
         </Button>
       </Section>
 
-      <Text style={{ fontSize: 12, color: "#666", marginTop: 16 }}>
+      <Text style={{ fontSize: 12, color: "#666", marginTop: 18, textAlign: "center" }}>
         The long way home.
       </Text>
     </EmailLayout>
+  );
+}
+
+/**
+ * ✅ React Email Preview needs a default export to show in the sidebar.
+ * This does NOT affect your production email sending code.
+ */
+export default function Preview() {
+  return (
+    <LetterDeliveredEmail
+      toName="Greggor"
+      fromName="The Flock"
+      statusUrl="/l/demo-token"
+      originName="Seattle, WA"
+      destName="New York, NY"
+      bird="pigeon"
+    />
   );
 }

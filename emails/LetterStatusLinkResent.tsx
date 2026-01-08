@@ -26,29 +26,42 @@ export function LetterStatusLinkResentEmail({
 
   return (
     <EmailLayout preview="Your flight status link">
-      <Text style={{ fontSize: 18, fontWeight: 800, margin: "6px 0 8px" }}>
+      <Text
+        style={{
+          fontSize: 18,
+          fontWeight: 800,
+          margin: "0 0 10px",
+          textAlign: "center",
+        }}
+      >
         Status link re-sent
       </Text>
 
-      <Text style={{ margin: "0 0 10px" }}>
+      <Text style={{ margin: "0 0 10px", textAlign: "center" }}>
         You asked nicely. We complied.
       </Text>
 
-      <Text style={{ margin: "0 0 12px", fontWeight: 700 }}>
+      <Text
+        style={{
+          margin: "0 0 12px",
+          fontWeight: 800,
+          textAlign: "center",
+        }}
+      >
         {subject || "(No subject)"}
       </Text>
 
-      <Text style={{ margin: "0 0 14px", color: "#444" }}>
+      <Text style={{ margin: "0 0 18px", color: "#444", textAlign: "center" }}>
         Route: <strong>{originName}</strong> → <strong>{destName}</strong>
       </Text>
 
-      <Section style={{ marginTop: 12 }}>
+      <Section style={{ textAlign: "center", marginTop: 8 }}>
         <Button
           href={href}
           style={{
             backgroundColor: "#111",
             color: "#fff",
-            padding: "12px 16px",
+            padding: "12px 18px",
             borderRadius: 10,
             display: "inline-block",
             textDecoration: "none",
@@ -59,9 +72,30 @@ export function LetterStatusLinkResentEmail({
         </Button>
       </Section>
 
-      <Text style={{ fontSize: 12, color: "#666", marginTop: 16 }}>
+      <Text
+        style={{
+          fontSize: 12,
+          color: "#666",
+          marginTop: 18,
+          textAlign: "center",
+        }}
+      >
         We found your link and slapped a stamp on it.
       </Text>
     </EmailLayout>
+  );
+}
+
+/**
+ * ✅ Required preview for React Email sidebar
+ */
+export default function Preview() {
+  return (
+    <LetterStatusLinkResentEmail
+      subject="SNIPE TEST"
+      originName="Seattle, WA"
+      destName="New York, NY"
+      statusUrl="https://carrier-pigeon-alpha.vercel.app/l/demo-token"
+    />
   );
 }
