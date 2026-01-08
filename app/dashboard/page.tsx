@@ -493,6 +493,18 @@ export default function DashboardPage() {
   return (
     <main className="pageBg">
       <div className="wrap">
+        {/* ✅ Option A: desktop header pill, mobile full-width CTA */}
+        <style>{`
+          .dashWriteMobile { display: none; }
+          .dashWriteDesktop { display: inline-flex; }
+
+          @media (max-width: 520px) {
+            .dashWriteDesktop { display: none !important; }
+            .dashWriteMobile { display: block; margin-top: 12px; }
+            .dashWriteMobile a { width: 100%; display: block; text-align: center; }
+          }
+        `}</style>
+
         {/* ✅ Top-centered brand mark (separate from the header card) */}
         <div className="topBrand">
           <a href="/" aria-label="FLOK home" title="Home" className="topBrandLink">
@@ -510,9 +522,17 @@ export default function DashboardPage() {
               <p className="muted" style={{ marginTop: 6 }}>
                 Load your mailbox by entering your email. Sent + Incoming are separate tabs now (no more déjà vu).
               </p>
+
+              {/* ✅ Mobile full-width CTA */}
+              <div className="dashWriteMobile">
+                <a href="/new" className="btnPrimary">
+                  + Write a letter
+                </a>
+              </div>
             </div>
 
-            <a href="/new" className="linkPill">
+            {/* ✅ Desktop pill CTA */}
+            <a href="/new" className="linkPill dashWriteDesktop">
               + Write a letter
             </a>
           </div>
@@ -675,13 +695,11 @@ export default function DashboardPage() {
                       </div>
                     </>
                   ) : tab === "sent" ? (
-                    <>
-                      <div className="muted">
-                        {sentLetters.length === 0 && incomingLetters.length === 0
-                          ? "No letters loaded yet. Enter your email and hit “Load letters”."
-                          : "No sent letters match your filter/search."}
-                      </div>
-                    </>
+                    <div className="muted">
+                      {sentLetters.length === 0 && incomingLetters.length === 0
+                        ? "No letters loaded yet. Enter your email and hit “Load letters”."
+                        : "No sent letters match your filter/search."}
+                    </div>
                   ) : (
                     <div className="muted">
                       {sentLetters.length === 0 && incomingLetters.length === 0
@@ -725,9 +743,13 @@ export default function DashboardPage() {
                 const statusUrl = typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
 
                 const canThumb =
-                  Number.isFinite(l.origin_lat) && Number.isFinite(l.origin_lon) && Number.isFinite(l.dest_lat) && Number.isFinite(l.dest_lon);
+                  Number.isFinite(l.origin_lat) &&
+                  Number.isFinite(l.origin_lon) &&
+                  Number.isFinite(l.dest_lat) &&
+                  Number.isFinite(l.dest_lon);
 
-                const current = l.current_lat != null && l.current_lon != null ? { lat: l.current_lat, lon: l.current_lon } : null;
+                const current =
+                  l.current_lat != null && l.current_lon != null ? { lat: l.current_lat, lon: l.current_lon } : null;
 
                 const geoText = isCanceled
                   ? "Canceled"
@@ -742,9 +764,6 @@ export default function DashboardPage() {
                 const isArchivingThis = archivingId === l.id;
                 const isCancelingThis = cancelingId === l.id;
 
-                const birdLabel =
-                  l.bird === "snipe" ? "Snipe" : l.bird === "goose" ? "Goose" : l.bird === "pigeon" ? "Pigeon" : null;
-
                 const disableActions = isArchivingThis || isCancelingThis;
 
                 const dirTag: Direction =
@@ -755,7 +774,6 @@ export default function DashboardPage() {
                     : (tab as any);
 
                 const dirLabel = dirTag === "incoming" ? "INCOMING" : dirTag === "both" ? "SENT + INCOMING" : "SENT";
-
                 const shouldPulseBadge = badgePulseKey === l.public_token;
 
                 return (
@@ -780,12 +798,6 @@ export default function DashboardPage() {
                           </span>
                         </div>
 
-                        {birdLabel && (
-                          <div className="muted" style={{ marginTop: 6, opacity: 0.75 }}>
-                            Bird: <strong>{birdLabel}</strong>
-                          </div>
-                        )}
-
                         <div className="muted" style={{ marginTop: 6 }}>
                           📍 <strong>{geoText}</strong>
                         </div>
@@ -798,7 +810,12 @@ export default function DashboardPage() {
                       </div>
 
                       {canThumb ? (
-                        <RouteThumb origin={{ lat: l.origin_lat, lon: l.origin_lon }} dest={{ lat: l.dest_lat, lon: l.dest_lon }} current={current} progress={derivedProgress} />
+                        <RouteThumb
+                          origin={{ lat: l.origin_lat, lon: l.origin_lon }}
+                          dest={{ lat: l.dest_lat, lon: l.dest_lon }}
+                          current={current}
+                          progress={derivedProgress}
+                        />
                       ) : null}
                     </div>
 
