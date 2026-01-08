@@ -126,11 +126,24 @@ function formatCountdown(ms: number) {
   return `${h}:${pad(m)}:${pad(s)}`;
 }
 
-function formatUtcFallback(iso: string) {
+/** Local time formatter for display (user-friendly) */
+function formatLocal(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(d);
+}
 
-  // Example: "1/8/2026, 4:56:01 PM UTC"
+/** UTC formatter for display (explicit UTC) */
+function formatUtc(iso: string) {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
   return (
     new Intl.DateTimeFormat("en-US", {
       timeZone: "UTC",
@@ -142,6 +155,11 @@ function formatUtcFallback(iso: string) {
       second: "2-digit",
     }).format(d) + " UTC"
   );
+}
+
+/** Back-compat name (if anything else relies on this) */
+function formatUtcFallback(iso: string) {
+  return formatUtc(iso);
 }
 
 function dayLabelLocal(iso: string) {
@@ -222,7 +240,13 @@ function Ico({
       return (
         <svg {...common}>
           <path d="M5 13a7 7 0 0 1 14 0" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-          <path d="M12 13l4.5-4.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M12 13l4.5-4.5"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
           <path d="M4 13h2M18 13h2" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
         </svg>
       );
@@ -242,7 +266,13 @@ function Ico({
     case "check":
       return (
         <svg {...common}>
-          <path d="M20 6 9 17l-5-5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M20 6 9 17l-5-5"
+            stroke="currentColor"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       );
     case "mail":
@@ -333,23 +363,26 @@ function WaxSealOverlay({
         <div className="sealVeil" />
 
         <div className="sealRow">
+          {/* ✅ Only the image lives here now (no old nested seal / initials) */}
           <div className="wax" aria-label="Wax seal" title="Sealed until delivery">
-{/* eslint-disable-next-line @next/next/no-img-element */}
-<img
-  src="/waxseal.png"
-  alt="Wax seal"
-  className="waxImg"
-/>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/waxseal.png"
+              alt="Wax seal"
+              className="waxImg"
+              style={{
+                width: 86,
+                height: 86,
+                display: "block",
+                objectFit: "contain",
+              }}
+            />
           </div>
 
           <div>
             <div className="sealTitle">{canceled ? "Canceled" : "Sealed until delivery"}</div>
-            <div className="sealSub">
-              {canceled ? "This letter will not be delivered." : `Opens at ${etaText}`}
-            </div>
-            <div className="sealHint">
-              {canceled ? "The bird was recalled to HQ." : "No peeking. The bird is watching."}
-            </div>
+            <div className="sealSub">{canceled ? "This letter will not be delivered." : `Opens at ${etaText}`}</div>
+            <div className="sealHint">{canceled ? "The bird was recalled to HQ." : "No peeking. The bird is watching."}</div>
           </div>
         </div>
 
@@ -837,9 +870,15 @@ export default function LetterStatusPage() {
     return bestKey ?? realItems[0].key;
   }, [timelineItems, now, uiDelivered, canceled]);
 
+  // ✅ show both local and UTC so it’s not confusing
   const etaTextUTC = useMemo(() => {
     if (!letter) return "";
     return (letter.eta_utc_text && letter.eta_utc_text.trim()) || formatUtcFallback(effectiveEtaISO);
+  }, [letter, effectiveEtaISO]);
+
+  const etaTextLocal = useMemo(() => {
+    if (!letter) return "";
+    return formatLocal(effectiveEtaISO);
   }, [letter, effectiveEtaISO]);
 
   const badgesSorted = useMemo(() => {
@@ -916,32 +955,28 @@ export default function LetterStatusPage() {
           <div className="bannerTop">
             <div>
               <div
-  style={{
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 6,
-  }}
->
-  <a
-    href="/"
-    aria-label="FLOK home"
-    title="Home"
-    className="flokMarkLink"
-    style={{ padding: 4 }}
-  >
-    {/* eslint-disable-next-line @next/next/no-img-element */}
-    <img
-      src="/brand/flok-mark.png"
-      alt="FLOK"
-      className="flokMark"
-    />
-  </a>
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  marginBottom: 6,
+                }}
+              >
+                <a
+                  href="/"
+                  aria-label="FLOK home"
+                  title="Home"
+                  className="flokMarkLink"
+                  style={{ padding: 4 }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/brand/flok-mark.png" alt="FLOK" className="flokMark" />
+                </a>
 
-  <div className="kicker" style={{ margin: 0 }}>
-    Flight status
-  </div>
-</div>
+                <div className="kicker" style={{ margin: 0 }}>
+                  Flight status
+                </div>
+              </div>
 
               <div className="routeHeadline">
                 {letter.origin_name} <span className="arrow">→</span> {letter.dest_name}
@@ -964,7 +999,9 @@ export default function LetterStatusPage() {
                         <span className="liveText">{sleeping ? "SLEEPING" : "LIVE"}</span>
                       </div>
                       <div className="liveSub">
-                        {sleeping ? `Wakes at ${flight?.sleep_local_text || "soon"}` : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
+                        {sleeping
+                          ? `Wakes at ${flight?.sleep_local_text || "soon"}`
+                          : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
                       </div>
                     </div>
 
@@ -978,7 +1015,13 @@ export default function LetterStatusPage() {
                     </div>
                   </>
                 ) : canceled ? (
-                  <div className="metaPill" style={{ borderColor: "rgba(220,38,38,0.35)", background: "rgba(220,38,38,0.06)" }}>
+                  <div
+                    className="metaPill"
+                    style={{
+                      borderColor: "rgba(220,38,38,0.35)",
+                      background: "rgba(220,38,38,0.06)",
+                    }}
+                  >
                     <span className="ico" style={{ color: "rgb(220,38,38)" }}>
                       <Ico name="x" />
                     </span>
@@ -1008,9 +1051,13 @@ export default function LetterStatusPage() {
               </div>
             </div>
 
+            {/* ✅ ETA now shows Local + UTC */}
             <div className="etaBox">
-              <div className="kicker">ETA (UTC)</div>
-              <div className="etaTime">{etaTextUTC}</div>
+              <div className="kicker">ETA</div>
+              <div className="etaTime">{etaTextLocal}</div>
+              <div className="etaSub" style={{ opacity: 0.75 }}>
+                (UTC: {etaTextUTC})
+              </div>
 
               {!uiDelivered && !archived && !canceled && <div className="etaSub">T-minus {countdown}</div>}
 
@@ -1078,7 +1125,10 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: uiDelivered && !canceled ? 1 : 0 }}>
+              <div
+                className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""}
+                style={{ opacity: uiDelivered && !canceled ? 1 : 0 }}
+              >
                 <div className="body">{uiDelivered && !canceled ? (letter.body ?? "") : ""}</div>
               </div>
 
