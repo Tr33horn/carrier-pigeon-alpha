@@ -2,7 +2,7 @@
 import React from "react";
 import { Resend } from "resend";
 import { render } from "@react-email/render";
-import { MAIL_FROM, BRAND } from "./config";
+import { BRAND, getMailFrom } from "./config";
 
 type SendArgs = {
   to: string | string[];
@@ -20,21 +20,23 @@ function asArray(to: string | string[]) {
   return Array.isArray(to) ? to : [to];
 }
 
-function assertEnv() {
+// ✅ Create one client per serverless instance (module-scope), but don’t throw at import time
+let _resend: Resend | null = null;
+
+function getResendClient() {
+  if (_resend) return _resend;
+
   const key = (process.env.RESEND_API_KEY || "").trim();
   if (!key) throw new Error("Missing RESEND_API_KEY");
-  return key;
-}
 
-// ✅ Create one client per serverless instance (not per email)
-const resend = new Resend(assertEnv());
+  _resend = new Resend(key);
+  return _resend;
+}
 
 /**
  * Resend typically returns:
  *  - success: { data: { id: string }, error: null, headers?: ... }
  *  - failure: { data: null, error: {...}, headers?: ... }
- *
- * We'll normalize to something easy to log + return.
  */
 type ResendSendResult = {
   data: { id?: string } | null;
@@ -43,12 +45,17 @@ type ResendSendResult = {
 };
 
 export async function sendEmail({ to, subject, react, replyTo, tags }: SendArgs) {
+  const resend = getResendClient();
+
+  // ✅ Validate MAIL_FROM at send-time (and auto-strip accidental quotes)
+  const from = getMailFrom();
+
   // HTML + text improves deliverability & lets recipients preview cleanly
   const html = await render(react, { pretty: false });
   const text = await render(react, { plainText: true });
 
   const payload: any = {
-    from: MAIL_FROM,
+    from,
     to: asArray(to),
     subject,
     html,
@@ -58,13 +65,10 @@ export async function sendEmail({ to, subject, react, replyTo, tags }: SendArgs)
     reply_to: replyTo || BRAND.supportEmail,
   };
 
-  // Optional tags if supported by your SDK/account
   if (tags?.length) payload.tags = tags;
 
-  // ✅ TS-safe cast: convert to unknown first
   const res = (await resend.emails.send(payload)) as unknown as ResendSendResult;
 
-  // Helpful log line (shows up in Vercel function logs + GitHub Actions output)
   if (res?.error) {
     console.error("RESEND_SEND_ERROR:", res.error, {
       to: payload.to,

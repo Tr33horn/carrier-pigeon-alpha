@@ -2,70 +2,97 @@
 
 /**
  * Email + branding config
- * - Avoid silent fallbacks that break deliverability.
- * - Ensure APP_URL is always a usable absolute URL.
+ * - Do NOT throw at module import time (breaks Next build + route boot).
+ * - Validate when used (send-time), where failures are actionable.
  */
 
-function isValidMailFrom(v: string) {
-  // Accepts: "Name <email@domain.com>" or just "email@domain.com"
-  // (Resend accepts both; we recommend the Name <...> form.)
-  const s = v.trim();
+function stripWrappingQuotes(s: string) {
+  const t = (s || "").trim();
 
+  // Handles: "abc", 'abc', ""abc"", ''abc''
+  const once =
+    (t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))
+      ? t.slice(1, -1).trim()
+      : t;
+
+  const twice =
+    (once.startsWith('"') && once.endsWith('"')) || (once.startsWith("'") && once.endsWith("'"))
+      ? once.slice(1, -1).trim()
+      : once;
+
+  return twice;
+}
+
+function isValidMailFrom(v: string) {
+  // Accept: "Name <email@domain.com>" OR "email@domain.com"
+  const s = v.trim();
   const angle = /^.+<[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+>$/.test(s);
   const plain = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
-
   return angle || plain;
 }
 
-function resolveAppUrl() {
+function resolveAppUrlLenient() {
   const env =
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.APP_URL ||
+    process.env.APP_BASE_URL ||
     process.env.VERCEL_URL ||
     "";
 
-  // If VERCEL_URL is set, it may be like "my-app.vercel.app" (no protocol)
-  const withProto =
-    env && !env.startsWith("http://") && !env.startsWith("https://")
-      ? `https://${env}`
-      : env;
+  const raw = stripWrappingQuotes(env);
 
-  if (withProto) return withProto.replace(/\/$/, "");
+  // VERCEL_URL may be "my-app.vercel.app" (no protocol)
+  const withProto =
+    raw && !raw.startsWith("http://") && !raw.startsWith("https://") ? `https://${raw}` : raw;
+
+  const normalized = withProto ? withProto.replace(/\/$/, "") : "";
+
+  if (normalized) return normalized;
 
   // Dev fallback only
   if (process.env.NODE_ENV === "development") return "http://localhost:3000";
 
-  // In prod, no fallback: force you to set it (prevents broken links in emails)
-  throw new Error(
-    "APP_URL is not set. Set APP_URL (or NEXT_PUBLIC_APP_URL) in your environment."
-  );
+  // In prod we *can* return empty string, but callers should validate if they need absolute URLs.
+  return "";
 }
 
-// ✅ Require MAIL_FROM (no silent resend.dev fallback)
-const mailFrom = (process.env.MAIL_FROM || "").trim();
-if (!mailFrom) {
-  throw new Error(
-    "MAIL_FROM is not set. Set MAIL_FROM to something like: FLOK <pigeon@send.pigeon.humanrobotalliance.com>"
-  );
+/**
+ * ✅ Call this at send-time.
+ * Throws with a clear message if misconfigured.
+ */
+export function getMailFrom() {
+  const raw = stripWrappingQuotes(process.env.MAIL_FROM || "");
+  if (!raw) {
+    throw new Error(
+      'MAIL_FROM is not set. Set MAIL_FROM to: FLOK <hello@mail.pigeon.humanrobotalliance.com> (no surrounding quotes)'
+    );
+  }
+  if (!isValidMailFrom(raw)) {
+    throw new Error(`MAIL_FROM is invalid: "${raw}". Use "Name <email@domain.com>" or "email@domain.com".`);
+  }
+  return raw;
 }
-if (!isValidMailFrom(mailFrom)) {
-  throw new Error(
-    `MAIL_FROM is invalid: "${mailFrom}". Use "Name <email@domain.com>" or "email@domain.com".`
-  );
+
+/**
+ * ✅ Safe URL for building absolute links in emails.
+ * In prod, you should set APP_URL/APP_BASE_URL. If missing, we fall back to "" and templates can use a hard fallback.
+ */
+export function getAppUrl() {
+  const url = resolveAppUrlLenient();
+  if (!url && process.env.NODE_ENV !== "development") {
+    // Not throwing here keeps builds stable; email templates can hard-fallback.
+    console.warn("APP_URL is not set (APP_URL / APP_BASE_URL / NEXT_PUBLIC_APP_URL). Email links may be wrong.");
+  }
+  return url;
 }
 
-export const MAIL_FROM = mailFrom;
+// Convenience constants (non-throwing)
+export const APP_URL = getAppUrl();
 
-// ✅ Always absolute (no empty string surprises)
-export const APP_URL = resolveAppUrl();
-
-// Shared brand bits
+// Brand bits
 export const BRAND = {
   name: "FLOK",
-
-  // ✅ Your real filenames:
-  logoUrl: `${APP_URL}/brand/flok-mark.png`,
-  stampUrl: `${APP_URL}/brand/flok-stamp.png`,
-
+  logoUrl: APP_URL ? `${APP_URL}/brand/flok-mark.png` : `/brand/flok-mark.png`,
+  stampUrl: APP_URL ? `${APP_URL}/brand/flok-stamp.png` : `/brand/flok-stamp.png`,
   supportEmail: "support@flok.app",
 };
