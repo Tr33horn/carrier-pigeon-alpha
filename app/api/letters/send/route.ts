@@ -26,6 +26,44 @@ const STORE_REGION_META = false;
 
 const REGIONS: GeoRegion[] = [...ROUTE_TUNED_REGIONS];
 
+type BirdType = "pigeon" | "snipe" | "goose";
+
+type SleepCfg = { sleepStartHour: number; sleepEndHour: number };
+
+const BIRDS: Record<
+  BirdType,
+  { label: string; speed_kmh: number; inefficiency: number; sleepCfg: SleepCfg; ignoresSleep: boolean }
+> = {
+  pigeon: {
+    label: "Homing Pigeon",
+    speed_kmh: 72,
+    inefficiency: 1.15,
+    sleepCfg: { sleepStartHour: 22, sleepEndHour: 6 },
+    ignoresSleep: false,
+  },
+  snipe: {
+    label: "Great Snipe",
+    speed_kmh: 88,
+    inefficiency: 1.05,
+    sleepCfg: { sleepStartHour: 22, sleepEndHour: 6 }, // irrelevant
+    ignoresSleep: true, // ✅ the real switch
+  },
+  goose: {
+    label: "Canada Goose",
+    speed_kmh: 56,
+    inefficiency: 1.2,
+    sleepCfg: { sleepStartHour: 21, sleepEndHour: 7 },
+    ignoresSleep: false,
+  },
+};
+
+function normalizeBird(raw: unknown): BirdType {
+  const b = String(raw || "").toLowerCase();
+  if (b === "snipe") return "snipe";
+  if (b === "goose") return "goose";
+  return "pigeon";
+}
+
 function toRad(deg: number) {
   return (deg * Math.PI) / 180;
 }
@@ -48,7 +86,11 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
-/** Simple email check (same vibe as your client validation) */
+function isFiniteNumber(n: unknown): n is number {
+  return typeof n === "number" && Number.isFinite(n);
+}
+
+/** Simple email check */
 function isEmailValid(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
@@ -70,54 +112,24 @@ function formatUtc(iso: string) {
   }).format(d);
 }
 
-/* -------------------------------------------------
-   ✅ Bird attributes (POC)
-------------------------------------------------- */
+/** ✅ Base URL helper for absolute links in emails */
+function getBaseUrl(req: Request) {
+  const envBase = process.env.APP_URL || process.env.APP_BASE_URL;
+  if (envBase && envBase.trim()) return envBase.trim();
 
-type BirdType = "pigeon" | "snipe" | "goose";
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  const proto = req.headers.get("x-forwarded-proto") || "https";
+  if (host) return `${proto}://${host}`;
 
-const BIRDS: Record<
-  BirdType,
-  { label: string; speed_kmh: number; inefficiency: number; sleepCfg: { sleepStartHour: number; sleepEndHour: number } }
-> = {
-  // Pigeon sleeps 10pm -> 6am
-  pigeon: {
-    label: "Homing Pigeon",
-    speed_kmh: 72,
-    inefficiency: 1.15,
-    sleepCfg: { sleepStartHour: 22, sleepEndHour: 6 },
-  },
-  // Snipe: no sleep (we set an empty window)
-  snipe: {
-    label: "Great Snipe",
-    speed_kmh: 88,
-    inefficiency: 1.05,
-    sleepCfg: { sleepStartHour: 0, sleepEndHour: 0 }, // never sleeping
-  },
-  // Goose sleeps longer (roughly 9pm -> 7am = 10h)
-  goose: {
-    label: "Canada Goose",
-    speed_kmh: 56,
-    inefficiency: 1.2,
-    sleepCfg: { sleepStartHour: 21, sleepEndHour: 7 },
-  },
-};
-
-function normalizeBird(raw: unknown): BirdType {
-  const b = String(raw || "").toLowerCase();
-  if (b === "snipe") return "snipe";
-  if (b === "goose") return "goose";
-  return "pigeon";
+  return "http://localhost:3000";
 }
 
-/**
- * Required awake flight time (ms) ignoring sleep pauses.
- * Sleep windows get applied via flightSleep.ts to compute ETA + checkpoint times.
- */
-function requiredAwakeMs(distanceKm: number, bird: BirdType) {
-  const cfg = BIRDS[bird];
-  const hours = (distanceKm / cfg.speed_kmh) * cfg.inefficiency;
-  return Math.round(hours * 60 * 60 * 1000);
+function joinUrl(base: string, pathOrUrl: string) {
+  if (!pathOrUrl) return base;
+  if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
+  const b = base.endsWith("/") ? base.slice(0, -1) : base;
+  const p = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
+  return `${b}${p}`;
 }
 
 /**
@@ -173,22 +185,25 @@ function stickyGeoLabel(opts: {
 }
 
 /**
- * ✅ Sleep-aware checkpoints:
- * - Position is still linear along the line (vibe > physics)
- * - TIME is NOT linear: it pauses during sleep windows
+ * ✅ Checkpoints that respect sleep:
+ * - Position is linear (vibe)
+ * - Time is mapped by “required awake ms” → UTC using flightSleep’s etaFromRequiredAwakeMs
+ *
+ * IMPORTANT: We DO NOT store sleep-adjusted ETA in DB anymore.
+ * DB stores baseline eta_at; status API computes sleep-adjusted display ETA.
  */
 function generateCheckpointsSleepAware(opts: {
   sentUtcMs: number;
-  etaUtcMs: number;
   requiredAwakeMsTotal: number;
   offsetMin: number;
-  sleepCfg: { sleepStartHour: number; sleepEndHour: number };
+  sleepCfg: SleepCfg;
+  ignoresSleep: boolean;
   oLat: number;
   oLon: number;
   dLat: number;
   dLon: number;
 }) {
-  const { sentUtcMs, requiredAwakeMsTotal, offsetMin, sleepCfg, oLat, oLon, dLat, dLon } = opts;
+  const { sentUtcMs, requiredAwakeMsTotal, offsetMin, sleepCfg, ignoresSleep, oLat, oLon, dLat, dLon } = opts;
 
   const count = 8;
 
@@ -209,9 +224,12 @@ function generateCheckpointsSleepAware(opts: {
     const lat = lerp(oLat, dLat, t);
     const lon = lerp(oLon, dLon, t);
 
-    // ✅ Convert progress->required awake ms, then map to UTC time with sleep pauses
-    const reqAwakeForThisCheckpoint = Math.round(requiredAwakeMsTotal * t);
-    const atUtcMs = etaFromRequiredAwakeMs(sentUtcMs, reqAwakeForThisCheckpoint, offsetMin, sleepCfg);
+    const reqAwakeForCheckpoint = Math.round(requiredAwakeMsTotal * t);
+
+    const atUtcMs = ignoresSleep
+      ? sentUtcMs + reqAwakeForCheckpoint
+      : etaFromRequiredAwakeMs(sentUtcMs, reqAwakeForCheckpoint, offsetMin, sleepCfg);
+
     const at = new Date(atUtcMs).toISOString();
 
     const geo = stickyGeoLabel({
@@ -240,31 +258,6 @@ function generateCheckpointsSleepAware(opts: {
       region_kind: geo?.kind ?? null,
     };
   });
-}
-
-/** ✅ Base URL helper for absolute links in emails */
-function getBaseUrl(req: Request) {
-  const envBase = process.env.APP_URL || process.env.APP_BASE_URL;
-  if (envBase && envBase.trim()) return envBase.trim();
-
-  // Works on Vercel + local + most hosts
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
-  const proto = req.headers.get("x-forwarded-proto") || "https";
-  if (host) return `${proto}://${host}`;
-
-  return "http://localhost:3000";
-}
-
-function joinUrl(base: string, pathOrUrl: string) {
-  if (!pathOrUrl) return base;
-  if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
-  const b = base.endsWith("/") ? base.slice(0, -1) : base;
-  const p = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
-  return `${b}${p}`;
-}
-
-function isFiniteNumber(n: unknown): n is number {
-  return typeof n === "number" && Number.isFinite(n);
 }
 
 export async function POST(req: Request) {
@@ -298,7 +291,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Recipient email looks invalid." }, { status: 400 });
   }
 
-  // ✅ Validate coords even if lat/lon are 0
   if (
     !origin ||
     !destination ||
@@ -314,30 +306,62 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Origin and destination must be different." }, { status: 400 });
   }
 
-  // ✅ Distance
+  // ✅ Distance + required awake flight duration (no sleep baked in)
   const km = distanceKm(origin.lat, origin.lon, destination.lat, destination.lon);
 
-  // ✅ Choose a single offset for the flight (simple + consistent)
-  // Using midpoint lon is usually better than origin-only.
+  const speedKmh = birdCfg.speed_kmh;
+  const reqAwakeMs = Math.max(
+    0,
+    Math.round(((km / speedKmh) * birdCfg.inefficiency) * 3600_000)
+  );
+
+  // ✅ Pick a single timezone offset for the flight
   const midLon = lerp(origin.lon, destination.lon, 0.5);
   const offsetMin = offsetMinutesFromLon(midLon);
 
-  // ✅ If "send" happens during sleep, delay actual sent_at to next wake (so no fake progress)
+  // ✅ If launch happens during sleep window, SKIP this sleep cycle:
+  // store sent_at at next wake, not “now”
   const requestedSentUtcMs = Date.now();
-  const sleepingNow = isSleepingAt(requestedSentUtcMs, offsetMin, birdCfg.sleepCfg);
 
-  const actualSentUtcMs =
-    sleepingNow ? nextWakeUtcMs(requestedSentUtcMs, offsetMin, birdCfg.sleepCfg) ?? requestedSentUtcMs : requestedSentUtcMs;
+  const sleepingNow =
+    birdCfg.ignoresSleep ? false : isSleepingAt(requestedSentUtcMs, offsetMin, birdCfg.sleepCfg);
 
-  // ✅ Required awake flight duration (no sleep baked in)
-  const reqAwakeMs = requiredAwakeMs(km, bird);
+  const wakeUtcMs =
+    birdCfg.ignoresSleep ? null : nextWakeUtcMs(requestedSentUtcMs, offsetMin, birdCfg.sleepCfg);
 
-  // ✅ Sleep-aware ETA
-  const etaUtcMs = etaFromRequiredAwakeMs(actualSentUtcMs, reqAwakeMs, offsetMin, birdCfg.sleepCfg);
+  const actualSentUtcMs = sleepingNow && wakeUtcMs ? wakeUtcMs : requestedSentUtcMs;
 
   const sentAt = new Date(actualSentUtcMs);
-  const etaAt = new Date(etaUtcMs);
+
+  // ✅ BASELINE ETA stored in DB (always sane):
+  // (sleep-adjusted ETA is computed in /api/letters/[token])
+  const etaBaselineUtcMs = actualSentUtcMs + reqAwakeMs;
+  const etaAt = new Date(etaBaselineUtcMs);
+
+  // ✅ Hard safety: if something is wildly wrong, clamp to baseline within 30 days.
+  // This prevents “2039” ever getting written again.
+  const maxAllowedUtcMs = actualSentUtcMs + 30 * 24 * 3600_000;
+  const etaAtSafe = Number.isFinite(etaBaselineUtcMs) && etaBaselineUtcMs <= maxAllowedUtcMs
+    ? etaAt
+    : new Date(Math.min(etaBaselineUtcMs || maxAllowedUtcMs, maxAllowedUtcMs));
+
   const publicToken = crypto.randomBytes(16).toString("hex");
+
+  // 🔎 Debug that will immediately tell us if sleep-skip is triggering
+  console.log("SEND DEBUG:", {
+    token: publicToken.slice(0, 8),
+    bird,
+    km: Number(km.toFixed(2)),
+    speedKmh,
+    ineff: birdCfg.inefficiency,
+    reqAwakeMs,
+    offsetMin,
+    requestedSentUtc: new Date(requestedSentUtcMs).toISOString(),
+    sleepingNow,
+    wakeUtc: wakeUtcMs ? new Date(wakeUtcMs).toISOString() : null,
+    actualSentUtc: sentAt.toISOString(),
+    etaBaselineUtc: etaAtSafe.toISOString(),
+  });
 
   const { data: letter, error: letterErr } = await supabaseServer
     .from("letters")
@@ -359,9 +383,9 @@ export async function POST(req: Request) {
       dest_lat: destination.lat,
       dest_lon: destination.lon,
       distance_km: km,
-      speed_kmh: birdCfg.speed_kmh,
+      speed_kmh: speedKmh,
       sent_at: sentAt.toISOString(),
-      eta_at: etaAt.toISOString(),
+      eta_at: etaAtSafe.toISOString(),
     })
     .select("id, public_token, eta_at, origin_name, dest_name, from_name, to_name, bird")
     .single();
@@ -370,13 +394,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: letterErr?.message ?? "Insert failed" }, { status: 500 });
   }
 
-  // ✅ Sleep-aware checkpoints (time pauses during sleep)
+  // ✅ Sleep-aware checkpoints (their times pause during sleep)
   const checkpoints = generateCheckpointsSleepAware({
     sentUtcMs: actualSentUtcMs,
-    etaUtcMs,
     requiredAwakeMsTotal: reqAwakeMs,
     offsetMin,
     sleepCfg: birdCfg.sleepCfg,
+    ignoresSleep: birdCfg.ignoresSleep,
     oLat: origin.lat,
     oLon: origin.lon,
     dLat: destination.lat,
@@ -425,7 +449,7 @@ export async function POST(req: Request) {
         etaTextUtc,
         statusUrl: absoluteStatusUrl,
         bird: (letter.bird as BirdType) || bird,
-        debugToken: publicToken, // ✅ trace this email to the letter
+        debugToken: publicToken,
       }),
       tags: [
         { name: "kind", value: "letter_on_the_way" },
@@ -433,7 +457,6 @@ export async function POST(req: Request) {
       ],
     });
 
-    // 👀 VERY IMPORTANT: log Resend-level failures
     if (result && "error" in (result as any) && (result as any).error) {
       console.error("RESEND SEND FAILED", {
         letterToken: publicToken,
@@ -444,9 +467,6 @@ export async function POST(req: Request) {
       console.log("RESEND SEND OK", {
         letterToken: publicToken,
         to: normalizedToEmail,
-        sleepingNow,
-        effectiveSentAt: sentAt.toISOString(),
-        etaAt: etaAt.toISOString(),
       });
     }
   } catch (e) {
