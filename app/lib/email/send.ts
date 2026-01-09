@@ -26,10 +26,23 @@ function assertEnv() {
   return key;
 }
 
-export async function sendEmail({ to, subject, react, replyTo, tags }: SendArgs) {
-  const apiKey = assertEnv();
-  const resend = new Resend(apiKey);
+// ✅ Create one client per serverless instance (not per email)
+const resend = new Resend(assertEnv());
 
+/**
+ * Resend typically returns:
+ *  - success: { data: { id: string }, error: null, headers?: ... }
+ *  - failure: { data: null, error: {...}, headers?: ... }
+ *
+ * We'll normalize to something easy to log + return.
+ */
+type ResendSendResult = {
+  data: { id?: string } | null;
+  error: unknown | null;
+  headers?: Record<string, string> | null;
+};
+
+export async function sendEmail({ to, subject, react, replyTo, tags }: SendArgs) {
   // HTML + text improves deliverability & lets recipients preview cleanly
   const html = await render(react, { pretty: false });
   const text = await render(react, { plainText: true });
@@ -48,19 +61,25 @@ export async function sendEmail({ to, subject, react, replyTo, tags }: SendArgs)
   // Optional tags if supported by your SDK/account
   if (tags?.length) payload.tags = tags;
 
-  const res = await resend.emails.send(payload);
+  // ✅ TS-safe cast: convert to unknown first
+  const res = (await resend.emails.send(payload)) as unknown as ResendSendResult;
 
   // Helpful log line (shows up in Vercel function logs + GitHub Actions output)
-  if ((res as any)?.error) {
-    console.error("RESEND_SEND_ERROR:", (res as any).error, {
+  if (res?.error) {
+    console.error("RESEND_SEND_ERROR:", res.error, {
       to: payload.to,
       subject,
+      from: payload.from,
+      hasText: Boolean(payload.text),
+      tags: payload.tags,
     });
   } else {
     console.log("RESEND_SENT:", {
-      id: (res as any)?.data?.id,
+      id: res?.data?.id,
       to: payload.to,
       subject,
+      from: payload.from,
+      tags: payload.tags,
     });
   }
 

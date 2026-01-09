@@ -68,7 +68,10 @@ function formatUtc(iso: string) {
 
 type BirdType = "pigeon" | "snipe" | "goose";
 
-const BIRDS: Record<BirdType, { label: string; speed_kmh: number; roost_hours: number; inefficiency: number }> = {
+const BIRDS: Record<
+  BirdType,
+  { label: string; speed_kmh: number; roost_hours: number; inefficiency: number }
+> = {
   pigeon: { label: "Homing Pigeon", speed_kmh: 72, roost_hours: 8, inefficiency: 1.15 },
   snipe: { label: "Great Snipe", speed_kmh: 88, roost_hours: 0, inefficiency: 1.05 },
   goose: { label: "Canada Goose", speed_kmh: 56, roost_hours: 10, inefficiency: 1.2 },
@@ -155,7 +158,14 @@ function stickyGeoLabel(opts: {
   };
 }
 
-function generateCheckpoints(sentAt: Date, etaAt: Date, oLat: number, oLon: number, dLat: number, dLon: number) {
+function generateCheckpoints(
+  sentAt: Date,
+  etaAt: Date,
+  oLat: number,
+  oLon: number,
+  dLat: number,
+  dLon: number
+) {
   const count = 8;
   const totalMs = etaAt.getTime() - sentAt.getTime();
 
@@ -186,7 +196,11 @@ function generateCheckpoints(sentAt: Date, etaAt: Date, oLat: number, oLon: numb
     });
 
     const name =
-      i === 0 ? "Departed roost" : i === count - 1 ? "Final descent" : geo?.text || fallback[i] || `Checkpoint ${i + 1}`;
+      i === 0
+        ? "Departed roost"
+        : i === count - 1
+        ? "Final descent"
+        : geo?.text || fallback[i] || `Checkpoint ${i + 1}`;
 
     return {
       idx: i,
@@ -221,22 +235,37 @@ function joinUrl(base: string, pathOrUrl: string) {
   return `${b}${p}`;
 }
 
-function isFiniteNumber(n: any) {
+function isFiniteNumber(n: unknown): n is number {
   return typeof n === "number" && Number.isFinite(n);
 }
 
 export async function POST(req: Request) {
   const body = await req.json();
 
-  const { from_name, from_email, to_name, to_email, subject, message, origin, destination, bird: birdRaw } = body;
+  const {
+    from_name,
+    from_email,
+    to_name,
+    to_email,
+    subject,
+    message,
+    origin,
+    destination,
+    bird: birdRaw,
+  } = body;
 
   const bird = normalizeBird(birdRaw);
 
-  const normalizedFromEmail = typeof from_email === "string" ? from_email.trim().toLowerCase() : "";
-  const normalizedToEmail = typeof to_email === "string" ? to_email.trim().toLowerCase() : "";
+  const normalizedFromEmail =
+    typeof from_email === "string" ? from_email.trim().toLowerCase() : "";
+  const normalizedToEmail =
+    typeof to_email === "string" ? to_email.trim().toLowerCase() : "";
 
   if (!normalizedFromEmail || !normalizedToEmail) {
-    return NextResponse.json({ error: "Sender and recipient email are required." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Sender and recipient email are required." },
+      { status: 400 }
+    );
   }
   if (!isEmailValid(normalizedFromEmail)) {
     return NextResponse.json({ error: "Sender email looks invalid." }, { status: 400 });
@@ -254,11 +283,17 @@ export async function POST(req: Request) {
     !isFiniteNumber(destination.lat) ||
     !isFiniteNumber(destination.lon)
   ) {
-    return NextResponse.json({ error: "Origin and destination are required." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Origin and destination are required." },
+      { status: 400 }
+    );
   }
 
   if (origin.name === destination.name) {
-    return NextResponse.json({ error: "Origin and destination must be different." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Origin and destination must be different." },
+      { status: 400 }
+    );
   }
 
   // ✅ Bird-based ETA (POC)
@@ -298,30 +333,42 @@ export async function POST(req: Request) {
     .single();
 
   if (letterErr || !letter) {
-    return NextResponse.json({ error: letterErr?.message ?? "Insert failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: letterErr?.message ?? "Insert failed" },
+      { status: 500 }
+    );
   }
 
-  const checkpoints = generateCheckpoints(sentAt, etaAt, origin.lat, origin.lon, destination.lat, destination.lon);
-
-  const { error: cpErr } = await supabaseServer.from("letter_checkpoints").insert(
-    checkpoints.map((cp) => {
-      const baseRow: any = {
-        letter_id: letter.id,
-        idx: cp.idx,
-        name: cp.name,
-        lat: cp.lat,
-        lon: cp.lon,
-        at: cp.at,
-      };
-
-      if (STORE_REGION_META) {
-        baseRow.region_id = cp.region_id;
-        baseRow.region_kind = cp.region_kind;
-      }
-
-      return baseRow;
-    })
+  const checkpoints = generateCheckpoints(
+    sentAt,
+    etaAt,
+    origin.lat,
+    origin.lon,
+    destination.lat,
+    destination.lon
   );
+
+  const { error: cpErr } = await supabaseServer
+    .from("letter_checkpoints")
+    .insert(
+      checkpoints.map((cp) => {
+        const baseRow: any = {
+          letter_id: letter.id,
+          idx: cp.idx,
+          name: cp.name,
+          lat: cp.lat,
+          lon: cp.lon,
+          at: cp.at,
+        };
+
+        if (STORE_REGION_META) {
+          baseRow.region_id = cp.region_id;
+          baseRow.region_kind = cp.region_kind;
+        }
+
+        return baseRow;
+      })
+    );
 
   if (cpErr) {
     return NextResponse.json({ error: cpErr.message }, { status: 500 });
@@ -334,23 +381,37 @@ export async function POST(req: Request) {
     const absoluteStatusUrl = joinUrl(baseUrl, statusPath);
     const etaTextUtc = formatUtc(letter.eta_at);
 
-    await sendEmail({
+    const result = await sendEmail({
       to: normalizedToEmail,
       subject: "A letter is on the way",
-      react: React.createElement(LetterOnTheWayEmail, {
+      react: React.createElement(LetterOnTheWayEmail as any, {
         toName: letter.to_name,
         fromName: letter.from_name,
         originName: letter.origin_name || origin.name || "Origin",
         destName: letter.dest_name || destination.name || "Destination",
         etaTextUtc,
-        statusUrl: absoluteStatusUrl, // ✅ absolute
+        statusUrl: absoluteStatusUrl,
         bird: (letter.bird as BirdType) || bird,
         debugToken: publicToken, // ✅ trace this email to the letter
       }),
     });
+
+    // 👀 VERY IMPORTANT: log Resend-level failures
+    if (result && "error" in (result as any) && (result as any).error) {
+      console.error("RESEND SEND FAILED", {
+        letterToken: publicToken,
+        to: normalizedToEmail,
+        error: (result as any).error,
+      });
+    } else {
+      console.log("RESEND SEND OK", {
+        letterToken: publicToken,
+        to: normalizedToEmail,
+      });
+    }
   } catch (e) {
     console.error("ON THE WAY EMAIL ERROR:", {
-      publicToken,
+      letterToken: publicToken,
       to: normalizedToEmail,
       error: (e as any)?.message ?? String(e),
     });

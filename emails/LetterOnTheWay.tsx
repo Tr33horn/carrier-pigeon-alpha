@@ -14,8 +14,6 @@ function joinUrl(base: string, pathOrUrl: string) {
 
 function safeBaseUrl() {
   const b = (APP_URL || "").trim();
-  // Email links should be absolute in prod. If APP_URL is blank, fall back to your domain.
-  // (Replace with your canonical domain if you want.)
   return b || "https://pigeon.humanrobotalliance.com";
 }
 
@@ -38,7 +36,7 @@ export function LetterOnTheWayEmail({
   destName,
   etaTextUtc,
   bird,
-  debugToken, // ✅ optional tracing
+  debugToken,
 }: {
   toName?: string | null;
   fromName?: string | null;
@@ -53,11 +51,10 @@ export function LetterOnTheWayEmail({
 
   return (
     <EmailLayout preview="A letter is on the way.">
-      {/* ✅ Debug trace (invisible in normal viewing, useful in raw source + logs) */}
       {debugToken ? (
         <>
           {/* X-FLOK-TOKEN: {debugToken} */}
-          <Text style={{ display: "none", fontSize: 1, color: "#fff" }}>
+          <Text style={{ fontSize: 1, lineHeight: "1px", margin: 0, color: "#ffffff" }}>
             X-FLOK-TOKEN:{debugToken}
           </Text>
         </>
