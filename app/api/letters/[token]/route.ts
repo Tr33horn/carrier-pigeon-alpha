@@ -4,8 +4,11 @@ import { supabaseServer } from "../../../lib/supabaseServer";
 // ✅ geo helpers
 import { checkpointGeoText, geoRegionForPoint } from "../../../lib/geo";
 
+// ✅ Use the shared sleep logic
+import { isSleepingAt, awakeMsBetween, etaFromRequiredAwakeMs, nextWakeUtcMs, sleepUntilLocalText } from "@/app/lib/flightSleep";
+
 /* -------------------------------------------------
-   Sleep / flight realism helpers (self-contained)
+   Sleep policy + tiny helpers
 ------------------------------------------------- */
 
 type SleepConfig = {
@@ -13,7 +16,8 @@ type SleepConfig = {
   sleepEndHour: number; // local hour 0-23
 };
 
-const SLEEP: SleepConfig = { sleepStartHour: 22, sleepEndHour: 6 }; // 10pm -> 6am (wraps)
+// Keep the same policy as flightSleep.ts (22 -> 6)
+const SLEEP: SleepConfig = { sleepStartHour: 22, sleepEndHour: 6 };
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
@@ -23,8 +27,7 @@ function clamp(n: number, a: number, b: number) {
  * Rough “local time” offset from longitude (good vibe > perfect geography)
  * 15° per hour. Rounded. Not DST-aware (intentionally).
  *
- * ✅ FIX: do NOT clamp to US-only offsets.
- * Use world-ish bounds: UTC-12..UTC+14
+ * ✅ World-ish bounds: UTC-12..UTC+14
  */
 function offsetMinutesFromLon(lon: number) {
   if (!Number.isFinite(lon)) return 0;
@@ -32,245 +35,98 @@ function offsetMinutesFromLon(lon: number) {
   return clamp(hours * 60, -12 * 60, 14 * 60);
 }
 
-function toLocalMs(utcMs: number, offsetMin: number) {
-  return utcMs + offsetMin * 60_000;
-}
-function toUtcMs(localMs: number, offsetMin: number) {
-  return localMs - offsetMin * 60_000;
-}
+/**
+ * Policy: If the letter is created inside a sleep window,
+ * we IGNORE that first sleep window (bird launches anyway),
+ * and it will sleep during the NEXT sleep window.
+ */
+function computeInitialSleepSkip(sentMs: number, offsetMin: number, ignoresSleep: boolean) {
+  if (ignoresSleep) return { skipUntilMs: null as number | null };
+  if (!Number.isFinite(sentMs)) return { skipUntilMs: null as number | null };
 
-function localPartsFromUtcMs(utcMs: number, offsetMin: number) {
-  const localMs = toLocalMs(utcMs, offsetMin);
-  const d = new Date(localMs);
-  return {
-    y: d.getUTCFullYear(),
-    m: d.getUTCMonth(),
-    day: d.getUTCDate(),
-    h: d.getUTCHours(),
-    localMs,
-  };
-}
+  const sleepingAtSend = isSleepingAt(sentMs, offsetMin, SLEEP as any);
+  if (!sleepingAtSend) return { skipUntilMs: null };
 
-function isSleepingAt(utcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
-  const { h } = localPartsFromUtcMs(utcMs, offsetMin);
-  const wraps = cfg.sleepStartHour > cfg.sleepEndHour; // 22 -> 6 wraps
+  const wake = nextWakeUtcMs(sentMs, offsetMin, SLEEP as any);
+  if (!wake || !Number.isFinite(wake) || wake <= sentMs) return { skipUntilMs: null };
 
-  if (!wraps) return h >= cfg.sleepStartHour && h < cfg.sleepEndHour;
-  return h >= cfg.sleepStartHour || h < cfg.sleepEndHour;
+  // from sentMs up to wake time -> treat as AWAKE for flight math + sleeping flag
+  return { skipUntilMs: wake };
 }
 
 /**
- * Deterministic “next sleep transition” in UTC:
- * - If currently sleeping -> next wake time
- * - If currently awake -> next sleep start time
- *
- * ✅ FIX: Avoid “candidate soup” that can cause boundary jitter.
+ * Awake time between start/end, with “skip initial sleep window” support.
+ * If end <= start => 0.
  */
-function nextTransitionUtcMs(utcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
-  const { y, m, day, h } = localPartsFromUtcMs(utcMs, offsetMin);
-  const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
+function awakeMsBetweenWithSkip(
+  startMs: number,
+  endMs: number,
+  offsetMin: number,
+  skipUntilMs: number | null,
+  ignoresSleep: boolean
+) {
+  if (endMs <= startMs) return 0;
+  if (ignoresSleep) return endMs - startMs;
 
-  const mkLocal = (yy: number, mm: number, dd: number, hh: number) => Date.UTC(yy, mm, dd, hh, 0, 0, 0);
+  // If we’re inside the initial skipped segment, treat it as awake.
+  if (skipUntilMs && startMs < skipUntilMs) {
+    const a = startMs;
+    const b = Math.min(endMs, skipUntilMs);
+    const awakeInSkip = Math.max(0, b - a);
 
-  const sleeping = isSleepingAt(utcMs, offsetMin, cfg);
+    if (endMs <= skipUntilMs) return awakeInSkip;
 
-  if (!wraps) {
-    if (sleeping) {
-      const todayEnd = mkLocal(y, m, day, cfg.sleepEndHour);
-      const nextLocal = h < cfg.sleepEndHour ? todayEnd : mkLocal(y, m, day + 1, cfg.sleepEndHour);
-      return toUtcMs(nextLocal, offsetMin);
-    } else {
-      const todayStart = mkLocal(y, m, day, cfg.sleepStartHour);
-      const nextLocal = h < cfg.sleepStartHour ? todayStart : mkLocal(y, m, day + 1, cfg.sleepStartHour);
-      return toUtcMs(nextLocal, offsetMin);
+    // After skipUntilMs, use normal awakeMsBetween
+    return awakeInSkip + awakeMsBetween(skipUntilMs, endMs, offsetMin, SLEEP as any);
+  }
+
+  return awakeMsBetween(startMs, endMs, offsetMin, SLEEP as any);
+}
+
+/**
+ * Given required awake flight time (ms), find ETA in UTC ms starting from sentMs,
+ * with “skip initial sleep window” support.
+ */
+function etaFromRequiredAwakeMsWithSkip(
+  sentMs: number,
+  requiredAwakeMs: number,
+  offsetMin: number,
+  skipUntilMs: number | null,
+  ignoresSleep: boolean
+) {
+  if (requiredAwakeMs <= 0) return sentMs;
+
+  if (ignoresSleep) return sentMs + requiredAwakeMs;
+
+  if (skipUntilMs && sentMs < skipUntilMs) {
+    const initialAwakeBudget = skipUntilMs - sentMs; // treated as awake
+    if (requiredAwakeMs <= initialAwakeBudget) {
+      return sentMs + requiredAwakeMs;
     }
+    const remaining = requiredAwakeMs - initialAwakeBudget;
+    return etaFromRequiredAwakeMs(skipUntilMs, remaining, offsetMin, SLEEP as any);
   }
 
-  // Wrap case: 22 -> 6
-  if (sleeping) {
-    const nextLocal = h >= cfg.sleepStartHour ? mkLocal(y, m, day + 1, cfg.sleepEndHour) : mkLocal(y, m, day, cfg.sleepEndHour);
-    return toUtcMs(nextLocal, offsetMin);
-  } else {
-    const todayStart = mkLocal(y, m, day, cfg.sleepStartHour);
-    const nextLocal = h < cfg.sleepStartHour ? todayStart : mkLocal(y, m, day + 1, cfg.sleepStartHour);
-    return toUtcMs(nextLocal, offsetMin);
-  }
-}
-
-function awakeMsBetween(startUtcMs: number, endUtcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
-  if (endUtcMs <= startUtcMs) return 0;
-
-  let t = startUtcMs;
-  let awake = 0;
-
-  let guard = 0;
-  while (t < endUtcMs && guard < 200000) {
-    guard++;
-
-    const sleeping = isSleepingAt(t, offsetMin, cfg);
-    const next = Math.min(nextTransitionUtcMs(t, offsetMin, cfg), endUtcMs);
-
-    if (!(next > t)) break;
-
-    if (!sleeping) awake += next - t;
-    t = next;
-  }
-
-  return awake;
+  return etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin, SLEEP as any);
 }
 
 /**
- * Returns UTC ms when requiredAwakeMs of "awake time" has elapsed.
- * ✅ Guard fallback => baseline no-sleep ETA
+ * Sleep millis between [start,end) (useful for debug/overlay if you want it)
  */
-function etaFromRequiredAwakeMs(sentUtcMs: number, requiredAwakeMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
-  let t = sentUtcMs;
-  let remaining = requiredAwakeMs;
-
-  let guard = 0;
-  while (remaining > 0 && guard < 200000) {
-    guard++;
-
-    const sleeping = isSleepingAt(t, offsetMin, cfg);
-    const next = nextTransitionUtcMs(t, offsetMin, cfg);
-
-    if (!(next > t)) break;
-
-    if (sleeping) {
-      t = next;
-      continue;
-    }
-
-    const chunk = Math.min(remaining, next - t);
-    remaining -= chunk;
-    t += chunk;
-  }
-
-  if (remaining > 0) return sentUtcMs + requiredAwakeMs;
-  return t;
-}
-
-/**
- * ✅ Hard safety wrapper: clamps adjusted ETA to sane bounds
- */
-function safeAdjustedEtaMs(args: {
-  sentMs: number;
-  requiredAwakeMs: number;
-  offsetMin: number;
-  ignoresSleep: boolean;
-  etaAtIso?: string | null;
-}) {
-  const { sentMs, requiredAwakeMs, offsetMin, ignoresSleep, etaAtIso } = args;
-
-  const etaDbMs = etaAtIso ? Date.parse(etaAtIso) : NaN;
-
-  if (!Number.isFinite(sentMs) || requiredAwakeMs <= 0) {
-    return Number.isFinite(etaDbMs) ? etaDbMs : sentMs;
-  }
-
-  const baselineMs = sentMs + requiredAwakeMs;
-  const adjustedMs = ignoresSleep ? baselineMs : etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin);
-
-  const maxAllowed = baselineMs + 7 * 24 * 3600_000;
-  const minAllowed = sentMs;
-
-  if (!Number.isFinite(adjustedMs) || adjustedMs < minAllowed || adjustedMs > maxAllowed) {
-    if (Number.isFinite(etaDbMs) && etaDbMs >= minAllowed && etaDbMs <= maxAllowed) return etaDbMs;
-    return baselineMs;
-  }
-
-  return adjustedMs;
-}
-
-function nextWakeUtcMs(nowUtcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
-  if (!isSleepingAt(nowUtcMs, offsetMin, cfg)) return null;
-  const next = nextTransitionUtcMs(nowUtcMs, offsetMin, cfg);
-  return Number.isFinite(next) && next > nowUtcMs ? next : null;
-}
-
-function sleepUntilLocalText(sleepUntilUtcMs: number, offsetMin: number) {
-  const localMs = toLocalMs(sleepUntilUtcMs, offsetMin);
-  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(localMs));
+function computeSleepMillisBetween(
+  startMs: number,
+  endMs: number,
+  offsetMin: number,
+  skipUntilMs: number | null,
+  ignoresSleep: boolean
+) {
+  if (endMs <= startMs) return 0;
+  const awake = awakeMsBetweenWithSkip(startMs, endMs, offsetMin, skipUntilMs, ignoresSleep);
+  return Math.max(0, (endMs - startMs) - awake);
 }
 
 function stripOverPrefix(s: string) {
   return (s || "").replace(/^over\s+/i, "").trim();
-}
-
-/**
- * Create “<Bird> slept …” events as synthetic checkpoints
- * ✅ FIX: If wake time is already in the past, say “awoke at …”
- */
-function buildSleepEvents(args: { sentMs: number; nowMs: number; offsetMin: number; birdLabel?: string; cfg?: SleepConfig }) {
-  const { sentMs, nowMs, offsetMin } = args;
-  const cfg = args.cfg ?? SLEEP;
-  const birdLabel = (args.birdLabel || "Pigeon").trim() || "Pigeon";
-
-  if (!Number.isFinite(sentMs) || !Number.isFinite(nowMs) || nowMs <= sentMs) return [];
-
-  const localStart = new Date(toLocalMs(sentMs, offsetMin));
-  const localEnd = new Date(toLocalMs(nowMs, offsetMin));
-
-  const startY = localStart.getUTCFullYear();
-  const startM = localStart.getUTCMonth();
-  const startD = localStart.getUTCDate();
-
-  const endY = localEnd.getUTCFullYear();
-  const endM = localEnd.getUTCMonth();
-  const endD = localEnd.getUTCDate();
-
-  const events: any[] = [];
-
-  const tupleLE = (a: [number, number, number], b: [number, number, number]) =>
-    a[0] < b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] <= b[2])));
-
-  let y = startY,
-    m = startM,
-    d = startD;
-
-  while (tupleLE([y, m, d], [endY, endM, endD])) {
-    const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
-
-    const sleepStartLocal = Date.UTC(y, m, d, cfg.sleepStartHour, 0, 0, 0);
-    const sleepEndLocal = wraps ? Date.UTC(y, m, d + 1, cfg.sleepEndHour, 0, 0, 0) : Date.UTC(y, m, d, cfg.sleepEndHour, 0, 0, 0);
-
-    const sleepStartUtc = toUtcMs(sleepStartLocal, offsetMin);
-    const sleepEndUtc = toUtcMs(sleepEndLocal, offsetMin);
-
-    if (sleepStartUtc <= nowMs && sleepEndUtc >= sentMs) {
-      const started = Math.max(sleepStartUtc, sentMs);
-      const wake = sleepEndUtc;
-
-      if (started <= nowMs) {
-        const wakeText = sleepUntilLocalText(wake, offsetMin);
-        const verb = wake <= nowMs ? "awoke at" : "wakes at";
-        events.push({
-          id: `sleep-${y}-${m + 1}-${d}`,
-          idx: 10_000 + events.length,
-          kind: "sleep",
-          at: new Date(started).toISOString(),
-          lat: null,
-          lon: null,
-          geo_text: "Sleeping",
-          region_id: null,
-          region_label: null,
-          name: `${birdLabel} slept — ${verb} ${wakeText}`,
-          _sleep_meta: {
-            sleep_start_utc: new Date(sleepStartUtc).toISOString(),
-            sleep_end_utc: new Date(sleepEndUtc).toISOString(),
-            wake_local_text: wakeText,
-          },
-        });
-      }
-    }
-
-    const next = new Date(Date.UTC(y, m, d + 1, 0, 0, 0, 0));
-    y = next.getUTCFullYear();
-    m = next.getUTCMonth();
-    d = next.getUTCDate();
-  }
-
-  return events.filter((e) => Date.parse(e.at) <= nowMs);
 }
 
 /* -------------------------------------------------
@@ -409,6 +265,85 @@ function computeBadgesFromRegions(args: {
 }
 
 /* -------------------------------------------------
+   Sleep events: synthetic checkpoints (timeline only)
+------------------------------------------------- */
+
+function buildSleepEvents(args: {
+  sentMs: number;
+  nowMs: number;
+  offsetMin: number;
+  birdLabel?: string;
+  cfg?: SleepConfig;
+}) {
+  const { sentMs, nowMs, offsetMin } = args;
+  const cfg = args.cfg ?? SLEEP;
+  const birdLabel = (args.birdLabel || "Pigeon").trim() || "Pigeon";
+
+  if (!Number.isFinite(sentMs) || !Number.isFinite(nowMs) || nowMs <= sentMs) return [];
+
+  const localStart = new Date(sentMs + offsetMin * 60_000);
+  const localEnd = new Date(nowMs + offsetMin * 60_000);
+
+  const startY = localStart.getUTCFullYear();
+  const startM = localStart.getUTCMonth();
+  const startD = localStart.getUTCDate();
+
+  const endY = localEnd.getUTCFullYear();
+  const endM = localEnd.getUTCMonth();
+  const endD = localEnd.getUTCDate();
+
+  const tupleLE = (a: [number, number, number], b: [number, number, number]) =>
+    a[0] < b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] <= b[2])));
+
+  const events: any[] = [];
+  let y = startY,
+    m = startM,
+    d = startD;
+
+  while (tupleLE([y, m, d], [endY, endM, endD])) {
+    const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
+
+    const sleepStartLocal = Date.UTC(y, m, d, cfg.sleepStartHour, 0, 0, 0);
+    const sleepEndLocal = wraps
+      ? Date.UTC(y, m, d + 1, cfg.sleepEndHour, 0, 0, 0)
+      : Date.UTC(y, m, d, cfg.sleepEndHour, 0, 0, 0);
+
+    const sleepStartUtc = sleepStartLocal - offsetMin * 60_000;
+    const sleepEndUtc = sleepEndLocal - offsetMin * 60_000;
+
+    if (sleepStartUtc <= nowMs && sleepEndUtc >= sentMs) {
+      const started = Math.max(sleepStartUtc, sentMs);
+      const wake = sleepEndUtc;
+
+      if (started <= nowMs) {
+        const wakeText = sleepUntilLocalText(wake, offsetMin);
+        const verb = wake <= nowMs ? "awoke at" : "wakes at";
+
+        events.push({
+          id: `sleep-${y}-${m + 1}-${d}`,
+          idx: 10_000 + events.length,
+          kind: "sleep",
+          at: new Date(started).toISOString(),
+          lat: null,
+          lon: null,
+          geo_text: "Sleeping",
+          region_id: null,
+          region_label: null,
+          name: `${birdLabel} slept — ${verb} ${wakeText}`,
+        });
+      }
+    }
+
+    const next = new Date(Date.UTC(y, m, d + 1, 0, 0, 0, 0));
+    y = next.getUTCFullYear();
+    m = next.getUTCMonth();
+    d = next.getUTCDate();
+  }
+
+  return events.filter((e) => Date.parse(e.at) <= nowMs);
+}
+
+/* -------------------------------------------------
    Route handler
 ------------------------------------------------- */
 
@@ -451,6 +386,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   // Normalize numerics (Supabase can return strings)
   const speedKmh = Number((meta as any).speed_kmh);
   const distanceKm = Number((meta as any).distance_km);
+
   const originLon = Number((meta as any).origin_lon);
   const originLat = Number((meta as any).origin_lat);
   const destLon = Number((meta as any).dest_lon);
@@ -487,7 +423,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   const server_now_iso = new Date(nowMsFinal).toISOString();
   const server_now_utc_text = formatUtc(server_now_iso);
 
-  // Fetch checkpoints
+  // Fetch checkpoints (static positions)
   const { data: checkpoints, error: cErr } = await supabaseServer
     .from("letter_checkpoints")
     .select("id, idx, name, at, lat, lon")
@@ -506,29 +442,40 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   const requiredAwakeMs =
     Number.isFinite(speedKmh) && speedKmh > 0 && Number.isFinite(distanceKm) && distanceKm > 0 ? (distanceKm / speedKmh) * 3600_000 : 0;
 
-  const etaAdjustedMs = safeAdjustedEtaMs({
-    sentMs,
-    requiredAwakeMs,
-    offsetMin,
-    ignoresSleep,
-    etaAtIso: (meta as any).eta_at,
-  });
+  // ✅ Skip-initial-sleep policy
+  const { skipUntilMs } = computeInitialSleepSkip(sentMs, offsetMin, ignoresSleep);
+
+  // ✅ ETA adjusted: based on awake-time, plus skip policy
+  const etaAdjustedMs =
+    Number.isFinite(sentMs) && requiredAwakeMs > 0
+      ? etaFromRequiredAwakeMsWithSkip(sentMs, requiredAwakeMs, offsetMin, skipUntilMs, ignoresSleep)
+      : Date.parse((meta as any).eta_at);
 
   // ✅ delivered is false if canceled (even if time would have passed)
   const delivered = canceled ? false : Number.isFinite(etaAdjustedMs) ? nowMsFinal >= etaAdjustedMs : true;
 
   const awakeSoFar =
     Number.isFinite(sentMs) && nowMsFinal > sentMs
-      ? ignoresSleep
-        ? Math.min(nowMsFinal, etaAdjustedMs) - sentMs
-        : awakeMsBetween(sentMs, Math.min(nowMsFinal, etaAdjustedMs), offsetMin)
+      ? awakeMsBetweenWithSkip(sentMs, Math.min(nowMsFinal, etaAdjustedMs), offsetMin, skipUntilMs, ignoresSleep)
       : 0;
 
   const progress = requiredAwakeMs > 0 ? clamp(awakeSoFar / requiredAwakeMs, 0, 1) : 1;
 
   // ✅ sleeping/wake disabled if archived or canceled
-  const sleeping = archived || canceled ? false : ignoresSleep ? false : isSleepingAt(nowMsFinal, offsetMin);
-  const wakeMs = archived || canceled ? null : ignoresSleep ? null : nextWakeUtcMs(nowMsFinal, offsetMin);
+  // ✅ ALSO: if we are in the initial skipped sleep segment, we force sleeping=false
+  const inSkip = !!(skipUntilMs && nowMsFinal < skipUntilMs);
+
+  const sleeping =
+    archived || canceled
+      ? false
+      : ignoresSleep
+      ? false
+      : inSkip
+      ? false
+      : isSleepingAt(nowMsFinal, offsetMin, SLEEP as any);
+
+  const wakeMs = archived || canceled ? null : ignoresSleep ? null : sleeping ? nextWakeUtcMs(nowMsFinal, offsetMin, SLEEP as any) : null;
+
   const sleep_until_iso = wakeMs ? new Date(wakeMs).toISOString() : null;
   const sleep_local_text = wakeMs ? sleepUntilLocalText(wakeMs, offsetMin) : "";
 
@@ -541,20 +488,35 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
     body = bodyRow?.body ?? null;
   }
 
-  // ✅ Upgrade checkpoint labels + add geo_text + region_id
+  /**
+   * ✅ Retiming checkpoints to respect sleep:
+   * Each checkpoint represents a fraction of requiredAwakeMs, not a fraction of wall time.
+   * This makes the timeline match your sleep-aware progress.
+   */
   const cpsBase = (checkpoints ?? []).map((cp: any, i: number, arr: any[]) => {
     const isFirst = i === 0;
     const isLast = i === arr.length - 1;
 
     const geo = Number.isFinite(cp.lat) && Number.isFinite(cp.lon) ? checkpointGeoText(cp.lat, cp.lon) : "somewhere over the U.S.";
-
     const region = Number.isFinite(cp.lat) && Number.isFinite(cp.lon) ? geoRegionForPoint(cp.lat, cp.lon) : null;
+
+    // fraction along checkpoints list
+    const frac = arr.length <= 1 ? 1 : i / (arr.length - 1);
+
+    // compute checkpoint time based on AWAKE-time progress
+    const atMs =
+      Number.isFinite(sentMs) && requiredAwakeMs > 0 && Number.isFinite(etaAdjustedMs)
+        ? etaFromRequiredAwakeMsWithSkip(sentMs, requiredAwakeMs * frac, offsetMin, skipUntilMs, ignoresSleep)
+        : Date.parse(cp.at);
+
+    const atISO = Number.isFinite(atMs) ? new Date(atMs).toISOString() : cp.at;
 
     const upgradedName = isFirst ? `Departed roost — ${geo}` : isLast ? `Final descent — ${geo}` : geo;
 
     return {
       ...cp,
       kind: "checkpoint",
+      at: atISO, // ✅ retimed
       geo_text: geo,
       region_id: region?.id ?? null,
       region_label: region?.label ?? null,
@@ -562,11 +524,15 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
     };
   });
 
-  // ✅ No sleep events if archived or canceled or ignoresSleep
+  /**
+   * ✅ Sleep events: use “effective sent time” for sleep insertion.
+   * If we skipped initial sleep, start sleep events from skipUntilMs so the timeline
+   * does NOT show “slept” immediately after sending.
+   */
   const sleepEvents =
     !archived && !canceled && !ignoresSleep && Number.isFinite(sentMs)
       ? buildSleepEvents({
-          sentMs,
+          sentMs: skipUntilMs ?? sentMs,
           nowMs: nowMsFinal,
           offsetMin,
           birdLabel: BIRD_RULES[bird].sleepLabel,
@@ -609,7 +575,11 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   const destRegion = Number.isFinite(destLat) && Number.isFinite(destLon) ? geoRegionForPoint(destLat, destLon) : null;
 
   const deliveredAtISO =
-    delivered && Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : delivered ? new Date(nowMsFinal).toISOString() : undefined;
+    delivered && Number.isFinite(etaAdjustedMs)
+      ? new Date(etaAdjustedMs).toISOString()
+      : delivered
+      ? new Date(nowMsFinal).toISOString()
+      : undefined;
 
   const computedBadges = computeBadgesFromRegions({
     origin: { name: (meta as any).origin_name, regionId: originRegion?.id ?? null },
@@ -636,7 +606,6 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
     }));
 
     const { error: upsertErr } = await supabaseServer.from("letter_items").upsert(rows, { onConflict: "letter_id,kind,code" });
-
     if (upsertErr) console.error("BADGE UPSERT ERROR:", upsertErr);
   }
 
@@ -666,6 +635,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
       : "Canceled"
     : formatUtc(etaAdjustedISO);
 
+  // Optional: handy debug if you add ?debug=1 later
+  // const sleepMsSoFar = computeSleepMillisBetween(sentMs, Math.min(nowMsFinal, etaAdjustedMs), offsetMin, skipUntilMs, ignoresSleep);
+
   return NextResponse.json({
     archived,
     archived_at: archived ? archived_at : null,
@@ -683,7 +655,6 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
 
       speed_kmh: Number.isFinite(speedKmh) ? speedKmh : 0,
 
-      // ✅ If canceled, we set these to cancel time so the UI can display a coherent stamp.
       eta_at_adjusted,
       eta_utc_text,
 
@@ -702,8 +673,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
       sleep_local_text,
       tooltip_text,
 
-      // ✅ CRITICAL FIX:
-      // Do NOT lie and say "delivered" when canceled — that triggers body reveal.
+      // ✅ CRITICAL: canceled must not become delivered (prevents body reveal)
       marker_mode: canceled ? "canceled" : delivered ? "delivered" : sleeping ? "sleeping" : "flying",
 
       current_speed_kmh,

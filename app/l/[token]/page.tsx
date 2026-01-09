@@ -1174,19 +1174,16 @@ export default function LetterStatusPage() {
             </div>
 
             <div style={{ marginTop: 12 }}>
-              <MapView
-                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-                progress={progress}
-                tooltipText={mapTooltip}
-                mapStyle={mapStyle}
-                markerMode={markerMode}
-
-                // ✅ pass sleep overlay inputs (optional)
-                sentAtISO={letter.sent_at}
-                etaAtISO={effectiveEtaISO}
-                bird={bird}
-              />
+<MapView
+  origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+  dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+  progress={progress}
+  tooltipText={mapTooltip}
+  mapStyle={mapStyle}
+  markerMode={markerMode}
+  sentAtISO={letter.sent_at}
+  etaAtISO={effectiveEtaISO}
+/>
             </div>
 
             <div style={{ marginTop: 14 }}>
