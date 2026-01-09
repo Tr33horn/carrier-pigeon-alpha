@@ -5,7 +5,11 @@ import { MapContainer, TileLayer, Polyline, Marker, Tooltip, useMap } from "reac
 import L from "leaflet";
 
 // ✅ dev-only sleep overlay helpers (pure functions)
-import { isSleepingAt, offsetMinutesFromLon } from "@/app/lib/flightSleep";
+import {
+  isSleepingAt,
+  offsetMinutesFromLon,
+  initialSleepSkipUntilUtcMs,
+} from "@/app/lib/flightSleep";
 
 // ✅ Match the LetterStatusPage values
 export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
@@ -162,6 +166,9 @@ function makeNearStraightDriftPath(args: {
 /**
  * ✅ Dev-only: build sleeping segments along the route based on sent/eta time.
  * This is a *visual aid* (overlay), not the authoritative sim.
+ *
+ * ✅ IMPORTANT: respects your "skip initial sleep window" policy
+ * by treating [sent..skipUntil) as awake.
  */
 function buildSleepOverlaySegments(args: {
   origin: LatLon;
@@ -175,6 +182,13 @@ function buildSleepOverlaySegments(args: {
 
   if (!Number.isFinite(sentMs) || !Number.isFinite(etaMs) || etaMs <= sentMs) return [];
 
+  // Use MIDPOINT offset as the server does (consistency > per-point “accuracy” here)
+  const midLon = (args.origin.lon + args.dest.lon) / 2;
+  const offMin = offsetMinutesFromLon(midLon);
+
+  // If sending during sleep, policy says: skip this first sleep window
+  const skipUntil = initialSleepSkipUntilUtcMs(sentMs, offMin) ?? null;
+
   const N = Math.max(48, args.samples ?? 140);
   const segments: [number, number][][] = [];
   let current: [number, number][] = [];
@@ -185,22 +199,21 @@ function buildSleepOverlaySegments(args: {
   };
 
   for (let i = 0; i <= N; i++) {
-    const f = i / N; // 0..1 time fraction
+    const f = i / N; // 0..1 time fraction (baseline)
     const tMs = sentMs + (etaMs - sentMs) * f;
+
+    // Treat initial skipped window as awake
+    const sleeping =
+      skipUntil && tMs < skipUntil
+        ? false
+        : isSleepingAt(tMs, offMin);
 
     const lat = lerp(args.origin.lat, args.dest.lat, f);
     const lon = lerp(args.origin.lon, args.dest.lon, f);
-
-    const offMin = offsetMinutesFromLon(lon);
-    const sleeping = isSleepingAt(tMs, offMin);
-
     const pt: [number, number] = [lat, lon];
 
-    if (sleeping) {
-      current.push(pt);
-    } else {
-      push();
-    }
+    if (sleeping) current.push(pt);
+    else push();
   }
 
   push();
@@ -213,7 +226,7 @@ export default function MapView(props: {
   progress: number; // 0..1
   tooltipText?: string;
   mapStyle?: MapStyle;
-  markerMode?: MarkerMode; // "flying" | "sleeping" | "delivered" | "canceled"
+  markerMode?: MarkerMode;
 
   // ✅ optional dev-only overlay inputs
   sentAtISO?: string;
@@ -238,10 +251,15 @@ export default function MapView(props: {
   const mapStyle: MapStyle = props.mapStyle ?? "carto-positron";
   const tile = useMemo(() => getCarto(mapStyle), [mapStyle]);
 
+  // ✅ smooth progress display with RAF (race-proof)
   const [displayProgress, setDisplayProgress] = useState(() => clamp01(props.progress));
+  const displayRef = useRef(displayProgress);
+  useEffect(() => {
+    displayRef.current = displayProgress;
+  }, [displayProgress]);
+
   const rafRef = useRef<number | null>(null);
 
-  // ✅ Mode derived from prop (source of truth) + fallback to progress
   const mode: MarkerMode = props.markerMode ?? (clamp01(props.progress) >= 1 ? "delivered" : "flying");
 
   const isFlying = mode === "flying";
@@ -264,13 +282,14 @@ export default function MapView(props: {
   useEffect(() => {
     const to = clamp01(props.progress);
 
-    // If terminal, just snap.
     if (isCanceled || isDelivered) {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
       setDisplayProgress(to);
       return;
     }
 
-    const from = displayProgress;
+    const from = displayRef.current;
     if (Math.abs(to - from) < 0.00001) return;
 
     const durationMs = 420;
@@ -281,7 +300,8 @@ export default function MapView(props: {
     const tick = (now: number) => {
       const t = clamp01((now - start) / durationMs);
       const eased = 1 - Math.pow(1 - t, 3);
-      setDisplayProgress(lerp(from, to, eased));
+      const next = lerp(from, to, eased);
+      setDisplayProgress(next);
       if (t < 1) rafRef.current = requestAnimationFrame(tick);
     };
 
@@ -289,8 +309,8 @@ export default function MapView(props: {
 
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.progress, isCanceled, isDelivered]);
 
   const current = useMemo(
@@ -301,7 +321,6 @@ export default function MapView(props: {
     [origin.lat, origin.lon, dest.lat, dest.lon, displayProgress]
   );
 
-  // ✅ CANCELED: render skull marker instead of dot
   const liveIcon = useMemo(
     () =>
       L.divIcon({
@@ -313,12 +332,7 @@ export default function MapView(props: {
             <span class="pigeonPulseRing"></span>
             <span class="pigeonPulseRing ring2"></span>
             <span class="pigeonSleepRing"></span>
-
-            ${
-              isCanceled
-                ? `<div class="pigeonSkull" aria-hidden="true">💀</div>`
-                : `<div class="pigeonDot"></div>`
-            }
+            ${isCanceled ? `<div class="pigeonSkull" aria-hidden="true">💀</div>` : `<div class="pigeonDot"></div>`}
           </div>
         `,
         iconSize: [44, 44],
@@ -368,19 +382,12 @@ export default function MapView(props: {
     [origin.lat, origin.lon, dest.lat, dest.lon]
   );
 
-  // ✅ flown route uses displayProgress (same thing the marker uses)
   const flownPts = useMemo(() => {
     const p = clamp01(displayProgress);
     if (p <= 0.0001) return [[origin.lat, origin.lon]] as [number, number][];
-    return makeNearStraightDriftPath({
-      origin,
-      dest,
-      progress: p,
-      points: 60,
-    });
+    return makeNearStraightDriftPath({ origin, dest, progress: p, points: 60 });
   }, [origin, dest, displayProgress]);
 
-  // ✅ sleep overlay segments (dev-only)
   const sleepSegments = useMemo(() => {
     if (!showSleepOverlay) return [];
     return buildSleepOverlaySegments({
@@ -394,32 +401,24 @@ export default function MapView(props: {
 
   const tooltip = useMemo(() => normalizeTooltip(props.tooltipText), [props.tooltipText]);
 
-  /**
-   * ✅ Don’t hardcode colors in JS.
-   * Use CSS variables with fallbacks so your theme can control it.
-   */
+  // ✅ CSS-variable based colors
   const idealColor = "var(--route-ideal, rgba(18,18,18,0.35))";
   const flownColor = "var(--route-flown, rgba(22,163,74,0.85))";
   const sleepColor = "var(--route-sleep, rgba(88,80,236,0.85))";
 
   return (
     <div className="mapShell">
-      <MapContainer zoom={4} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
+      <MapContainer
+        zoom={4}
+        scrollWheelZoom={false}
+        style={{ height: "100%", width: "100%" }}
+      >
         <TileLayer attribution={tile.attribution} url={tile.url} />
 
         <FitBoundsOnRouteChange origin={origin} dest={dest} />
 
-        {/* Ideal straight line route */}
-        <Polyline
-          positions={straightLine}
-          pathOptions={{
-            color: idealColor,
-            weight: 3,
-            opacity: 1,
-          }}
-        />
+        <Polyline positions={straightLine} pathOptions={{ color: idealColor, weight: 3, opacity: 1 }} />
 
-        {/* Actual flown route so far (subtle drift) */}
         <Polyline
           positions={flownPts}
           pathOptions={{
@@ -432,7 +431,6 @@ export default function MapView(props: {
           }}
         />
 
-        {/* ✅ Dev-only sleep overlay segments */}
         {showSleepOverlay &&
           sleepSegments.map((seg, i) => (
             <Polyline

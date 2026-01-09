@@ -2,25 +2,27 @@
 
 export type SleepConfig = {
   sleepStartHour: number; // 0-23 local
-  sleepEndHour: number;   // 0-23 local
+  sleepEndHour: number; // 0-23 local
   // Example: 22 -> 6 means 10pm to 6am (wraps midnight)
 };
 
-const DEFAULT_SLEEP: SleepConfig = { sleepStartHour: 22, sleepEndHour: 6 };
+export const DEFAULT_SLEEP: SleepConfig = { sleepStartHour: 22, sleepEndHour: 6 };
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
 /**
- * Very lightweight "timezone" for US: infer a fixed UTC offset from longitude.
- * -120 lon ~ UTC-8, -75 ~ UTC-5, etc.
- * This is a heuristic (good enough for vibe + consistency).
+ * Lightweight fixed "timezone" offset from longitude.
+ * 15° ≈ 1 hour. Rounded. Not DST-aware (intentional).
+ *
+ * ✅ World-ish bounds: UTC-12..UTC+14
+ * (Important: don't hard-clamp to US-only offsets, or sleep logic disagrees across the route.)
  */
 export function offsetMinutesFromLon(lon: number) {
   if (!Number.isFinite(lon)) return 0;
-  const hours = Math.round(lon / 15); // -120/15 = -8
-  return clamp(hours * 60, -600, -240); // clamp to typical US offsets (UTC-10..UTC-4)
+  const hours = Math.round(lon / 15);
+  return clamp(hours * 60, -12 * 60, 14 * 60);
 }
 
 function toLocalMs(utcMs: number, offsetMin: number) {
@@ -44,29 +46,24 @@ function nextBoundaryUtcMs(utcMs: number, offsetMin: number, cfg: SleepConfig) {
   const { y, m, day } = localYMD(localMs);
 
   // build local times (as UTC Date but representing local clock, because we use UTC getters)
-  const mkLocal = (hh: number, mm = 0) =>
-    Date.UTC(y, m, day, hh, mm, 0, 0);
+  const mkLocal = (hh: number, mm = 0) => Date.UTC(y, m, day, hh, mm, 0, 0);
 
-  const sleepStartLocal = mkLocal(cfg.sleepStartHour);
-  const sleepEndLocal = mkLocal(cfg.sleepEndHour);
-
-  // Because sleep may wrap midnight
   // If sleepStartHour > sleepEndHour => window crosses midnight.
   const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
 
-  // Candidate boundaries today (and possibly tomorrow for end if wraps)
   const candidatesLocal: number[] = [];
 
-  // Always consider end-of-day as a boundary so we can move forward safely
+  // Always consider end-of-day boundary so we can move forward safely
   candidatesLocal.push(Date.UTC(y, m, day + 1, 0, 0, 0, 0));
 
-  candidatesLocal.push(sleepStartLocal);
+  // Sleep start is always a candidate boundary "today"
+  candidatesLocal.push(mkLocal(cfg.sleepStartHour));
 
+  // Sleep end may be "today" or "tomorrow" depending on wrap
   if (wraps) {
-    // sleep end is next day
     candidatesLocal.push(Date.UTC(y, m, day + 1, cfg.sleepEndHour, 0, 0, 0));
   } else {
-    candidatesLocal.push(sleepEndLocal);
+    candidatesLocal.push(mkLocal(cfg.sleepEndHour));
   }
 
   // Convert candidates to UTC and pick the soonest > utcMs
@@ -75,7 +72,7 @@ function nextBoundaryUtcMs(utcMs: number, offsetMin: number, cfg: SleepConfig) {
     .filter((t) => t > utcMs + 1); // strictly in the future
 
   if (!candidatesUtc.length) {
-    // fallback: +1 hour
+    // fallback: +1 hour (shouldn't really happen, but keeps things safe)
     return utcMs + 3600_000;
   }
 
@@ -88,10 +85,15 @@ export function isSleepingAt(utcMs: number, offsetMin: number, cfg: SleepConfig 
   const h = d.getUTCHours(); // because localMs already shifted
 
   const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
+
+  // Non-wrapping window (e.g. 13..17)
   if (!wraps) {
+    // Special case: 0..0 means "never sleeping"
+    if (cfg.sleepStartHour === cfg.sleepEndHour) return false;
     return h >= cfg.sleepStartHour && h < cfg.sleepEndHour;
   }
-  // wraps midnight, e.g. 22..6
+
+  // Wrapping window (e.g. 22..6)
   return h >= cfg.sleepStartHour || h < cfg.sleepEndHour;
 }
 
@@ -112,7 +114,7 @@ export function awakeMsBetween(
   while (t < endUtcMs) {
     const sleeping = isSleepingAt(t, offsetMin, cfg);
     const next = Math.min(nextBoundaryUtcMs(t, offsetMin, cfg), endUtcMs);
-    if (!sleeping) awake += (next - t);
+    if (!sleeping) awake += next - t;
     t = next;
   }
 
@@ -153,7 +155,7 @@ export function etaFromRequiredAwakeMs(
 }
 
 /**
- * Pretty local text like "Sleeps until 6:00 AM"
+ * Pretty local text like "6:00 AM"
  */
 export function sleepUntilLocalText(sleepUntilUtcMs: number, offsetMin: number) {
   const localMs = toLocalMs(sleepUntilUtcMs, offsetMin);
@@ -167,22 +169,22 @@ export function sleepUntilLocalText(sleepUntilUtcMs: number, offsetMin: number) 
  * If sleeping now, return the next wake time in UTC ms.
  * If awake now, return null.
  */
-export function nextWakeUtcMs(
-  nowUtcMs: number,
-  offsetMin: number,
-  cfg: SleepConfig = DEFAULT_SLEEP
-) {
+export function nextWakeUtcMs(nowUtcMs: number, offsetMin: number, cfg: SleepConfig = DEFAULT_SLEEP) {
   if (!isSleepingAt(nowUtcMs, offsetMin, cfg)) return null;
 
-  // step forward until we are not sleeping
   let t = nowUtcMs;
   let guard = 0;
+
+  // step forward until we are not sleeping
   while (guard < 1000) {
     guard++;
     const next = nextBoundaryUtcMs(t, offsetMin, cfg);
     t = next;
+
+    // t is on a boundary; test just after it
     if (!isSleepingAt(t + 1, offsetMin, cfg)) return t;
   }
+
   return null;
 }
 
@@ -216,6 +218,7 @@ export function addAwakeMs(
     const wake = nextWakeUtcMs(t, offsetMin, cfg);
     if (wake != null) t = wake;
   }
+
   return etaFromRequiredAwakeMs(t, addAwakeMs, offsetMin, cfg);
 }
 
@@ -239,14 +242,29 @@ export function awakeProgress01(
 }
 
 /**
- * If "launch" happens during sleep, push to next wake.
- * (Your requested behavior: skip the current sleep window and sleep next time.)
+ * ✅ NEW HELPER (matches your "skip initial sleep window" policy):
+ * If "send" occurs during sleep, return the wake time (UTC ms).
+ * Status route can treat [sent..wake) as AWAKE for progress math,
+ * without changing sent_at.
  */
-export function launchUtcMs(
+export function initialSleepSkipUntilUtcMs(
   sentUtcMs: number,
   offsetMin: number,
   cfg: SleepConfig = DEFAULT_SLEEP
 ) {
-  const wake = nextWakeUtcMs(sentUtcMs, offsetMin, cfg);
-  return wake ?? sentUtcMs;
+  if (!Number.isFinite(sentUtcMs)) return null;
+  if (!isSleepingAt(sentUtcMs, offsetMin, cfg)) return null;
+  return nextWakeUtcMs(sentUtcMs, offsetMin, cfg);
+}
+
+/**
+ * Back-compat helper.
+ *
+ * ⚠️ Old behavior: "push launch to next wake"
+ * ✅ New behavior (your policy): DO NOT shift sent time.
+ *
+ * Keep this returning sentUtcMs so older callers don't secretly reintroduce the bug.
+ */
+export function launchUtcMs(sentUtcMs: number, _offsetMin: number, _cfg: SleepConfig = DEFAULT_SLEEP) {
+  return sentUtcMs;
 }

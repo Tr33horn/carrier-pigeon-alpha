@@ -260,7 +260,12 @@ function Ico({
     case "moon":
       return (
         <svg {...common}>
-          <path d="M21 14.2A7.5 7.5 0 0 1 9.8 3a6.6 6.6 0 1 0 11.2 11.2Z" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round" />
+          <path
+            d="M21 14.2A7.5 7.5 0 0 1 9.8 3a6.6 6.6 0 1 0 11.2 11.2Z"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
         </svg>
       );
     case "pin":
@@ -396,9 +401,7 @@ function WaxSealOverlay({
 
           <div>
             <div className="sealTitle">{canceled ? "Canceled" : "Sealed until delivery"}</div>
-            <div className="sealSub">
-              {canceled ? "This letter will not be delivered." : `Opens at ${opensShort}`}
-            </div>
+            <div className="sealSub">{canceled ? "This letter will not be delivered." : `Opens at ${opensShort}`}</div>
             <div className="sealHint">{canceled ? "The bird was recalled to HQ." : "No peeking. The bird is watching."}</div>
           </div>
         </div>
@@ -569,6 +572,9 @@ export default function LetterStatusPage() {
   const [canceled, setCanceled] = useState(false);
   const canceledRef = useRef(false);
 
+  // ✅ NEW: delivered ref so polling can stop immediately when delivered flips true
+  const deliveredRef = useRef(false);
+
   const [archivedAtISO, setArchivedAtISO] = useState<string | null>(null);
   const [canceledAtISO, setCanceledAtISO] = useState<string | null>(null);
 
@@ -697,21 +703,6 @@ export default function LetterStatusPage() {
     };
   }, [token]);
 
-  useEffect(() => {
-    if (!token) return;
-    if (archived) return;
-    if (canceled) return;
-
-    const interval = setInterval(() => {
-      if (archivedRef.current) return;
-      if (canceledRef.current) return;
-      const fn = loadRef.current;
-      if (fn) void fn();
-    }, 15000);
-
-    return () => clearInterval(interval);
-  }, [token, archived, canceled]);
-
   const effectiveEtaISO = useMemo(() => {
     if (!letter) return "";
     return (letter.eta_at_adjusted && letter.eta_at_adjusted.trim()) || letter.eta_at;
@@ -741,6 +732,30 @@ export default function LetterStatusPage() {
     if (canceled) return false;
     return !!delivered;
   }, [canceled, delivered]);
+
+  // ✅ NEW: keep deliveredRef updated for polling guard
+  useEffect(() => {
+    deliveredRef.current = uiDelivered;
+  }, [uiDelivered]);
+
+  // ✅ polling stops after delivery too
+  useEffect(() => {
+    if (!token) return;
+    if (archived) return;
+    if (canceled) return;
+    if (uiDelivered) return;
+
+    const interval = setInterval(() => {
+      if (archivedRef.current) return;
+      if (canceledRef.current) return;
+      if (deliveredRef.current) return;
+
+      const fn = loadRef.current;
+      if (fn) void fn();
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [token, archived, canceled, uiDelivered]);
 
   const progress = useMemo(() => {
     if (flight && Number.isFinite(flight.progress)) return clamp01(flight.progress);
@@ -866,6 +881,7 @@ export default function LetterStatusPage() {
     return grouped;
   }, [checkpointsByTime, uiDelivered, canceled, effectiveEtaISO]);
 
+  // ✅ NEW: when sleeping, current highlight prefers the latest sleep event
   const currentTimelineKey = useMemo(() => {
     if (uiDelivered || canceled) return null;
 
@@ -873,6 +889,23 @@ export default function LetterStatusPage() {
     if (!realItems.length) return null;
 
     const nowT = now.getTime();
+
+    if (sleeping) {
+      let bestSleep: TimelineItem | null = null;
+      let bestT = -Infinity;
+
+      for (const it of realItems) {
+        if (it.kind !== "sleep") continue;
+        const t = new Date(it.at).getTime();
+        if (t <= nowT && t >= bestT) {
+          bestT = t;
+          bestSleep = it;
+        }
+      }
+
+      if (bestSleep) return bestSleep.key;
+    }
+
     let bestKey: string | null = null;
     let bestT = -Infinity;
 
@@ -885,7 +918,7 @@ export default function LetterStatusPage() {
     }
 
     return bestKey ?? realItems[0].key;
-  }, [timelineItems, now, uiDelivered, canceled]);
+  }, [timelineItems, now, uiDelivered, canceled, sleeping]);
 
   const etaTextUTC = useMemo(() => {
     if (!letter) return "";
@@ -897,7 +930,6 @@ export default function LetterStatusPage() {
     return formatLocal(effectiveEtaISO);
   }, [letter, effectiveEtaISO]);
 
-  // ✅ This is what the seal uses (short + sweet)
   const opensShort = useMemo(() => {
     if (!effectiveEtaISO) return "";
     return formatOpensShort(effectiveEtaISO);
@@ -918,10 +950,16 @@ export default function LetterStatusPage() {
     return uiDelivered ? "delivered" : sleeping ? "sleeping" : "flying";
   }, [canceled, flight?.marker_mode, uiDelivered, sleeping]);
 
+  // ✅ FIX: prevent delivery animation from re-triggering forever
   useEffect(() => {
-    if (canceled) return;
+    if (canceled) {
+      prevDelivered.current = false;
+      return;
+    }
 
     if (!prevDelivered.current && uiDelivered) {
+      prevDelivered.current = true;
+
       setRevealStage("crack");
       setConfetti(true);
 
@@ -1049,7 +1087,6 @@ export default function LetterStatusPage() {
               </div>
             </div>
 
-            {/* ✅ ETA shows Local + UTC */}
             <div className="etaBox">
               <div className="kicker">ETA</div>
               <div className="etaTime">{etaTextLocal}</div>
@@ -1174,16 +1211,17 @@ export default function LetterStatusPage() {
             </div>
 
             <div style={{ marginTop: 12 }}>
-<MapView
-  origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-  dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-  progress={progress}
-  tooltipText={mapTooltip}
-  mapStyle={mapStyle}
-  markerMode={markerMode}
-  sentAtISO={letter.sent_at}
-  etaAtISO={effectiveEtaISO}
-/>
+              <MapView
+                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+                progress={progress}
+                tooltipText={mapTooltip}
+                mapStyle={mapStyle}
+                markerMode={markerMode}
+                // ✅ Dev-only sleep overlay inputs only when live (prevents weird overlays in terminal states)
+                sentAtISO={showLive ? letter.sent_at : undefined}
+                etaAtISO={showLive ? effectiveEtaISO : undefined}
+              />
             </div>
 
             <div style={{ marginTop: 14 }}>

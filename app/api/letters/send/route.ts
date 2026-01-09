@@ -8,13 +8,8 @@ import { sendEmail } from "../../../lib/email/send";
 import { ROUTE_TUNED_REGIONS } from "../../../lib/geo/geoRegions.routes";
 import { geoLabelFor, type GeoRegion } from "../../../lib/geo/geoLabel";
 
-// ✅ Sleep realism helpers (already in your repo)
-import {
-  offsetMinutesFromLon,
-  isSleepingAt,
-  nextWakeUtcMs,
-  etaFromRequiredAwakeMs,
-} from "../../../lib/flightSleep";
+// ✅ Sleep helper (SINGLE source of truth — match status route)
+import { offsetMinutesFromLon } from "@/app/lib/flightSleep";
 
 // ✅ Email template
 import { LetterOnTheWayEmail } from "@/emails/LetterOnTheWay";
@@ -27,7 +22,6 @@ const STORE_REGION_META = false;
 const REGIONS: GeoRegion[] = [...ROUTE_TUNED_REGIONS];
 
 type BirdType = "pigeon" | "snipe" | "goose";
-
 type SleepCfg = { sleepStartHour: number; sleepEndHour: number };
 
 const BIRDS: Record<
@@ -46,7 +40,7 @@ const BIRDS: Record<
     speed_kmh: 88,
     inefficiency: 1.05,
     sleepCfg: { sleepStartHour: 22, sleepEndHour: 6 }, // irrelevant
-    ignoresSleep: true, // ✅ the real switch
+    ignoresSleep: true,
   },
   goose: {
     label: "Canada Goose",
@@ -75,9 +69,7 @@ function distanceKm(aLat: number, aLon: number, bLat: number, bLon: number) {
   const lat1 = toRad(aLat);
   const lat2 = toRad(bLat);
 
-  const x =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
 
   return 2 * R * Math.asin(Math.sqrt(x));
 }
@@ -185,25 +177,23 @@ function stickyGeoLabel(opts: {
 }
 
 /**
- * ✅ Checkpoints that respect sleep:
+ * ✅ Stable checkpoints:
  * - Position is linear (vibe)
- * - Time is mapped by “required awake ms” → UTC using flightSleep’s etaFromRequiredAwakeMs
+ * - Time is baseline wall-time between sent_at and eta_at (no sleep baked in)
  *
- * IMPORTANT: We DO NOT store sleep-adjusted ETA in DB anymore.
- * DB stores baseline eta_at; status API computes sleep-adjusted display ETA.
+ * IMPORTANT:
+ * Your /api/letters/[token] route RETIMES checkpoints to match sleep-aware progress anyway.
+ * So storing baseline times here keeps DB sane + avoids double-applying sleep.
  */
-function generateCheckpointsSleepAware(opts: {
+function generateCheckpointsBaseline(opts: {
   sentUtcMs: number;
-  requiredAwakeMsTotal: number;
-  offsetMin: number;
-  sleepCfg: SleepCfg;
-  ignoresSleep: boolean;
+  etaUtcMs: number;
   oLat: number;
   oLon: number;
   dLat: number;
   dLon: number;
 }) {
-  const { sentUtcMs, requiredAwakeMsTotal, offsetMin, sleepCfg, ignoresSleep, oLat, oLon, dLat, dLon } = opts;
+  const { sentUtcMs, etaUtcMs, oLat, oLon, dLat, dLon } = opts;
 
   const count = 8;
 
@@ -218,18 +208,15 @@ function generateCheckpointsSleepAware(opts: {
     "Final descent",
   ];
 
+  const span = Math.max(1, etaUtcMs - sentUtcMs);
+
   return Array.from({ length: count }, (_, i) => {
     const t = i / (count - 1);
 
     const lat = lerp(oLat, dLat, t);
     const lon = lerp(oLon, dLon, t);
 
-    const reqAwakeForCheckpoint = Math.round(requiredAwakeMsTotal * t);
-
-    const atUtcMs = ignoresSleep
-      ? sentUtcMs + reqAwakeForCheckpoint
-      : etaFromRequiredAwakeMs(sentUtcMs, reqAwakeForCheckpoint, offsetMin, sleepCfg);
-
+    const atUtcMs = sentUtcMs + Math.round(span * t);
     const at = new Date(atUtcMs).toISOString();
 
     const geo = stickyGeoLabel({
@@ -263,17 +250,7 @@ function generateCheckpointsSleepAware(opts: {
 export async function POST(req: Request) {
   const body = await req.json();
 
-  const {
-    from_name,
-    from_email,
-    to_name,
-    to_email,
-    subject,
-    message,
-    origin,
-    destination,
-    bird: birdRaw,
-  } = body;
+  const { from_name, from_email, to_name, to_email, subject, message, origin, destination, bird: birdRaw } = body;
 
   const bird = normalizeBird(birdRaw);
   const birdCfg = BIRDS[bird];
@@ -302,52 +279,44 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Origin and destination are required." }, { status: 400 });
   }
 
-  if (origin.name === destination.name) {
+  // Prefer coords check over "name" check (names can differ for same place; coords cannot)
+  if (origin.lat === destination.lat && origin.lon === destination.lon) {
     return NextResponse.json({ error: "Origin and destination must be different." }, { status: 400 });
   }
 
   // ✅ Distance + required awake flight duration (no sleep baked in)
   const km = distanceKm(origin.lat, origin.lon, destination.lat, destination.lon);
+  if (!Number.isFinite(km) || km <= 0) {
+    return NextResponse.json({ error: "Invalid route distance." }, { status: 400 });
+  }
 
   const speedKmh = birdCfg.speed_kmh;
-  const reqAwakeMs = Math.max(
-    0,
-    Math.round(((km / speedKmh) * birdCfg.inefficiency) * 3600_000)
-  );
+  if (!Number.isFinite(speedKmh) || speedKmh <= 0) {
+    return NextResponse.json({ error: "Invalid bird speed." }, { status: 400 });
+  }
 
-  // ✅ Pick a single timezone offset for the flight
+  const reqAwakeMs = Math.max(0, Math.round(((km / speedKmh) * birdCfg.inefficiency) * 3600_000));
+
+  // ✅ Pick a single timezone offset for the flight (MIDPOINT lon)
   const midLon = lerp(origin.lon, destination.lon, 0.5);
   const offsetMin = offsetMinutesFromLon(midLon);
 
-  // ✅ If launch happens during sleep window, SKIP this sleep cycle:
-  // store sent_at at next wake, not “now”
-  const requestedSentUtcMs = Date.now();
+  // ✅ IMPORTANT FIX:
+  // We DO NOT delay sent_at if the bird is “sleeping”.
+  // The “skip-initial-sleep-window” behavior is handled in /api/letters/[token].
+  const sentUtcMs = Date.now();
+  const sentAt = new Date(sentUtcMs);
 
-  const sleepingNow =
-    birdCfg.ignoresSleep ? false : isSleepingAt(requestedSentUtcMs, offsetMin, birdCfg.sleepCfg);
+  // ✅ BASELINE ETA stored in DB (always sane)
+  const etaUtcMs = sentUtcMs + reqAwakeMs;
 
-  const wakeUtcMs =
-    birdCfg.ignoresSleep ? null : nextWakeUtcMs(requestedSentUtcMs, offsetMin, birdCfg.sleepCfg);
-
-  const actualSentUtcMs = sleepingNow && wakeUtcMs ? wakeUtcMs : requestedSentUtcMs;
-
-  const sentAt = new Date(actualSentUtcMs);
-
-  // ✅ BASELINE ETA stored in DB (always sane):
-  // (sleep-adjusted ETA is computed in /api/letters/[token])
-  const etaBaselineUtcMs = actualSentUtcMs + reqAwakeMs;
-  const etaAt = new Date(etaBaselineUtcMs);
-
-  // ✅ Hard safety: if something is wildly wrong, clamp to baseline within 30 days.
-  // This prevents “2039” ever getting written again.
-  const maxAllowedUtcMs = actualSentUtcMs + 30 * 24 * 3600_000;
-  const etaAtSafe = Number.isFinite(etaBaselineUtcMs) && etaBaselineUtcMs <= maxAllowedUtcMs
-    ? etaAt
-    : new Date(Math.min(etaBaselineUtcMs || maxAllowedUtcMs, maxAllowedUtcMs));
+  // ✅ Hard safety clamp: never store an ETA beyond 30 days (prevents “2039”)
+  const maxAllowedUtcMs = sentUtcMs + 30 * 24 * 3600_000;
+  const etaUtcMsSafe = Number.isFinite(etaUtcMs) ? Math.min(etaUtcMs, maxAllowedUtcMs) : maxAllowedUtcMs;
+  const etaAtSafe = new Date(etaUtcMsSafe);
 
   const publicToken = crypto.randomBytes(16).toString("hex");
 
-  // 🔎 Debug that will immediately tell us if sleep-skip is triggering
   console.log("SEND DEBUG:", {
     token: publicToken.slice(0, 8),
     bird,
@@ -356,10 +325,7 @@ export async function POST(req: Request) {
     ineff: birdCfg.inefficiency,
     reqAwakeMs,
     offsetMin,
-    requestedSentUtc: new Date(requestedSentUtcMs).toISOString(),
-    sleepingNow,
-    wakeUtc: wakeUtcMs ? new Date(wakeUtcMs).toISOString() : null,
-    actualSentUtc: sentAt.toISOString(),
+    sentUtc: sentAt.toISOString(),
     etaBaselineUtc: etaAtSafe.toISOString(),
   });
 
@@ -394,13 +360,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: letterErr?.message ?? "Insert failed" }, { status: 500 });
   }
 
-  // ✅ Sleep-aware checkpoints (their times pause during sleep)
-  const checkpoints = generateCheckpointsSleepAware({
-    sentUtcMs: actualSentUtcMs,
-    requiredAwakeMsTotal: reqAwakeMs,
-    offsetMin,
-    sleepCfg: birdCfg.sleepCfg,
-    ignoresSleep: birdCfg.ignoresSleep,
+  // ✅ Store baseline checkpoints (status route retimes them sleep-aware)
+  const checkpoints = generateCheckpointsBaseline({
+    sentUtcMs,
+    etaUtcMs: etaUtcMsSafe,
     oLat: origin.lat,
     oLon: origin.lon,
     dLat: destination.lat,
