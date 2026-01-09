@@ -113,6 +113,13 @@ async function copyToClipboard(text: string) {
   document.body.removeChild(ta);
 }
 
+function isCanceledLetter(l: DashboardLetter | null | undefined) {
+  if (!l) return false;
+  if (l.canceled === true) return true;
+  if (l.canceled_at && String(l.canceled_at).trim()) return true;
+  return false;
+}
+
 function progressFromTimes(opts: {
   nowMs: number;
   sentISO: string;
@@ -326,8 +333,12 @@ export default function DashboardPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to load");
 
-      const sent = (data.sentLetters ?? data.letters ?? []) as DashboardLetter[];
-      const incoming = (data.incomingLetters ?? []) as DashboardLetter[];
+      const sentRaw = (data.sentLetters ?? data.letters ?? []) as DashboardLetter[];
+      const incomingRaw = (data.incomingLetters ?? []) as DashboardLetter[];
+
+      // ✅ DEFAULT: hide canceled letters (no clutter in test mode)
+      const sent = sentRaw.filter((l) => !isCanceledLetter(l));
+      const incoming = incomingRaw.filter((l) => !isCanceledLetter(l));
 
       setSentLetters(sent.map((l) => ({ ...l, direction: "sent" })));
       setIncomingLetters(incoming.map((l) => ({ ...l, direction: "incoming" })));
@@ -376,7 +387,7 @@ export default function DashboardPage() {
   async function cancelLetter(letter: DashboardLetter) {
     if (archivingId || cancelingId) return;
 
-    const alreadyCanceled = !!(letter.canceled || (letter.canceled_at && String(letter.canceled_at).trim()));
+    const alreadyCanceled = isCanceledLetter(letter);
     if (alreadyCanceled) return;
 
     if (letter.delivered) {
@@ -391,23 +402,9 @@ export default function DashboardPage() {
 
     setCancelingId(letter.id);
 
+    // ✅ Since canceled is hidden by default, remove it immediately
     const prevSent = sentLetters;
-    const nowIso = new Date().toISOString();
-
-    setSentLetters((cur) =>
-      cur.map((x) =>
-        x.id === letter.id
-          ? {
-              ...x,
-              canceled: true,
-              canceled_at: x.canceled_at ?? nowIso,
-              delivered: false,
-              sleeping: false,
-              current_over_text: "Canceled",
-            }
-          : x
-      )
-    );
+    setSentLetters((cur) => cur.filter((x) => x.id !== letter.id));
 
     try {
       const res = await fetch(`/api/letters/cancel/${encodeURIComponent(letter.public_token)}`, {
@@ -429,13 +426,16 @@ export default function DashboardPage() {
     }
   }
 
-  // ✅ Counts per tab
+  // ✅ Counts per tab (canceled already removed, but we also guard anyway)
   const counts = useMemo(() => {
-    const sentTotal = sentLetters.length;
-    const incomingTotal = incomingLetters.length;
+    const sentVisible = sentLetters.filter((l) => !isCanceledLetter(l));
+    const incomingVisible = incomingLetters.filter((l) => !isCanceledLetter(l));
 
-    const sentDelivered = sentLetters.filter((l) => l.delivered).length;
-    const incomingDelivered = incomingLetters.filter((l) => l.delivered).length;
+    const sentTotal = sentVisible.length;
+    const incomingTotal = incomingVisible.length;
+
+    const sentDelivered = sentVisible.filter((l) => l.delivered).length;
+    const incomingDelivered = incomingVisible.filter((l) => l.delivered).length;
 
     return {
       sent: { total: sentTotal, delivered: sentDelivered, inflight: sentTotal - sentDelivered },
@@ -454,7 +454,8 @@ export default function DashboardPage() {
   }, [tab, sentLetters, incomingLetters]);
 
   const filteredSorted = useMemo(() => {
-    let list = [...activeList];
+    // ✅ Hard default: never show canceled
+    let list = activeList.filter((l) => !isCanceledLetter(l));
 
     if (filter === "inflight") list = list.filter((l) => !l.delivered);
     if (filter === "delivered") list = list.filter((l) => l.delivered);
@@ -717,7 +718,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               filteredSorted.map((l) => {
-                const isCanceled = !!(l.canceled || (l.canceled_at && String(l.canceled_at).trim()));
+                const isCanceled = isCanceledLetter(l); // should always be false now, but safe
                 const etaIsoResolved = l.eta_utc_iso || l.eta_at;
 
                 const derivedProgress = progressFromTimes({
@@ -736,6 +737,7 @@ export default function DashboardPage() {
 
                 const isSleeping = !!l.sleeping && !l.delivered && !isCanceled;
 
+                // priority order: canceled -> delivered -> sleeping -> flying
                 const statusLabel = isCanceled ? "Canceled" : l.delivered ? "Delivered" : isSleeping ? "Sleeping" : "In Flight";
                 const statusEmoji = isCanceled ? "🛑" : l.delivered ? "✅" : isSleeping ? "😴" : "🕊️";
 
@@ -751,11 +753,8 @@ export default function DashboardPage() {
                 const current =
                   l.current_lat != null && l.current_lon != null ? { lat: l.current_lat, lon: l.current_lon } : null;
 
-                const geoText = isCanceled
-                  ? "Canceled"
-                  : l.delivered
-                  ? "Delivered"
-                  : (l.current_over_text && l.current_over_text.trim()) || "somewhere over the U.S.";
+                const geoText =
+                  isCanceled ? "Canceled" : l.delivered ? "Delivered" : (l.current_over_text && l.current_over_text.trim()) || "somewhere over the U.S.";
 
                 const sentUtc = (l.sent_utc_text && l.sent_utc_text.trim()) || formatUtcFallback(l.sent_at);
                 const etaUtc = (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(etaIsoResolved);
@@ -801,12 +800,6 @@ export default function DashboardPage() {
                         <div className="muted" style={{ marginTop: 6 }}>
                           📍 <strong>{geoText}</strong>
                         </div>
-
-                        {isCanceled && (
-                          <div className="muted" style={{ marginTop: 6, opacity: 0.8 }}>
-                            This letter was recalled and will not be delivered.
-                          </div>
-                        )}
                       </div>
 
                       {canThumb ? (
@@ -850,7 +843,7 @@ export default function DashboardPage() {
                             title="Cancel (recall) letter"
                             disabled={disableActions || l.delivered || isCanceled}
                           >
-                            {isCancelingThis ? "Canceling…" : isCanceled ? "Canceled" : "Cancel"}
+                            {isCancelingThis ? "Canceling…" : "Cancel"}
                           </button>
 
                           <button
@@ -858,7 +851,7 @@ export default function DashboardPage() {
                             className="btnGhost"
                             onClick={() => void archiveLetter(l)}
                             title="Archive letter (soft delete)"
-                            disabled={disableActions || isCanceled}
+                            disabled={disableActions}
                           >
                             {isArchivingThis ? "Archiving…" : "Archive"}
                           </button>
@@ -868,7 +861,7 @@ export default function DashboardPage() {
 
                     <div className="muted" style={{ marginTop: 10 }}>
                       Sent (UTC): {sentUtc} • <strong>ETA (UTC):</strong> {etaUtc}
-                      {!l.delivered && !isCanceled && <> • (T-minus {countdown})</>}
+                      {!l.delivered && <> • (T-minus {countdown})</>}
                     </div>
 
                     <div style={{ marginTop: 12 }}>
