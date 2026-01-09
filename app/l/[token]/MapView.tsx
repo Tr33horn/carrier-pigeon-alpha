@@ -4,23 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, Polyline, Marker, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 
-// ✅ Sleep helpers (client-safe)
-import {
-  offsetMinutesFromLon,
-  isSleepingAt,
-  nextWakeUtcMs,
-  sleepUntilLocalText,
-  type SleepConfig,
-} from "@/app/lib/flightSleep";
+// ✅ dev-only sleep overlay helpers (pure functions)
+import { isSleepingAt, offsetMinutesFromLon } from "@/app/lib/flightSleep";
 
 // ✅ Match the LetterStatusPage values
 export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
 export type MarkerMode = "flying" | "sleeping" | "delivered" | "canceled";
 
 type LatLon = { lat: number; lon: number };
-
-// Optional bird types (used only for sleep config overlay)
-export type BirdType = "pigeon" | "snipe" | "goose";
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
@@ -168,79 +159,51 @@ function makeNearStraightDriftPath(args: {
   return pts;
 }
 
-/* -------------------------------------------------
-   ✅ Sleep overlay helpers (dev-only)
-------------------------------------------------- */
-
-const SLEEP_BY_BIRD: Record<BirdType, SleepConfig> = {
-  pigeon: { sleepStartHour: 22, sleepEndHour: 6 },
-  goose: { sleepStartHour: 21, sleepEndHour: 7 },
-  snipe: { sleepStartHour: 0, sleepEndHour: 0 }, // never sleeps
-};
-
-function parseIsoToMs(iso?: string) {
-  if (!iso) return null;
-  const t = Date.parse(iso);
-  return Number.isFinite(t) ? t : null;
-}
-
-function localClockText(utcMs: number, offsetMin: number) {
-  const localMs = utcMs + offsetMin * 60_000;
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(localMs));
-}
-
 /**
- * Build polylines for segments that are "sleeping" at estimated time along route.
- * Uses linear time interpolation between sentAt and etaAt purely for visualization.
- * (Your real model is sleep-aware, but this overlay is just a neat dev lens.)
+ * ✅ Dev-only: build sleeping segments along the route based on sent/eta time.
+ * This is a *visual aid* (overlay), not the authoritative sim.
  */
-function buildSleepSegments(args: {
+function buildSleepOverlaySegments(args: {
   origin: LatLon;
   dest: LatLon;
-  sentAtMs: number;
-  etaAtMs: number;
-  cfg: SleepConfig;
-  samplePoints?: number;
+  sentAtISO?: string;
+  etaAtISO?: string;
+  samples?: number;
 }) {
-  const { origin, dest, sentAtMs, etaAtMs, cfg } = args;
-  const N = Math.max(24, args.samplePoints ?? 80);
+  const sentMs = args.sentAtISO ? Date.parse(args.sentAtISO) : NaN;
+  const etaMs = args.etaAtISO ? Date.parse(args.etaAtISO) : NaN;
 
-  if (!Number.isFinite(sentAtMs) || !Number.isFinite(etaAtMs) || etaAtMs <= sentAtMs) return [];
+  if (!Number.isFinite(sentMs) || !Number.isFinite(etaMs) || etaMs <= sentMs) return [];
 
-  // create points along straight line (sleep overlay shouldn’t drift; it’s “debug truth”)
-  const pts: { lat: number; lon: number; utcMs: number; sleeping: boolean }[] = [];
+  const N = Math.max(48, args.samples ?? 140);
+  const segments: [number, number][][] = [];
+  let current: [number, number][] = [];
+
+  const push = () => {
+    if (current.length >= 2) segments.push(current);
+    current = [];
+  };
 
   for (let i = 0; i <= N; i++) {
-    const t = i / N;
-    const lat = lerp(origin.lat, dest.lat, t);
-    const lon = lerp(origin.lon, dest.lon, t);
-    const utcMs = sentAtMs + (etaAtMs - sentAtMs) * t;
+    const f = i / N; // 0..1 time fraction
+    const tMs = sentMs + (etaMs - sentMs) * f;
 
-    const offsetMin = offsetMinutesFromLon(lon);
-    const sleeping = isSleepingAt(utcMs, offsetMin, cfg);
+    const lat = lerp(args.origin.lat, args.dest.lat, f);
+    const lon = lerp(args.origin.lon, args.dest.lon, f);
 
-    pts.push({ lat, lon, utcMs, sleeping });
-  }
+    const offMin = offsetMinutesFromLon(lon);
+    const sleeping = isSleepingAt(tMs, offMin);
 
-  // group contiguous sleeping points into polylines
-  const segments: [number, number][][] = [];
-  let cur: [number, number][] = [];
+    const pt: [number, number] = [lat, lon];
 
-  for (let i = 0; i < pts.length; i++) {
-    const p = pts[i];
-    if (p.sleeping) {
-      cur.push([p.lat, p.lon]);
+    if (sleeping) {
+      current.push(pt);
     } else {
-      if (cur.length >= 2) segments.push(cur);
-      cur = [];
+      push();
     }
   }
-  if (cur.length >= 2) segments.push(cur);
 
+  push();
   return segments;
 }
 
@@ -252,10 +215,10 @@ export default function MapView(props: {
   mapStyle?: MapStyle;
   markerMode?: MarkerMode; // "flying" | "sleeping" | "delivered" | "canceled"
 
-  // ✅ Optional sleep overlay inputs (backwards compatible)
-  sentAtISO?: string; // letter.sent_at
-  etaAtISO?: string;  // letter.eta_at
-  bird?: BirdType | null;
+  // ✅ optional dev-only overlay inputs
+  sentAtISO?: string;
+  etaAtISO?: string;
+  bird?: "pigeon" | "snipe" | "goose";
 }) {
   // ✅ Hard guard: never crash the page if coords are missing/bad
   if (!isFiniteLatLon(props.origin) || !isFiniteLatLon(props.dest)) {
@@ -285,6 +248,17 @@ export default function MapView(props: {
   const isSleeping = mode === "sleeping";
   const isDelivered = mode === "delivered";
   const isCanceled = mode === "canceled";
+
+  // ✅ dev-only overlay toggle (?sleep=1)
+  const [showSleepOverlay, setShowSleepOverlay] = useState(false);
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      setShowSleepOverlay(sp.get("sleep") === "1");
+    } catch {
+      setShowSleepOverlay(false);
+    }
+  }, []);
 
   // ✅ smooth marker progress (skip animation for terminal canceled/delivered)
   useEffect(() => {
@@ -406,6 +380,18 @@ export default function MapView(props: {
     });
   }, [origin, dest, displayProgress]);
 
+  // ✅ sleep overlay segments (dev-only)
+  const sleepSegments = useMemo(() => {
+    if (!showSleepOverlay) return [];
+    return buildSleepOverlaySegments({
+      origin,
+      dest,
+      sentAtISO: props.sentAtISO,
+      etaAtISO: props.etaAtISO,
+      samples: 170,
+    });
+  }, [showSleepOverlay, origin, dest, props.sentAtISO, props.etaAtISO]);
+
   const tooltip = useMemo(() => normalizeTooltip(props.tooltipText), [props.tooltipText]);
 
   /**
@@ -414,109 +400,10 @@ export default function MapView(props: {
    */
   const idealColor = "var(--route-ideal, rgba(18,18,18,0.35))";
   const flownColor = "var(--route-flown, rgba(22,163,74,0.85))";
-
-  // -----------------------------
-  // ✅ Dev-only sleep overlay toggle
-  // -----------------------------
-  const [overlayOn, setOverlayOn] = useState(false);
-
-  useEffect(() => {
-    if (process.env.NODE_ENV !== "development") return;
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      setOverlayOn(sp.get("sleep") === "1");
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  const bird: BirdType = props.bird === "goose" || props.bird === "snipe" ? props.bird : "pigeon";
-  const cfg = SLEEP_BY_BIRD[bird];
-
-  const offsetMin = useMemo(() => offsetMinutesFromLon(current.lon), [current.lon]);
-
-  const sleepNow = useMemo(() => isSleepingAt(Date.now(), offsetMin, cfg), [offsetMin, cfg]);
-  const nextWake = useMemo(() => nextWakeUtcMs(Date.now(), offsetMin, cfg), [offsetMin, cfg]);
-
-  const sentAtMs = useMemo(() => parseIsoToMs(props.sentAtISO), [props.sentAtISO]);
-  const etaAtMs = useMemo(() => parseIsoToMs(props.etaAtISO), [props.etaAtISO]);
-
-  const sleepSegments = useMemo(() => {
-    if (!overlayOn) return [];
-    if (!sentAtMs || !etaAtMs) return [];
-    return buildSleepSegments({
-      origin,
-      dest,
-      sentAtMs,
-      etaAtMs,
-      cfg,
-      samplePoints: 90,
-    });
-  }, [overlayOn, sentAtMs, etaAtMs, origin, dest, cfg]);
-
-  // Route overlay colors (CSS vars w/ fallbacks)
-  const sleepColor = "var(--route-sleep, rgba(99,102,241,0.70))"; // indigo-ish fallback
+  const sleepColor = "var(--route-sleep, rgba(88,80,236,0.85))";
 
   return (
-    <div className="mapShell" style={{ position: "relative" }}>
-      {/* ✅ Dev-only overlay HUD */}
-      {overlayOn && (
-        <div
-          style={{
-            position: "absolute",
-            zIndex: 1000,
-            top: 10,
-            left: 10,
-            padding: "10px 12px",
-            borderRadius: 12,
-            background: "rgba(255,255,255,0.92)",
-            border: "1px solid rgba(0,0,0,0.08)",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
-            fontSize: 12,
-            lineHeight: 1.25,
-            maxWidth: 260,
-            backdropFilter: "blur(6px)",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-            <div style={{ fontWeight: 800 }}>Sleep overlay</div>
-            <div style={{ opacity: 0.7 }}>{bird}</div>
-          </div>
-
-          <div style={{ marginTop: 8 }}>
-            <div>
-              Local time: <strong>{localClockText(Date.now(), offsetMin)}</strong>{" "}
-              <span style={{ opacity: 0.75 }}>(UTC{offsetMin >= 0 ? "+" : ""}{Math.round(offsetMin / 60)})</span>
-            </div>
-
-            <div style={{ marginTop: 6 }}>
-              Window:{" "}
-              <strong>
-                {cfg.sleepStartHour}:00 → {cfg.sleepEndHour}:00
-              </strong>{" "}
-              <span style={{ opacity: 0.75 }}>(local)</span>
-            </div>
-
-            <div style={{ marginTop: 6 }}>
-              Status:{" "}
-              <strong style={{ color: sleepNow ? "rgba(99,102,241,0.95)" : "rgba(22,163,74,0.95)" }}>
-                {sleepNow ? "sleeping 💤" : "awake 🫡"}
-              </strong>
-            </div>
-
-            {sleepNow && nextWake ? (
-              <div style={{ marginTop: 6, opacity: 0.85 }}>
-                Wakes: <strong>{sleepUntilLocalText(nextWake, offsetMin)}</strong>
-              </div>
-            ) : null}
-
-            <div style={{ marginTop: 8, opacity: 0.7 }}>
-              Tip: toggle via <code>?sleep=1</code>
-            </div>
-          </div>
-        </div>
-      )}
-
+    <div className="mapShell">
       <MapContainer zoom={4} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
         <TileLayer attribution={tile.attribution} url={tile.url} />
 
@@ -532,23 +419,6 @@ export default function MapView(props: {
           }}
         />
 
-        {/* ✅ Sleep segments overlay (dev-only) */}
-        {overlayOn &&
-          sleepSegments.map((seg, idx) => (
-            <Polyline
-              key={`sleep-${idx}`}
-              positions={seg as any}
-              pathOptions={{
-                color: sleepColor,
-                weight: 4,
-                opacity: 1,
-                dashArray: "1 8",
-                lineCap: "round",
-                lineJoin: "round",
-              }}
-            />
-          ))}
-
         {/* Actual flown route so far (subtle drift) */}
         <Polyline
           positions={flownPts}
@@ -561,6 +431,23 @@ export default function MapView(props: {
             lineJoin: "round",
           }}
         />
+
+        {/* ✅ Dev-only sleep overlay segments */}
+        {showSleepOverlay &&
+          sleepSegments.map((seg, i) => (
+            <Polyline
+              key={`sleep-${i}`}
+              positions={seg as any}
+              pathOptions={{
+                color: sleepColor,
+                weight: 5,
+                opacity: 0.55,
+                dashArray: "10 10",
+                lineCap: "round",
+                lineJoin: "round",
+              }}
+            />
+          ))}
 
         <Marker position={[origin.lat, origin.lon]} icon={originIcon} />
         <Marker position={[dest.lat, dest.lon]} icon={destIcon} />
