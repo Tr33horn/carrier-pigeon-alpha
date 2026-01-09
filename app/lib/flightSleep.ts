@@ -185,3 +185,68 @@ export function nextWakeUtcMs(
   }
   return null;
 }
+
+/** Total sleep ms between [startUtcMs, endUtcMs) */
+export function sleepMsBetween(
+  startUtcMs: number,
+  endUtcMs: number,
+  offsetMin: number,
+  cfg: SleepConfig = DEFAULT_SLEEP
+) {
+  const total = Math.max(0, endUtcMs - startUtcMs);
+  const awake = awakeMsBetween(startUtcMs, endUtcMs, offsetMin, cfg);
+  return Math.max(0, total - awake);
+}
+
+/**
+ * Advance by "awake milliseconds" starting at startUtcMs (sleep pauses time).
+ * If start is inside sleep, you can choose to jump to wake first.
+ */
+export function addAwakeMs(
+  startUtcMs: number,
+  addAwakeMs: number,
+  offsetMin: number,
+  cfg: SleepConfig = DEFAULT_SLEEP,
+  opts?: { jumpIfSleeping?: boolean }
+) {
+  const jumpIfSleeping = opts?.jumpIfSleeping ?? true;
+
+  let t = startUtcMs;
+  if (jumpIfSleeping) {
+    const wake = nextWakeUtcMs(t, offsetMin, cfg);
+    if (wake != null) t = wake;
+  }
+  return etaFromRequiredAwakeMs(t, addAwakeMs, offsetMin, cfg);
+}
+
+/**
+ * Progress 0..1 based on awake time (sleep pauses progress)
+ */
+export function awakeProgress01(
+  sentUtcMs: number,
+  etaUtcMs: number,
+  nowUtcMs: number,
+  offsetMin: number,
+  cfg: SleepConfig = DEFAULT_SLEEP
+) {
+  if (etaUtcMs <= sentUtcMs) return 1;
+
+  const totalAwake = awakeMsBetween(sentUtcMs, etaUtcMs, offsetMin, cfg);
+  if (totalAwake <= 0) return 1;
+
+  const elapsedAwake = awakeMsBetween(sentUtcMs, Math.min(nowUtcMs, etaUtcMs), offsetMin, cfg);
+  return Math.max(0, Math.min(1, elapsedAwake / totalAwake));
+}
+
+/**
+ * If "launch" happens during sleep, push to next wake.
+ * (Your requested behavior: skip the current sleep window and sleep next time.)
+ */
+export function launchUtcMs(
+  sentUtcMs: number,
+  offsetMin: number,
+  cfg: SleepConfig = DEFAULT_SLEEP
+) {
+  const wake = nextWakeUtcMs(sentUtcMs, offsetMin, cfg);
+  return wake ?? sentUtcMs;
+}

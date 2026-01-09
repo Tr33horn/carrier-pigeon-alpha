@@ -1181,6 +1181,11 @@ export default function LetterStatusPage() {
                 tooltipText={mapTooltip}
                 mapStyle={mapStyle}
                 markerMode={markerMode}
+
+                // ✅ pass sleep overlay inputs (optional)
+                sentAtISO={letter.sent_at}
+                etaAtISO={effectiveEtaISO}
+                bird={bird}
               />
             </div>
 

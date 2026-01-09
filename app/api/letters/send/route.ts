@@ -8,6 +8,14 @@ import { sendEmail } from "../../../lib/email/send";
 import { ROUTE_TUNED_REGIONS } from "../../../lib/geo/geoRegions.routes";
 import { geoLabelFor, type GeoRegion } from "../../../lib/geo/geoLabel";
 
+// ✅ Sleep realism helpers (already in your repo)
+import {
+  offsetMinutesFromLon,
+  isSleepingAt,
+  nextWakeUtcMs,
+  etaFromRequiredAwakeMs,
+} from "../../../lib/flightSleep";
+
 // ✅ Email template
 import { LetterOnTheWayEmail } from "@/emails/LetterOnTheWay";
 
@@ -70,11 +78,29 @@ type BirdType = "pigeon" | "snipe" | "goose";
 
 const BIRDS: Record<
   BirdType,
-  { label: string; speed_kmh: number; roost_hours: number; inefficiency: number }
+  { label: string; speed_kmh: number; inefficiency: number; sleepCfg: { sleepStartHour: number; sleepEndHour: number } }
 > = {
-  pigeon: { label: "Homing Pigeon", speed_kmh: 72, roost_hours: 8, inefficiency: 1.15 },
-  snipe: { label: "Great Snipe", speed_kmh: 88, roost_hours: 0, inefficiency: 1.05 },
-  goose: { label: "Canada Goose", speed_kmh: 56, roost_hours: 10, inefficiency: 1.2 },
+  // Pigeon sleeps 10pm -> 6am
+  pigeon: {
+    label: "Homing Pigeon",
+    speed_kmh: 72,
+    inefficiency: 1.15,
+    sleepCfg: { sleepStartHour: 22, sleepEndHour: 6 },
+  },
+  // Snipe: no sleep (we set an empty window)
+  snipe: {
+    label: "Great Snipe",
+    speed_kmh: 88,
+    inefficiency: 1.05,
+    sleepCfg: { sleepStartHour: 0, sleepEndHour: 0 }, // never sleeping
+  },
+  // Goose sleeps longer (roughly 9pm -> 7am = 10h)
+  goose: {
+    label: "Canada Goose",
+    speed_kmh: 56,
+    inefficiency: 1.2,
+    sleepCfg: { sleepStartHour: 21, sleepEndHour: 7 },
+  },
 };
 
 function normalizeBird(raw: unknown): BirdType {
@@ -85,25 +111,13 @@ function normalizeBird(raw: unknown): BirdType {
 }
 
 /**
- * Compute total travel hours with:
- * - base flight time = distance / speed
- * - inefficiency multiplier
- * - roosting: bird flies (24 - roost_hours) per day, then roosts roost_hours
+ * Required awake flight time (ms) ignoring sleep pauses.
+ * Sleep windows get applied via flightSleep.ts to compute ETA + checkpoint times.
  */
-function estimateTravelHours(distanceKm: number, bird: BirdType) {
+function requiredAwakeMs(distanceKm: number, bird: BirdType) {
   const cfg = BIRDS[bird];
-
-  const flightHours = (distanceKm / cfg.speed_kmh) * cfg.inefficiency;
-
-  if (cfg.roost_hours <= 0) return flightHours;
-
-  const awakeHours = 24 - cfg.roost_hours;
-  if (awakeHours <= 0) return flightHours;
-
-  const fullAwakeBlocks = Math.floor(flightHours / awakeHours);
-  const roostHours = fullAwakeBlocks * cfg.roost_hours;
-
-  return flightHours + roostHours;
+  const hours = (distanceKm / cfg.speed_kmh) * cfg.inefficiency;
+  return Math.round(hours * 60 * 60 * 1000);
 }
 
 /**
@@ -158,16 +172,25 @@ function stickyGeoLabel(opts: {
   };
 }
 
-function generateCheckpoints(
-  sentAt: Date,
-  etaAt: Date,
-  oLat: number,
-  oLon: number,
-  dLat: number,
-  dLon: number
-) {
+/**
+ * ✅ Sleep-aware checkpoints:
+ * - Position is still linear along the line (vibe > physics)
+ * - TIME is NOT linear: it pauses during sleep windows
+ */
+function generateCheckpointsSleepAware(opts: {
+  sentUtcMs: number;
+  etaUtcMs: number;
+  requiredAwakeMsTotal: number;
+  offsetMin: number;
+  sleepCfg: { sleepStartHour: number; sleepEndHour: number };
+  oLat: number;
+  oLon: number;
+  dLat: number;
+  dLon: number;
+}) {
+  const { sentUtcMs, requiredAwakeMsTotal, offsetMin, sleepCfg, oLat, oLon, dLat, dLon } = opts;
+
   const count = 8;
-  const totalMs = etaAt.getTime() - sentAt.getTime();
 
   const fallback = [
     "Departed roost",
@@ -182,9 +205,14 @@ function generateCheckpoints(
 
   return Array.from({ length: count }, (_, i) => {
     const t = i / (count - 1);
+
     const lat = lerp(oLat, dLat, t);
     const lon = lerp(oLon, dLon, t);
-    const at = new Date(sentAt.getTime() + totalMs * t).toISOString();
+
+    // ✅ Convert progress->required awake ms, then map to UTC time with sleep pauses
+    const reqAwakeForThisCheckpoint = Math.round(requiredAwakeMsTotal * t);
+    const atUtcMs = etaFromRequiredAwakeMs(sentUtcMs, reqAwakeForThisCheckpoint, offsetMin, sleepCfg);
+    const at = new Date(atUtcMs).toISOString();
 
     const geo = stickyGeoLabel({
       lat,
@@ -255,17 +283,13 @@ export async function POST(req: Request) {
   } = body;
 
   const bird = normalizeBird(birdRaw);
+  const birdCfg = BIRDS[bird];
 
-  const normalizedFromEmail =
-    typeof from_email === "string" ? from_email.trim().toLowerCase() : "";
-  const normalizedToEmail =
-    typeof to_email === "string" ? to_email.trim().toLowerCase() : "";
+  const normalizedFromEmail = typeof from_email === "string" ? from_email.trim().toLowerCase() : "";
+  const normalizedToEmail = typeof to_email === "string" ? to_email.trim().toLowerCase() : "";
 
   if (!normalizedFromEmail || !normalizedToEmail) {
-    return NextResponse.json(
-      { error: "Sender and recipient email are required." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Sender and recipient email are required." }, { status: 400 });
   }
   if (!isEmailValid(normalizedFromEmail)) {
     return NextResponse.json({ error: "Sender email looks invalid." }, { status: 400 });
@@ -283,26 +307,36 @@ export async function POST(req: Request) {
     !isFiniteNumber(destination.lat) ||
     !isFiniteNumber(destination.lon)
   ) {
-    return NextResponse.json(
-      { error: "Origin and destination are required." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Origin and destination are required." }, { status: 400 });
   }
 
   if (origin.name === destination.name) {
-    return NextResponse.json(
-      { error: "Origin and destination must be different." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Origin and destination must be different." }, { status: 400 });
   }
 
-  // ✅ Bird-based ETA (POC)
+  // ✅ Distance
   const km = distanceKm(origin.lat, origin.lon, destination.lat, destination.lon);
-  const hours = estimateTravelHours(km, bird);
-  const ms = Math.round(hours * 60 * 60 * 1000);
 
-  const sentAt = new Date();
-  const etaAt = new Date(sentAt.getTime() + ms);
+  // ✅ Choose a single offset for the flight (simple + consistent)
+  // Using midpoint lon is usually better than origin-only.
+  const midLon = lerp(origin.lon, destination.lon, 0.5);
+  const offsetMin = offsetMinutesFromLon(midLon);
+
+  // ✅ If "send" happens during sleep, delay actual sent_at to next wake (so no fake progress)
+  const requestedSentUtcMs = Date.now();
+  const sleepingNow = isSleepingAt(requestedSentUtcMs, offsetMin, birdCfg.sleepCfg);
+
+  const actualSentUtcMs =
+    sleepingNow ? nextWakeUtcMs(requestedSentUtcMs, offsetMin, birdCfg.sleepCfg) ?? requestedSentUtcMs : requestedSentUtcMs;
+
+  // ✅ Required awake flight duration (no sleep baked in)
+  const reqAwakeMs = requiredAwakeMs(km, bird);
+
+  // ✅ Sleep-aware ETA
+  const etaUtcMs = etaFromRequiredAwakeMs(actualSentUtcMs, reqAwakeMs, offsetMin, birdCfg.sleepCfg);
+
+  const sentAt = new Date(actualSentUtcMs);
+  const etaAt = new Date(etaUtcMs);
   const publicToken = crypto.randomBytes(16).toString("hex");
 
   const { data: letter, error: letterErr } = await supabaseServer
@@ -325,7 +359,7 @@ export async function POST(req: Request) {
       dest_lat: destination.lat,
       dest_lon: destination.lon,
       distance_km: km,
-      speed_kmh: BIRDS[bird].speed_kmh,
+      speed_kmh: birdCfg.speed_kmh,
       sent_at: sentAt.toISOString(),
       eta_at: etaAt.toISOString(),
     })
@@ -333,42 +367,41 @@ export async function POST(req: Request) {
     .single();
 
   if (letterErr || !letter) {
-    return NextResponse.json(
-      { error: letterErr?.message ?? "Insert failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: letterErr?.message ?? "Insert failed" }, { status: 500 });
   }
 
-  const checkpoints = generateCheckpoints(
-    sentAt,
-    etaAt,
-    origin.lat,
-    origin.lon,
-    destination.lat,
-    destination.lon
+  // ✅ Sleep-aware checkpoints (time pauses during sleep)
+  const checkpoints = generateCheckpointsSleepAware({
+    sentUtcMs: actualSentUtcMs,
+    etaUtcMs,
+    requiredAwakeMsTotal: reqAwakeMs,
+    offsetMin,
+    sleepCfg: birdCfg.sleepCfg,
+    oLat: origin.lat,
+    oLon: origin.lon,
+    dLat: destination.lat,
+    dLon: destination.lon,
+  });
+
+  const { error: cpErr } = await supabaseServer.from("letter_checkpoints").insert(
+    checkpoints.map((cp) => {
+      const baseRow: any = {
+        letter_id: letter.id,
+        idx: cp.idx,
+        name: cp.name,
+        lat: cp.lat,
+        lon: cp.lon,
+        at: cp.at,
+      };
+
+      if (STORE_REGION_META) {
+        baseRow.region_id = cp.region_id;
+        baseRow.region_kind = cp.region_kind;
+      }
+
+      return baseRow;
+    })
   );
-
-  const { error: cpErr } = await supabaseServer
-    .from("letter_checkpoints")
-    .insert(
-      checkpoints.map((cp) => {
-        const baseRow: any = {
-          letter_id: letter.id,
-          idx: cp.idx,
-          name: cp.name,
-          lat: cp.lat,
-          lon: cp.lon,
-          at: cp.at,
-        };
-
-        if (STORE_REGION_META) {
-          baseRow.region_id = cp.region_id;
-          baseRow.region_kind = cp.region_kind;
-        }
-
-        return baseRow;
-      })
-    );
 
   if (cpErr) {
     return NextResponse.json({ error: cpErr.message }, { status: 500 });
@@ -394,6 +427,10 @@ export async function POST(req: Request) {
         bird: (letter.bird as BirdType) || bird,
         debugToken: publicToken, // ✅ trace this email to the letter
       }),
+      tags: [
+        { name: "kind", value: "letter_on_the_way" },
+        { name: "token", value: publicToken },
+      ],
     });
 
     // 👀 VERY IMPORTANT: log Resend-level failures
@@ -407,6 +444,9 @@ export async function POST(req: Request) {
       console.log("RESEND SEND OK", {
         letterToken: publicToken,
         to: normalizedToEmail,
+        sleepingNow,
+        effectiveSentAt: sentAt.toISOString(),
+        etaAt: etaAt.toISOString(),
       });
     }
   } catch (e) {
