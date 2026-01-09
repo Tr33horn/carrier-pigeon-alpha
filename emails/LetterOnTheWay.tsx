@@ -12,6 +12,13 @@ function joinUrl(base: string, pathOrUrl: string) {
   return `${b}${p}`;
 }
 
+function safeBaseUrl() {
+  const b = (APP_URL || "").trim();
+  // Email links should be absolute in prod. If APP_URL is blank, fall back to your domain.
+  // (Replace with your canonical domain if you want.)
+  return b || "https://pigeon.humanrobotalliance.com";
+}
+
 const BUTTON = {
   backgroundColor: "#111",
   color: "#fff",
@@ -31,6 +38,7 @@ export function LetterOnTheWayEmail({
   destName,
   etaTextUtc,
   bird,
+  debugToken, // ✅ optional tracing
 }: {
   toName?: string | null;
   fromName?: string | null;
@@ -39,11 +47,22 @@ export function LetterOnTheWayEmail({
   destName: string;
   etaTextUtc: string;
   bird?: BirdType | null;
+  debugToken?: string | null; // public_token
 }) {
-  const href = joinUrl(APP_URL, statusUrl);
+  const href = joinUrl(safeBaseUrl(), statusUrl);
 
   return (
     <EmailLayout preview="A letter is on the way.">
+      {/* ✅ Debug trace (invisible in normal viewing, useful in raw source + logs) */}
+      {debugToken ? (
+        <>
+          {/* X-FLOK-TOKEN: {debugToken} */}
+          <Text style={{ display: "none", fontSize: 1, color: "#fff" }}>
+            X-FLOK-TOKEN:{debugToken}
+          </Text>
+        </>
+      ) : null}
+
       <BirdStateImage bird={bird ?? undefined} state="fly" alt="Courier in flight" />
 
       <Text style={{ fontSize: 18, fontWeight: 800, margin: "0 0 10px", textAlign: "center" }}>
@@ -85,6 +104,7 @@ export default function Preview() {
       destName="Austin, TX"
       etaTextUtc="2026-01-08 02:30 UTC"
       bird="snipe"
+      debugToken="demo-token"
     />
   );
 }

@@ -68,10 +68,7 @@ function formatUtc(iso: string) {
 
 type BirdType = "pigeon" | "snipe" | "goose";
 
-const BIRDS: Record<
-  BirdType,
-  { label: string; speed_kmh: number; roost_hours: number; inefficiency: number }
-> = {
+const BIRDS: Record<BirdType, { label: string; speed_kmh: number; roost_hours: number; inefficiency: number }> = {
   pigeon: { label: "Homing Pigeon", speed_kmh: 72, roost_hours: 8, inefficiency: 1.15 },
   snipe: { label: "Great Snipe", speed_kmh: 88, roost_hours: 0, inefficiency: 1.05 },
   goose: { label: "Canada Goose", speed_kmh: 56, roost_hours: 10, inefficiency: 1.2 },
@@ -158,14 +155,7 @@ function stickyGeoLabel(opts: {
   };
 }
 
-function generateCheckpoints(
-  sentAt: Date,
-  etaAt: Date,
-  oLat: number,
-  oLon: number,
-  dLat: number,
-  dLon: number
-) {
+function generateCheckpoints(sentAt: Date, etaAt: Date, oLat: number, oLon: number, dLat: number, dLon: number) {
   const count = 8;
   const totalMs = etaAt.getTime() - sentAt.getTime();
 
@@ -196,11 +186,7 @@ function generateCheckpoints(
     });
 
     const name =
-      i === 0
-        ? "Departed roost"
-        : i === count - 1
-        ? "Final descent"
-        : geo?.text || fallback[i] || `Checkpoint ${i + 1}`;
+      i === 0 ? "Departed roost" : i === count - 1 ? "Final descent" : geo?.text || fallback[i] || `Checkpoint ${i + 1}`;
 
     return {
       idx: i,
@@ -228,33 +214,26 @@ function getBaseUrl(req: Request) {
 }
 
 function joinUrl(base: string, pathOrUrl: string) {
+  if (!pathOrUrl) return base;
   if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) return pathOrUrl;
   const b = base.endsWith("/") ? base.slice(0, -1) : base;
   const p = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
   return `${b}${p}`;
 }
 
+function isFiniteNumber(n: any) {
+  return typeof n === "number" && Number.isFinite(n);
+}
+
 export async function POST(req: Request) {
   const body = await req.json();
 
-  const {
-    from_name,
-    from_email,
-    to_name,
-    to_email,
-    subject,
-    message,
-    origin,
-    destination,
-    bird: birdRaw,
-  } = body;
+  const { from_name, from_email, to_name, to_email, subject, message, origin, destination, bird: birdRaw } = body;
 
   const bird = normalizeBird(birdRaw);
 
-  const normalizedFromEmail =
-    typeof from_email === "string" ? from_email.trim().toLowerCase() : "";
-  const normalizedToEmail =
-    typeof to_email === "string" ? to_email.trim().toLowerCase() : "";
+  const normalizedFromEmail = typeof from_email === "string" ? from_email.trim().toLowerCase() : "";
+  const normalizedToEmail = typeof to_email === "string" ? to_email.trim().toLowerCase() : "";
 
   if (!normalizedFromEmail || !normalizedToEmail) {
     return NextResponse.json({ error: "Sender and recipient email are required." }, { status: 400 });
@@ -266,9 +245,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Recipient email looks invalid." }, { status: 400 });
   }
 
-  if (!origin?.lat || !origin?.lon || !destination?.lat || !destination?.lon) {
+  // ✅ Validate coords even if lat/lon are 0
+  if (
+    !origin ||
+    !destination ||
+    !isFiniteNumber(origin.lat) ||
+    !isFiniteNumber(origin.lon) ||
+    !isFiniteNumber(destination.lat) ||
+    !isFiniteNumber(destination.lon)
+  ) {
     return NextResponse.json({ error: "Origin and destination are required." }, { status: 400 });
   }
+
   if (origin.name === destination.name) {
     return NextResponse.json({ error: "Origin and destination must be different." }, { status: 400 });
   }
@@ -313,47 +301,37 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: letterErr?.message ?? "Insert failed" }, { status: 500 });
   }
 
-  const checkpoints = generateCheckpoints(
-    sentAt,
-    etaAt,
-    origin.lat,
-    origin.lon,
-    destination.lat,
-    destination.lon
+  const checkpoints = generateCheckpoints(sentAt, etaAt, origin.lat, origin.lon, destination.lat, destination.lon);
+
+  const { error: cpErr } = await supabaseServer.from("letter_checkpoints").insert(
+    checkpoints.map((cp) => {
+      const baseRow: any = {
+        letter_id: letter.id,
+        idx: cp.idx,
+        name: cp.name,
+        lat: cp.lat,
+        lon: cp.lon,
+        at: cp.at,
+      };
+
+      if (STORE_REGION_META) {
+        baseRow.region_id = cp.region_id;
+        baseRow.region_kind = cp.region_kind;
+      }
+
+      return baseRow;
+    })
   );
-
-  const { error: cpErr } = await supabaseServer
-    .from("letter_checkpoints")
-    .insert(
-      checkpoints.map((cp) => {
-        const baseRow: any = {
-          letter_id: letter.id,
-          idx: cp.idx,
-          name: cp.name,
-          lat: cp.lat,
-          lon: cp.lon,
-          at: cp.at,
-        };
-
-        if (STORE_REGION_META) {
-          baseRow.region_id = cp.region_id;
-          baseRow.region_kind = cp.region_kind;
-        }
-
-        return baseRow;
-      })
-    );
 
   if (cpErr) {
     return NextResponse.json({ error: cpErr.message }, { status: 500 });
   }
 
-  // ✅ Send “On the way” email using your template system (ABSOLUTE status URL)
+  // ✅ Send “On the way” email (ABSOLUTE status URL + debugToken)
   try {
     const baseUrl = getBaseUrl(req);
     const statusPath = `/l/${publicToken}`;
     const absoluteStatusUrl = joinUrl(baseUrl, statusPath);
-
     const etaTextUtc = formatUtc(letter.eta_at);
 
     await sendEmail({
@@ -365,13 +343,18 @@ export async function POST(req: Request) {
         originName: letter.origin_name || origin.name || "Origin",
         destName: letter.dest_name || destination.name || "Destination",
         etaTextUtc,
-        statusUrl: absoluteStatusUrl, // ✅ FIX
+        statusUrl: absoluteStatusUrl, // ✅ absolute
         bird: (letter.bird as BirdType) || bird,
+        debugToken: publicToken, // ✅ trace this email to the letter
       }),
     });
   } catch (e) {
-    console.error("ON THE WAY EMAIL ERROR:", e);
+    console.error("ON THE WAY EMAIL ERROR:", {
+      publicToken,
+      to: normalizedToEmail,
+      error: (e as any)?.message ?? String(e),
+    });
   }
 
   return NextResponse.json({ public_token: publicToken, eta_at: letter.eta_at });
-} 
+}
