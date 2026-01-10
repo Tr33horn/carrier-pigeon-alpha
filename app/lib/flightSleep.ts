@@ -32,51 +32,64 @@ function toUtcMs(localMs: number, offsetMin: number) {
   return localMs - offsetMin * 60_000;
 }
 
-function localYMD(localMs: number) {
-  const d = new Date(localMs);
-  return { y: d.getUTCFullYear(), m: d.getUTCMonth(), day: d.getUTCDate() };
-}
-
 /**
  * Returns the next boundary in UTC ms where sleep/awake could change.
- * We step by local day boundaries + sleep start/end.
+ *
+ * ✅ FIXED: For wrap windows (e.g. 22..6 or 21..7), the "next wake" during
+ * early morning must be TODAY at sleepEndHour (not tomorrow).
  */
 function nextBoundaryUtcMs(utcMs: number, offsetMin: number, cfg: SleepConfig) {
   const localMs = toLocalMs(utcMs, offsetMin);
-  const { y, m, day } = localYMD(localMs);
+  const d = new Date(localMs);
 
-  // build local times (as UTC Date but representing local clock, because we use UTC getters)
-  const mkLocal = (hh: number, mm = 0) => Date.UTC(y, m, day, hh, mm, 0, 0);
+  // local clock parts (use UTC getters because localMs is already shifted)
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth();
+  const day = d.getUTCDate();
+  const h = d.getUTCHours();
 
-  // If sleepStartHour > sleepEndHour => window crosses midnight.
   const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
+
+  const localAt = (dd: number, hh: number, mm = 0) => Date.UTC(y, m, dd, hh, mm, 0, 0);
 
   const candidatesLocal: number[] = [];
 
-  // Always consider end-of-day boundary so we can move forward safely
+  // Always consider next local midnight as a safety boundary
   candidatesLocal.push(Date.UTC(y, m, day + 1, 0, 0, 0, 0));
 
-  // Sleep start is always a candidate boundary "today"
-  candidatesLocal.push(mkLocal(cfg.sleepStartHour));
-
-  // Sleep end may be "today" or "tomorrow" depending on wrap
-  if (wraps) {
-    candidatesLocal.push(Date.UTC(y, m, day + 1, cfg.sleepEndHour, 0, 0, 0));
+  // Special case: start=end means "never sleeping"
+  if (cfg.sleepStartHour === cfg.sleepEndHour) {
+    // just keep midnight boundary; nothing else matters
+  } else if (!wraps) {
+    // Non-wrapping window: sleepStart .. sleepEnd within the same day
+    // Decide which boundary comes next based on current local hour.
+    if (h < cfg.sleepStartHour) {
+      candidatesLocal.push(localAt(day, cfg.sleepStartHour));
+    } else if (h < cfg.sleepEndHour) {
+      candidatesLocal.push(localAt(day, cfg.sleepEndHour));
+    } else {
+      candidatesLocal.push(localAt(day + 1, cfg.sleepStartHour));
+    }
   } else {
-    candidatesLocal.push(mkLocal(cfg.sleepEndHour));
+    // Wrapping window: sleepStart (today) -> sleepEnd (next day)
+    // Three zones:
+    //  - [sleepStart .. 24): sleeping, wake is TOMORROW at sleepEnd
+    //  - [0 .. sleepEnd): sleeping, wake is TODAY at sleepEnd  ✅ key fix
+    //  - [sleepEnd .. sleepStart): awake, sleep starts TODAY at sleepStart
+    if (h < cfg.sleepEndHour) {
+      candidatesLocal.push(localAt(day, cfg.sleepEndHour));
+    } else if (h >= cfg.sleepStartHour) {
+      candidatesLocal.push(localAt(day + 1, cfg.sleepEndHour));
+    } else {
+      candidatesLocal.push(localAt(day, cfg.sleepStartHour));
+    }
   }
 
-  // Convert candidates to UTC and pick the soonest > utcMs
   const candidatesUtc = candidatesLocal
     .map((lm) => toUtcMs(lm, offsetMin))
-    .filter((t) => t > utcMs + 1); // strictly in the future
+    .filter((t) => t > utcMs + 1); // strictly future
 
-  if (!candidatesUtc.length) {
-    // fallback: +1 hour (shouldn't really happen, but keeps things safe)
-    return utcMs + 3600_000;
-  }
-
-  return Math.min(...candidatesUtc);
+  return candidatesUtc.length ? Math.min(...candidatesUtc) : utcMs + 3600_000;
 }
 
 export function isSleepingAt(utcMs: number, offsetMin: number, cfg: SleepConfig = DEFAULT_SLEEP) {
@@ -168,24 +181,46 @@ export function sleepUntilLocalText(sleepUntilUtcMs: number, offsetMin: number) 
 /**
  * If sleeping now, return the next wake time in UTC ms.
  * If awake now, return null.
+ *
+ * ✅ FIXED: direct wake calculation for wrap windows.
  */
 export function nextWakeUtcMs(nowUtcMs: number, offsetMin: number, cfg: SleepConfig = DEFAULT_SLEEP) {
   if (!isSleepingAt(nowUtcMs, offsetMin, cfg)) return null;
 
-  let t = nowUtcMs;
-  let guard = 0;
+  // Special case: never sleeping
+  if (cfg.sleepStartHour === cfg.sleepEndHour) return null;
 
-  // step forward until we are not sleeping
-  while (guard < 1000) {
-    guard++;
-    const next = nextBoundaryUtcMs(t, offsetMin, cfg);
-    t = next;
+  const localMs = toLocalMs(nowUtcMs, offsetMin);
+  const d = new Date(localMs);
 
-    // t is on a boundary; test just after it
-    if (!isSleepingAt(t + 1, offsetMin, cfg)) return t;
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth();
+  const day = d.getUTCDate();
+  const h = d.getUTCHours();
+
+  const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
+
+  let wakeLocal: number;
+
+  if (!wraps) {
+    // sleeping inside [start..end) => wake today at end
+    wakeLocal = Date.UTC(y, m, day, cfg.sleepEndHour, 0, 0, 0);
+    const wakeUtc = toUtcMs(wakeLocal, offsetMin);
+    return wakeUtc > nowUtcMs
+      ? wakeUtc
+      : toUtcMs(Date.UTC(y, m, day + 1, cfg.sleepEndHour, 0, 0, 0), offsetMin);
   }
 
-  return null;
+  // Wrap window:
+  // early morning => wake TODAY at end
+  // late night => wake TOMORROW at end
+  wakeLocal =
+    h < cfg.sleepEndHour
+      ? Date.UTC(y, m, day, cfg.sleepEndHour, 0, 0, 0)
+      : Date.UTC(y, m, day + 1, cfg.sleepEndHour, 0, 0, 0);
+
+  const wakeUtc = toUtcMs(wakeLocal, offsetMin);
+  return wakeUtc > nowUtcMs ? wakeUtc : null;
 }
 
 /** Total sleep ms between [startUtcMs, endUtcMs) */
