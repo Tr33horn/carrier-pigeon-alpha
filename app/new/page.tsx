@@ -23,7 +23,15 @@ type FutureBirdOption = {
 
 export default function NewPage() {
   const router = useRouter();
+
+  // ✅ selected bird (toggle-able)
   const [bird, setBird] = useState<BirdType>("pigeon");
+  const [showWriteOn, setShowWriteOn] = useState(false);
+
+  // ✅ intermittent shake state
+  const [shake, setShake] = useState(false);
+  const shakeIntervalRef = useRef<number | null>(null);
+  const shakeTimeoutRef = useRef<number | null>(null);
 
   // ✅ tiny toast
   const [toast, setToast] = useState<string | null>(null);
@@ -38,6 +46,8 @@ export default function NewPage() {
   useEffect(() => {
     return () => {
       if (toastTimer.current) window.clearTimeout(toastTimer.current);
+      if (shakeIntervalRef.current) window.clearInterval(shakeIntervalRef.current);
+      if (shakeTimeoutRef.current) window.clearTimeout(shakeTimeoutRef.current);
     };
   }, []);
 
@@ -70,45 +80,44 @@ export default function NewPage() {
 
   const futureFowls = useMemo<FutureBirdOption[]>(
     () => [
-      {
-        id: "peregrine-falcon",
-        title: "Peregrine Falcon",
-        subtitle: "The airborne missile (politely).",
-        imgSrc: "/birds/Peregrine-Falcon.gif",
-      },
-      {
-        id: "annas-hummingbird",
-        title: "Anna’s Hummingbird",
-        subtitle: "Tiny bird. Unhinged acceleration.",
-        imgSrc: "/birds/AnnasHummingbird.gif",
-      },
-      {
-        id: "white-throated-needletail",
-        title: "White-throated Needletail",
-        subtitle: "Blink-and-it’s-delivered speed.",
-        imgSrc: "/birds/white-throated-needletail.gif",
-      },
-      {
-        id: "american-osprey",
-        title: "American Osprey",
-        subtitle: "Precision strikes. Fish not included.",
-        imgSrc: "/birds/American-Osprey.gif",
-      },
-      {
-        id: "northern-hawk-owl",
-        title: "Northern Hawk Owl",
-        subtitle: "Daylight hunter. Night-owl energy.",
-        imgSrc: "/birds/NorthernHawkOwl.gif",
-      },
-      {
-        id: "common-tern",
-        title: "Common Tern",
-        subtitle: "Coastal courier with stamina.",
-        imgSrc: "/birds/CommonTern.gif",
-      },
+      { id: "peregrine-falcon", title: "Peregrine Falcon", subtitle: "The airborne missile (politely).", imgSrc: "/birds/Peregrine-Falcon.gif" },
+      { id: "annas-hummingbird", title: "Anna’s Hummingbird", subtitle: "Tiny bird. Unhinged acceleration.", imgSrc: "/birds/AnnasHummingbird.gif" },
+      { id: "white-throated-needletail", title: "White-throated Needletail", subtitle: "Blink-and-it’s-delivered speed.", imgSrc: "/birds/white-throated-needletail.gif" },
+      { id: "american-osprey", title: "American Osprey", subtitle: "Precision strikes. Fish not included.", imgSrc: "/birds/American-Osprey.gif" },
+      { id: "northern-hawk-owl", title: "Northern Hawk Owl", subtitle: "Daylight hunter. Night-owl energy.", imgSrc: "/birds/NorthernHawkOwl.gif" },
+      { id: "common-tern", title: "Common Tern", subtitle: "Coastal courier with stamina.", imgSrc: "/birds/CommonTern.gif" },
     ],
     []
   );
+
+  // ✅ start/stop the "shake every 5s" loop when the button is visible
+  useEffect(() => {
+    // clear any previous loop
+    if (shakeIntervalRef.current) window.clearInterval(shakeIntervalRef.current);
+    if (shakeTimeoutRef.current) window.clearTimeout(shakeTimeoutRef.current);
+    setShake(false);
+
+    if (!showWriteOn) return;
+
+    const pulse = () => {
+      setShake(true);
+      if (shakeTimeoutRef.current) window.clearTimeout(shakeTimeoutRef.current);
+      shakeTimeoutRef.current = window.setTimeout(() => setShake(false), 650); // shake duration
+    };
+
+    // small initial delay so it doesn't feel frantic
+    const initial = window.setTimeout(() => pulse(), 800);
+    shakeTimeoutRef.current = initial as unknown as number;
+
+    // repeat every 5s
+    shakeIntervalRef.current = window.setInterval(pulse, 5000);
+
+    return () => {
+      if (shakeIntervalRef.current) window.clearInterval(shakeIntervalRef.current);
+      if (shakeTimeoutRef.current) window.clearTimeout(shakeTimeoutRef.current);
+      setShake(false);
+    };
+  }, [showWriteOn]);
 
   return (
     <main className="pageBg">
@@ -138,7 +147,15 @@ export default function NewPage() {
                 <button
                   type="button"
                   className={`card birdCard ${isSelected ? "on" : ""}`}
-                  onClick={() => setBird(opt.id)} // ✅ no auto-nav
+                  onClick={() => {
+                    if (isSelected) {
+                      // ✅ toggle: clicking the selected one hides/shows CTA
+                      setShowWriteOn((v) => !v);
+                    } else {
+                      setBird(opt.id);
+                      setShowWriteOn(true);
+                    }
+                  }}
                   aria-pressed={isSelected}
                   style={{ position: "relative" }}
                   title={`Choose ${opt.title}`}
@@ -163,11 +180,11 @@ export default function NewPage() {
                   </div>
                 </button>
 
-                {/* ✅ Pop-up button beneath the selected card */}
-                {isSelected && (
+                {/* ✅ Pop-up button beneath the selected card (toggle-able) */}
+                {isSelected && showWriteOn && (
                   <button
                     type="button"
-                    className="btnPrimary writeOnBtn"
+                    className={`btnPrimary writeOnBtn ${shake ? "shakeNow" : ""}`}
                     onClick={() => go(opt.id)}
                     title="Write your letter"
                   >
@@ -202,7 +219,6 @@ export default function NewPage() {
                   showToast("Coming soon — Future Fowls aren’t selectable yet.");
                 }}
               >
-                {/* ✅ EXACT same colors as Recommended by reusing birdRec */}
                 <div className="birdRec futurePill" aria-hidden="true">
                   Coming soon
                 </div>
@@ -272,7 +288,6 @@ export default function NewPage() {
         )}
 
         <style jsx global>{`
-          /* wrapper so the Write On button can live "beneath the chosen card" */
           .birdPick {
             display: flex;
             flex-direction: column;
@@ -286,6 +301,7 @@ export default function NewPage() {
             font-weight: 900;
             letter-spacing: -0.01em;
             animation: popIn 160ms ease-out;
+            will-change: transform;
           }
 
           @keyframes popIn {
@@ -299,12 +315,33 @@ export default function NewPage() {
             }
           }
 
-          .futureCard {
-            position: relative;
-            cursor: pointer; /* match selectable */
+          /* ✅ intermittent shake: only when .shakeNow is applied */
+          .shakeNow {
+            animation: popIn 160ms ease-out, shake 520ms ease-in-out;
           }
 
-          /* positioning ONLY — colors come from .birdRec */
+          @keyframes shake {
+            0%   { transform: translateX(0) rotate(0deg); }
+            12%  { transform: translateX(-2px) rotate(-0.5deg); }
+            25%  { transform: translateX(3px) rotate(0.6deg); }
+            38%  { transform: translateX(-3px) rotate(-0.6deg); }
+            52%  { transform: translateX(2px) rotate(0.4deg); }
+            68%  { transform: translateX(-1px) rotate(-0.2deg); }
+            100% { transform: translateX(0) rotate(0deg); }
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            .writeOnBtn,
+            .shakeNow {
+              animation: none !important;
+            }
+          }
+
+          .futureCard {
+            position: relative;
+            cursor: pointer;
+          }
+
           .futurePill {
             position: absolute;
             top: 10px;
@@ -318,14 +355,12 @@ export default function NewPage() {
             z-index: 1;
           }
 
-          /* grayscale by default */
           .futureCard .birdThumb img {
             filter: grayscale(1) saturate(0.85) contrast(1.05);
             transition: filter 180ms ease, transform 180ms ease;
             transform: translateZ(0);
           }
 
-          /* hover/focus -> color */
           .futureCard:hover .birdThumb img,
           .futureCard:focus-visible .birdThumb img {
             filter: grayscale(0) saturate(1) contrast(1);
