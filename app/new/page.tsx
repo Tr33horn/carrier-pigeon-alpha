@@ -365,6 +365,27 @@ export default function NewPage() {
           .futureCard:focus-visible .birdThumb img {
             filter: grayscale(0) saturate(1) contrast(1);
           }
+
+          /* ===============================
+   Top-row bird grayscale behavior
+   =============================== */
+
+/* Default: unselected birds are grayscale */
+.birdCard:not(.on) .birdThumb img {
+  filter: grayscale(1) saturate(0.85) contrast(1.05);
+  transition: filter 180ms ease, transform 180ms ease;
+}
+
+/* Hover / keyboard focus brings color back */
+.birdCard:not(.on):hover .birdThumb img,
+.birdCard:not(.on):focus-visible .birdThumb img {
+  filter: grayscale(0) saturate(1) contrast(1);
+}
+
+/* Selected bird: always full color */
+.birdCard.on .birdThumb img {
+  filter: none;
+}
         `}</style>
       </div>
     </main>
