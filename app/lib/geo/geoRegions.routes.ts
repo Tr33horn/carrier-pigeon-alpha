@@ -19,6 +19,9 @@ export const ROUTE_TUNED_REGIONS: GeoRegion[] = [
   { id: "puget_sound", name: "Puget Sound", kind: "coast", priority: 96,
     bbox: { minLat: 47.0, minLon: -123.5, maxLat: 48.9, maxLon: -122.0 } },
 
+  { id: "salish_sea", name: "Salish Sea", kind: "coast", priority: 98,
+    bbox: { minLat: 47.42, minLon: -122.41, maxLat: 47.44, maxLon: -122.39 } },
+
   { id: "willamette_valley", name: "the Willamette Valley", kind: "plain", priority: 92,
     bbox: { minLat: 44.7, minLon: -123.5, maxLat: 46.3, maxLon: -122.3 } },
 
