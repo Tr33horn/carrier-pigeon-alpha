@@ -8,7 +8,7 @@ import { sendEmail } from "../../../lib/email/send";
 import { ROUTE_TUNED_REGIONS } from "../../../lib/geo/geoRegions.routes";
 import { geoLabelFor, type GeoRegion } from "../../../lib/geo/geoLabel";
 
-// ✅ Sleep helper (SINGLE source of truth — match status route)
+// ✅ Sleep helper (only used here to pick a stable flight “timezone” offset)
 import { offsetMinutesFromLon } from "@/app/lib/flightSleep";
 
 // ✅ Email template
@@ -22,32 +22,25 @@ const STORE_REGION_META = false;
 const REGIONS: GeoRegion[] = [...ROUTE_TUNED_REGIONS];
 
 type BirdType = "pigeon" | "snipe" | "goose";
-type SleepCfg = { sleepStartHour: number; sleepEndHour: number };
 
 const BIRDS: Record<
   BirdType,
-  { label: string; speed_kmh: number; inefficiency: number; sleepCfg: SleepCfg; ignoresSleep: boolean }
+  { label: string; speed_kmh: number; inefficiency: number }
 > = {
   pigeon: {
     label: "Homing Pigeon",
     speed_kmh: 72,
     inefficiency: 1.15,
-    sleepCfg: { sleepStartHour: 22, sleepEndHour: 6 },
-    ignoresSleep: false,
   },
   snipe: {
     label: "Great Snipe",
     speed_kmh: 88,
     inefficiency: 1.05,
-    sleepCfg: { sleepStartHour: 22, sleepEndHour: 6 }, // irrelevant
-    ignoresSleep: true,
   },
   goose: {
     label: "Canada Goose",
     speed_kmh: 56,
     inefficiency: 1.2,
-    sleepCfg: { sleepStartHour: 21, sleepEndHour: 7 },
-    ignoresSleep: false,
   },
 };
 
@@ -279,7 +272,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Origin and destination are required." }, { status: 400 });
   }
 
-  // Prefer coords check over "name" check (names can differ for same place; coords cannot)
   if (origin.lat === destination.lat && origin.lon === destination.lon) {
     return NextResponse.json({ error: "Origin and destination must be different." }, { status: 400 });
   }
@@ -301,17 +293,16 @@ export async function POST(req: Request) {
   const midLon = lerp(origin.lon, destination.lon, 0.5);
   const offsetMin = offsetMinutesFromLon(midLon);
 
-  // ✅ IMPORTANT FIX:
-  // We DO NOT delay sent_at if the bird is “sleeping”.
-  // The “skip-initial-sleep-window” behavior is handled in /api/letters/[token].
+  // ✅ IMPORTANT:
+  // Do NOT delay sent_at for sleep. Status route handles skip-initial-sleep-window.
   const sentUtcMs = Date.now();
   const sentAt = new Date(sentUtcMs);
 
-  // ✅ BASELINE ETA stored in DB (always sane)
+  // ✅ Baseline ETA stored in DB (always sane)
   const etaUtcMs = sentUtcMs + reqAwakeMs;
 
-  // ✅ Hard safety clamp: never store an ETA beyond 30 days (prevents “2039”)
-  const maxAllowedUtcMs = sentUtcMs + 30 * 24 * 3600_000;
+  // ✅ Safety belt: don’t allow ETAs beyond 365 days (should never hit in real use)
+  const maxAllowedUtcMs = sentUtcMs + 365 * 24 * 3600_000;
   const etaUtcMsSafe = Number.isFinite(etaUtcMs) ? Math.min(etaUtcMs, maxAllowedUtcMs) : maxAllowedUtcMs;
   const etaAtSafe = new Date(etaUtcMsSafe);
 
