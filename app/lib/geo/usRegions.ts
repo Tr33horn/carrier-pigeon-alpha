@@ -44,6 +44,7 @@ export const US_REGIONS: GeoRegion[] = [
 
   // --- Puget Sound / I-5 corridor ---
   R("puget-sound", "Puget Sound", [47.0, -123.5, 48.6, -122.0], "over"),
+   R("salish-sea", "Salish Sea", [47.42, -122.41, 47.44, -122.39], "over"),
   R("seattle-metro", "Seattle Metro", [47.2, -122.6, 47.9, -121.9], "over"),
 
   // --- Oregon / Columbia specifics ---
