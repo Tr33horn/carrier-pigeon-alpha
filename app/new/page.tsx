@@ -68,10 +68,8 @@ export default function NewPage() {
     []
   );
 
-  // ✅ Future Fowls (2 rows = 6 cards)
   const futureFowls = useMemo<FutureBirdOption[]>(
     () => [
-      // Row 1
       {
         id: "peregrine-falcon",
         title: "Peregrine Falcon",
@@ -90,8 +88,6 @@ export default function NewPage() {
         subtitle: "Blink-and-it’s-delivered speed.",
         imgSrc: "/birds/white-throated-needletail.gif",
       },
-
-      // Row 2
       {
         id: "american-osprey",
         title: "American Osprey",
@@ -188,32 +184,22 @@ export default function NewPage() {
               <button
                 key={opt.id}
                 type="button"
-                className="card birdCard futureFowlCard"
+                className="card birdCard futureCard"
                 aria-disabled="true"
                 title={`${opt.title} (Coming soon)`}
-                onClick={() => showToast("Coming soon — Future Fowls aren’t selectable yet.")}
-                style={{
-                  position: "relative",
-                  opacity: 0.9,
-                  cursor: "not-allowed",
+                onClick={(e) => {
+                  e.preventDefault();
+                  showToast("Coming soon — Future Fowls aren’t selectable yet.");
                 }}
               >
-                <div
-                  className="birdRec"
-                  style={{
-                    position: "absolute",
-                    top: 10,
-                    left: 10,
-                    opacity: 0.95,
-                  }}
-                >
+                <div className="futurePill" aria-hidden="true">
                   Coming soon
                 </div>
 
                 <div className="birdRow">
-                  <div className="birdThumb futureFowlThumb" aria-hidden="true">
+                  <div className="birdThumb" aria-hidden="true">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img className="futureFowlImg" src={opt.imgSrc} alt="" />
+                    <img src={opt.imgSrc} alt="" />
                   </div>
 
                   <div style={{ minWidth: 0 }}>
@@ -225,15 +211,7 @@ export default function NewPage() {
             ))}
           </div>
 
-          {/* ✅ Cheeky footer */}
-          <div
-            className="muted"
-            style={{
-              marginTop: 10,
-              fontSize: 13,
-              opacity: 0.75,
-            }}
-          >
+          <div className="muted" style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
             More birds are molting.
           </div>
         </div>
@@ -282,26 +260,44 @@ export default function NewPage() {
           </div>
         )}
 
-        {/* ✅ Local styles: grayscale → color hover for Future Fowls */}
-        <style jsx>{`
-          .futureFowlImg {
-            filter: grayscale(1);
-            opacity: 0.9;
-            transition: filter 180ms ease, opacity 180ms ease, transform 180ms ease;
+        {/* ✅ Future Fowls hover behavior */}
+        <style jsx global>{`
+          .futureCard {
+            position: relative;
+            cursor: not-allowed;
+          }
+
+          /* pill styling separate from "Recommended" */
+          .futurePill {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            border: 1px solid rgba(0, 0, 0, 0.12);
+            background: rgba(0, 0, 0, 0.04);
+            color: rgba(0, 0, 0, 0.72);
+          }
+
+          /* grayscale by default */
+          .futureCard .birdThumb img {
+            filter: grayscale(1) saturate(0.85) contrast(1.05);
+            transition: filter 180ms ease, transform 180ms ease;
             transform: translateZ(0);
           }
 
-          .futureFowlCard:hover .futureFowlImg,
-          .futureFowlCard:focus-visible .futureFowlImg {
-            filter: grayscale(0);
-            opacity: 1;
-            transform: scale(1.02);
+          /* hover/focus -> color (subtle) */
+          .futureCard:hover .birdThumb img,
+          .futureCard:focus-visible .birdThumb img {
+            filter: grayscale(0) saturate(1) contrast(1);
           }
 
-          /* Keep it subtle: don’t let a disabled card feel “clicky” */
-          .futureFowlCard:hover,
-          .futureFowlCard:focus-visible {
-            transform: none;
+          /* keep the card from looking "dimmed to death" */
+          .futureCard {
+            opacity: 1;
           }
         `}</style>
       </div>
