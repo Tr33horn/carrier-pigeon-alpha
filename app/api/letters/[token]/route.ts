@@ -14,8 +14,10 @@ import {
   sleepUntilLocalText,
   initialSleepSkipUntilUtcMs,
   type SleepConfig,
-  DEFAULT_SLEEP,
 } from "@/app/lib/flightSleep";
+
+// ✅ Single source of truth for bird rules
+import { BIRD_RULES, normalizeBird, type BirdType } from "@/app/lib/birds";
 
 /* -------------------------------------------------
    tiny helpers
@@ -163,36 +165,6 @@ function computeBadgesFromRegions(args: {
   const seen = new Set<string>();
   return out.filter((b) => (seen.has(b.code) ? false : (seen.add(b.code), true)));
 }
-
-/* -------------------------------------------------
-   Bird rules (MUST match send route)
-------------------------------------------------- */
-
-type BirdType = "pigeon" | "snipe" | "goose";
-
-const BIRD_RULES: Record<
-  BirdType,
-  { ignoresSleep: boolean; sleepLabel: string; sleepCfg: SleepConfig; inefficiency: number }
-> = {
-  pigeon: {
-    ignoresSleep: false,
-    sleepLabel: "Pigeon",
-    sleepCfg: DEFAULT_SLEEP, // 22 -> 6
-    inefficiency: 1.15,
-  },
-  snipe: {
-    ignoresSleep: true,
-    sleepLabel: "Snipe",
-    sleepCfg: DEFAULT_SLEEP, // irrelevant
-    inefficiency: 1.05,
-  },
-  goose: {
-    ignoresSleep: false,
-    sleepLabel: "Goose",
-    sleepCfg: { sleepStartHour: 21, sleepEndHour: 7 },
-    inefficiency: 1.2,
-  },
-};
 
 /* -------------------------------------------------
    Skip-initial-sleep helpers (uses flightSleep.ts)
@@ -381,10 +353,8 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
   const destLon = Number((meta as any).dest_lon);
   const destLat = Number((meta as any).dest_lat);
 
-  // ✅ Bird behavior
-  const rawBird = String((meta as any).bird || "pigeon").toLowerCase();
-  const bird: BirdType = rawBird === "snipe" || rawBird === "goose" ? (rawBird as BirdType) : "pigeon";
-
+  // ✅ Bird behavior (single source of truth)
+  const bird: BirdType = normalizeBird((meta as any).bird);
   const birdRule = BIRD_RULES[bird];
   const ignoresSleep = birdRule.ignoresSleep;
   const sleepCfg = birdRule.sleepCfg;

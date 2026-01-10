@@ -11,6 +11,9 @@ import { geoLabelFor, type GeoRegion } from "../../../lib/geo/geoLabel";
 // ✅ Sleep helper (only used here to pick a stable flight “timezone” offset)
 import { offsetMinutesFromLon } from "@/app/lib/flightSleep";
 
+// ✅ Single source of truth for bird rules
+import { BIRD_RULES, normalizeBird, type BirdType } from "@/app/lib/birds";
+
 // ✅ Email template
 import { LetterOnTheWayEmail } from "@/emails/LetterOnTheWay";
 
@@ -20,36 +23,6 @@ import { LetterOnTheWayEmail } from "@/emails/LetterOnTheWay";
 const STORE_REGION_META = false;
 
 const REGIONS: GeoRegion[] = [...ROUTE_TUNED_REGIONS];
-
-type BirdType = "pigeon" | "snipe" | "goose";
-
-const BIRDS: Record<
-  BirdType,
-  { label: string; speed_kmh: number; inefficiency: number }
-> = {
-  pigeon: {
-    label: "Homing Pigeon",
-    speed_kmh: 72,
-    inefficiency: 1.15,
-  },
-  snipe: {
-    label: "Great Snipe",
-    speed_kmh: 88,
-    inefficiency: 1.05,
-  },
-  goose: {
-    label: "Canada Goose",
-    speed_kmh: 56,
-    inefficiency: 1.2,
-  },
-};
-
-function normalizeBird(raw: unknown): BirdType {
-  const b = String(raw || "").toLowerCase();
-  if (b === "snipe") return "snipe";
-  if (b === "goose") return "goose";
-  return "pigeon";
-}
 
 function toRad(deg: number) {
   return (deg * Math.PI) / 180;
@@ -245,8 +218,8 @@ export async function POST(req: Request) {
 
   const { from_name, from_email, to_name, to_email, subject, message, origin, destination, bird: birdRaw } = body;
 
-  const bird = normalizeBird(birdRaw);
-  const birdCfg = BIRDS[bird];
+  const bird: BirdType = normalizeBird(birdRaw);
+  const birdCfg = BIRD_RULES[bird];
 
   const normalizedFromEmail = typeof from_email === "string" ? from_email.trim().toLowerCase() : "";
   const normalizedToEmail = typeof to_email === "string" ? to_email.trim().toLowerCase() : "";
@@ -282,7 +255,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid route distance." }, { status: 400 });
   }
 
-  const speedKmh = birdCfg.speed_kmh;
+  const speedKmh = birdCfg.speedKmh;
   if (!Number.isFinite(speedKmh) || speedKmh <= 0) {
     return NextResponse.json({ error: "Invalid bird speed." }, { status: 400 });
   }
