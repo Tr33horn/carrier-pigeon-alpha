@@ -244,15 +244,15 @@ function WritePageInner() {
             <h1 className="h1">Write a Letter</h1>
 
             <p className="muted" style={{ marginTop: 6 }}>
-              Sending with <strong>{birdLabel(bird)}</strong>.{" "}
-              <a href="/new" className="link">
-                Change bird
-              </a>
+              It’ll unlock for the recipient when the bird lands.
             </p>
 
             <p className="muted" style={{ marginTop: 6 }}>
-              It’ll unlock for the recipient when the bird lands.
+              Sending with <strong>{birdLabel(bird)}</strong>.{" "}
+
             </p>
+
+
           </div>
 
           <a
