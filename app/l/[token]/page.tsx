@@ -137,7 +137,6 @@ function formatCountdown(ms: number) {
   return `${h}:${pad(m)}:${pad(s)}`;
 }
 
-/** Local time formatter for display (full) */
 function formatLocal(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
@@ -151,7 +150,6 @@ function formatLocal(iso: string) {
   }).format(d);
 }
 
-/** UTC formatter for display (full, explicit UTC) */
 function formatUtc(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
@@ -168,7 +166,6 @@ function formatUtc(iso: string) {
   );
 }
 
-/** Back-compat name */
 function formatUtcFallback(iso: string) {
   return formatUtc(iso);
 }
@@ -190,10 +187,6 @@ function timeLabelLocal(iso: string) {
   return d.toLocaleString();
 }
 
-/** ✅ Short, nice-looking “Opens at …” line:
- * - Same-day: "8:56 AM (4:56 PM UTC)"
- * - Different-day: "Jan 8, 8:56 AM (Jan 8, 4:56 PM UTC)"
- */
 function formatOpensShort(etaIso: string) {
   const dLocal = new Date(etaIso);
   const dUtc = new Date(etaIso);
@@ -233,6 +226,40 @@ function formatOpensShort(etaIso: string) {
   return `${dateLocal}, ${timeLocal} (${dateUtc}, ${timeUtc} UTC)`;
 }
 
+/* ---------- localStorage helpers ---------- */
+type PersistedMilestones = { m25: boolean; m50: boolean; m75: boolean; lastP: number };
+
+function storageKeyForToken(token: string) {
+  return `flok_milestones_${token}`;
+}
+
+function safeGetMilestones(token: string): PersistedMilestones | null {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem(storageKeyForToken(token));
+    if (!raw) return null;
+    const j = JSON.parse(raw);
+
+    const m25 = !!j?.m25;
+    const m50 = !!j?.m50;
+    const m75 = !!j?.m75;
+    const lastP = clamp01(Number(j?.lastP ?? 0));
+
+    return { m25, m50, m75, lastP };
+  } catch {
+    return null;
+  }
+}
+
+function safeSetMilestones(token: string, val: PersistedMilestones) {
+  try {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(storageKeyForToken(token), JSON.stringify(val));
+  } catch {
+    // ignore (private mode, quota, etc.)
+  }
+}
+
 /* ---------- tiny icon system (inline SVG) ---------- */
 function Ico({
   name,
@@ -254,7 +281,13 @@ function Ico({
     case "x":
       return (
         <svg {...common}>
-          <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M18 6 6 18M6 6l12 12"
+            stroke="currentColor"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       );
     case "moon":
@@ -271,15 +304,30 @@ function Ico({
     case "pin":
       return (
         <svg {...common}>
-          <path d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round" />
-          <path d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z" stroke="currentColor" strokeWidth="2.4" />
+          <path
+            d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z"
+            stroke="currentColor"
+            strokeWidth="2.4"
+          />
         </svg>
       );
     case "speed":
       return (
         <svg {...common}>
           <path d="M5 13a7 7 0 0 1 14 0" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-          <path d="M12 13l4.5-4.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M12 13l4.5-4.5"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
           <path d="M4 13h2M18 13h2" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
         </svg>
       );
@@ -287,7 +335,13 @@ function Ico({
       return (
         <svg {...common}>
           <path d="M7 7h10M7 17h10" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-          <path d="M9 9l-2-2 2-2M15 15l2 2-2 2" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M9 9l-2-2 2-2M15 15l2 2-2 2"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       );
     case "check":
@@ -325,7 +379,8 @@ function Ico({
 /** ✅ Bird image based on bird + state */
 function birdImageSrc(bird: BirdType, mode: "flying" | "sleeping" | "delivered" | "canceled") {
   const base = bird === "snipe" ? "great-snipe" : bird === "goose" ? "canada-goose" : "homing-pigeon";
-  const state = mode === "sleeping" ? "sleep" : mode === "delivered" ? "landed" : mode === "canceled" ? "landed" : "fly";
+  const state =
+    mode === "sleeping" ? "sleep" : mode === "delivered" ? "landed" : mode === "canceled" ? "landed" : "fly";
   return `/birds/${base}-${state}.gif`;
 }
 
@@ -390,12 +445,7 @@ function WaxSealOverlay({
               src="/waxseal.png"
               alt="Wax seal"
               className="waxImg"
-              style={{
-                width: 86,
-                height: 86,
-                display: "block",
-                objectFit: "contain",
-              }}
+              style={{ width: 86, height: 86, display: "block", objectFit: "contain" }}
             />
           </div>
 
@@ -572,7 +622,6 @@ export default function LetterStatusPage() {
   const [canceled, setCanceled] = useState(false);
   const canceledRef = useRef(false);
 
-  // ✅ NEW: delivered ref so polling can stop immediately when delivered flips true
   const deliveredRef = useRef(false);
 
   const [archivedAtISO, setArchivedAtISO] = useState<string | null>(null);
@@ -593,6 +642,14 @@ export default function LetterStatusPage() {
   const [confetti, setConfetti] = useState(false);
 
   const [mapStyle, setMapStyle] = useState<MapStyle>("carto-positron");
+
+  // ✅ Milestones: crossing-based + persisted
+  const progressRef = useRef(0);
+  const [milestoneReached, setMilestoneReached] = useState({ m25: false, m50: false, m75: false });
+  const milestoneKeyRef = useRef<string>("");
+
+  // localStorage write throttle
+  const lastWriteRef = useRef(0);
 
   useEffect(() => {
     archivedRef.current = archived;
@@ -621,7 +678,6 @@ export default function LetterStatusPage() {
     window.localStorage.setItem("pigeon_map_style", mapStyle);
   }, [mapStyle]);
 
-  // ✅ clock: if archived or canceled, freeze at server snapshot
   useEffect(() => {
     if ((archived || canceled) && serverNowISO) {
       setNow(new Date(serverNowISO));
@@ -733,12 +789,10 @@ export default function LetterStatusPage() {
     return !!delivered;
   }, [canceled, delivered]);
 
-  // ✅ NEW: keep deliveredRef updated for polling guard
   useEffect(() => {
     deliveredRef.current = uiDelivered;
   }, [uiDelivered]);
 
-  // ✅ polling stops after delivery too
   useEffect(() => {
     if (!token) return;
     if (archived) return;
@@ -768,6 +822,88 @@ export default function LetterStatusPage() {
     return clamp01((t - sent) / (eta - sent));
   }, [flight, letter, effectiveEtaISO, now]);
 
+  // ✅ Restore milestones from localStorage when token changes / first load
+  useEffect(() => {
+    const key = (letter?.public_token || token || "").trim();
+    if (!key) return;
+
+    if (milestoneKeyRef.current !== key) {
+      milestoneKeyRef.current = key;
+
+      const saved = safeGetMilestones(key);
+      if (saved) {
+        setMilestoneReached({ m25: saved.m25, m50: saved.m50, m75: saved.m75 });
+        progressRef.current = clamp01(saved.lastP);
+      } else {
+        setMilestoneReached({ m25: false, m50: false, m75: false });
+        progressRef.current = 0;
+      }
+    }
+  }, [letter?.public_token, token]);
+
+  // ✅ Terminal states: show milestones complete (and persist)
+  useEffect(() => {
+    const key = milestoneKeyRef.current;
+    if (!key) return;
+
+    if (uiDelivered || archived || canceled) {
+      setMilestoneReached({ m25: true, m50: true, m75: true });
+      progressRef.current = 1;
+
+      safeSetMilestones(key, { m25: true, m50: true, m75: true, lastP: 1 });
+      lastWriteRef.current = Date.now();
+    }
+  }, [uiDelivered, archived, canceled]);
+
+  // ✅ Crossing-based milestone logic (with persistence)
+  useEffect(() => {
+    if (!letter) return;
+    if (uiDelivered || archived || canceled) return;
+
+    const key = milestoneKeyRef.current;
+    if (!key) return;
+
+    const p = clamp01(progress);
+    const prev = clamp01(progressRef.current);
+
+    const crossed25 = prev < 0.25 && p >= 0.25;
+    const crossed50 = prev < 0.5 && p >= 0.5;
+    const crossed75 = prev < 0.75 && p >= 0.75;
+
+    if (crossed25 || crossed50 || crossed75) {
+      setMilestoneReached((cur) => {
+        const next = {
+          m25: cur.m25 || p >= 0.25,
+          m50: cur.m50 || p >= 0.5,
+          m75: cur.m75 || p >= 0.75,
+        };
+
+        // write immediately on “events”
+        safeSetMilestones(key, { ...next, lastP: p });
+        lastWriteRef.current = Date.now();
+
+        return next;
+      });
+    }
+
+    progressRef.current = p;
+  }, [progress, letter, uiDelivered, archived, canceled]);
+
+  // ✅ Throttled persistence of lastP even when no milestone event happens
+  useEffect(() => {
+    const key = milestoneKeyRef.current;
+    if (!key) return;
+    if (!letter) return;
+    if (uiDelivered || archived || canceled) return;
+
+    const nowT = Date.now();
+    if (nowT - lastWriteRef.current < 15000) return; // every 15s max
+
+    const p = clamp01(progress);
+    safeSetMilestones(key, { ...milestoneReached, lastP: p });
+    lastWriteRef.current = nowT;
+  }, [progress, milestoneReached, letter, uiDelivered, archived, canceled]);
+
   const countdown = useMemo(() => {
     if (!letter) return "";
     const msLeft = new Date(effectiveEtaISO).getTime() - now.getTime();
@@ -789,14 +925,12 @@ export default function LetterStatusPage() {
   }, [canceled, letter, flight?.current_speed_kmh, uiDelivered, archived, sleeping]);
 
   const milestones = useMemo(() => {
-    if (!letter) return [];
-    const defs = [
-      { pct: 25, frac: 0.25, label: "25% reached" },
-      { pct: 50, frac: 0.5, label: "50% reached" },
-      { pct: 75, frac: 0.75, label: "75% reached" },
+    return [
+      { pct: 25, frac: 0.25, label: "25% reached", isPast: milestoneReached.m25 },
+      { pct: 50, frac: 0.5, label: "50% reached", isPast: milestoneReached.m50 },
+      { pct: 75, frac: 0.75, label: "75% reached", isPast: milestoneReached.m75 },
     ];
-    return defs.map((m) => ({ ...m, isPast: progress >= m.frac }));
-  }, [letter, progress]);
+  }, [milestoneReached]);
 
   const checkpointsByTime = useMemo(() => {
     const cps = [...checkpointsAdjusted];
@@ -881,7 +1015,6 @@ export default function LetterStatusPage() {
     return grouped;
   }, [checkpointsByTime, uiDelivered, canceled, effectiveEtaISO]);
 
-  // ✅ NEW: when sleeping, current highlight prefers the latest sleep event
   const currentTimelineKey = useMemo(() => {
     if (uiDelivered || canceled) return null;
 
@@ -950,7 +1083,6 @@ export default function LetterStatusPage() {
     return uiDelivered ? "delivered" : sleeping ? "sleeping" : "flying";
   }, [canceled, flight?.marker_mode, uiDelivered, sleeping]);
 
-  // ✅ FIX: prevent delivery animation from re-triggering forever
   useEffect(() => {
     if (canceled) {
       prevDelivered.current = false;
@@ -1043,7 +1175,9 @@ export default function LetterStatusPage() {
                         <span className="liveText">{sleeping ? "SLEEPING" : "LIVE"}</span>
                       </div>
                       <div className="liveSub">
-                        {sleeping ? `Wakes at ${flight?.sleep_local_text || "soon"}` : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
+                        {sleeping
+                          ? `Wakes at ${flight?.sleep_local_text || "soon"}`
+                          : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
                       </div>
                     </div>
 
@@ -1218,7 +1352,6 @@ export default function LetterStatusPage() {
                 tooltipText={mapTooltip}
                 mapStyle={mapStyle}
                 markerMode={markerMode}
-                // ✅ Dev-only sleep overlay inputs only when live (prevents weird overlays in terminal states)
                 sentAtISO={showLive ? letter.sent_at : undefined}
                 etaAtISO={showLive ? effectiveEtaISO : undefined}
               />
