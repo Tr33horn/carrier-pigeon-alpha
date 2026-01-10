@@ -261,45 +261,48 @@ export default function NewPage() {
         )}
 
         {/* ✅ Future Fowls hover behavior */}
-        <style jsx global>{`
-          .futureCard {
-            position: relative;
-            cursor: not-allowed;
-          }
+ <style jsx global>{`
+  .futureCard {
+    position: relative;
+    cursor: pointer; /* ✅ match selectable */
+  }
 
-          /* pill styling separate from "Recommended" */
-          .futurePill {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            padding: 6px 10px;
-            border-radius: 999px;
-            font-size: 11px;
-            font-weight: 800;
-            letter-spacing: 0.02em;
-            border: 1px solid rgba(0, 0, 0, 0.12);
-            background: rgba(0, 0, 0, 0.04);
-            color: rgba(0, 0, 0, 0.72);
-          }
+  /* make sure the pill is ABOVE the image */
+  .futurePill {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 5;              /* ✅ brings it on top */
+    pointer-events: none;    /* ✅ clicks still go to the card */
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    background: rgba(0, 0, 0, 0.04);
+    color: rgba(0, 0, 0, 0.72);
+  }
 
-          /* grayscale by default */
-          .futureCard .birdThumb img {
-            filter: grayscale(1) saturate(0.85) contrast(1.05);
-            transition: filter 180ms ease, transform 180ms ease;
-            transform: translateZ(0);
-          }
+  /* ALSO ensure the thumb doesn't float above overlays */
+  .futureCard .birdThumb {
+    position: relative;
+    z-index: 1;
+  }
 
-          /* hover/focus -> color (subtle) */
-          .futureCard:hover .birdThumb img,
-          .futureCard:focus-visible .birdThumb img {
-            filter: grayscale(0) saturate(1) contrast(1);
-          }
+  /* grayscale by default */
+  .futureCard .birdThumb img {
+    filter: grayscale(1) saturate(0.85) contrast(1.05);
+    transition: filter 180ms ease, transform 180ms ease;
+    transform: translateZ(0);
+  }
 
-          /* keep the card from looking "dimmed to death" */
-          .futureCard {
-            opacity: 1;
-          }
-        `}</style>
+  /* hover/focus -> color */
+  .futureCard:hover .birdThumb img,
+  .futureCard:focus-visible .birdThumb img {
+    filter: grayscale(0) saturate(1) contrast(1);
+  }
+`}</style>
       </div>
     </main>
   );
