@@ -268,21 +268,29 @@ export default function NewPage() {
   }
 
   /* make sure the pill is ABOVE the image */
-  .futurePill {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    z-index: 5;              /* ✅ brings it on top */
-    pointer-events: none;    /* ✅ clicks still go to the card */
-    padding: 6px 10px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-    border: 1px solid rgba(0, 0, 0, 0.12);
-    background: rgba(0, 0, 0, 0.04);
-    color: rgba(0, 0, 0, 0.72);
-  }
+.futurePill {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 5;
+  pointer-events: none;
+
+  padding: 6px 10px;
+  border-radius: 999px;
+
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+
+  /* 🔵 Match Recommended pill vibe */
+  background: rgba(56, 132, 255, 0.12);
+  color: #1f5eff;
+  border: 1px solid rgba(56, 132, 255, 0.35);
+
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+    0 1px 2px rgba(31, 94, 255, 0.15);
+}
 
   /* ALSO ensure the thumb doesn't float above overlays */
   .futureCard .birdThumb {
