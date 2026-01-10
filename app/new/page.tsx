@@ -386,6 +386,53 @@ export default function NewPage() {
 .birdCard.on .birdThumb img {
   filter: none;
 }
+
+/* ===============================
+   Top-row (Current birds): grayscale + scale + text dim
+   =============================== */
+
+/* Default: unselected birds are grayscale and slightly dimmed */
+.birdCard:not(.on) .birdThumb img {
+  filter: grayscale(1) saturate(0.85) contrast(1.05);
+  transition: filter 180ms ease, transform 180ms ease;
+  transform: translateZ(0);
+}
+
+/* Slightly dim the text for unselected */
+.birdCard:not(.on) .birdTitle {
+  opacity: 0.88;
+  transition: opacity 180ms ease;
+}
+.birdCard:not(.on) .birdSub {
+  opacity: 0.70;
+  transition: opacity 180ms ease;
+}
+
+/* Hover/focus: restore color + tiny scale up + brighten text */
+.birdCard:not(.on):hover .birdThumb img,
+.birdCard:not(.on):focus-visible .birdThumb img {
+  filter: grayscale(0) saturate(1) contrast(1);
+  transform: scale(1.02);
+}
+
+.birdCard:not(.on):hover .birdTitle,
+.birdCard:not(.on):focus-visible .birdTitle {
+  opacity: 1;
+}
+.birdCard:not(.on):hover .birdSub,
+.birdCard:not(.on):focus-visible .birdSub {
+  opacity: 0.90;
+}
+
+/* Selected bird: always full color + full text */
+.birdCard.on .birdThumb img {
+  filter: none;
+  transform: none;
+}
+.birdCard.on .birdTitle,
+.birdCard.on .birdSub {
+  opacity: 1;
+}
         `}</style>
       </div>
     </main>
