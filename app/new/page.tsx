@@ -134,37 +134,47 @@ export default function NewPage() {
             const isSelected = bird === opt.id;
 
             return (
-              <button
-                key={opt.id}
-                type="button"
-                className={`card birdCard ${isSelected ? "on" : ""}`}
-                onClick={() => {
-                  setBird(opt.id);
-                  go(opt.id);
-                }}
-                aria-pressed={isSelected}
-                style={{ position: "relative" }}
-                title={`Choose ${opt.title}`}
-              >
+              <div key={opt.id} className="birdPick">
+                <button
+                  type="button"
+                  className={`card birdCard ${isSelected ? "on" : ""}`}
+                  onClick={() => setBird(opt.id)} // ✅ no auto-nav
+                  aria-pressed={isSelected}
+                  style={{ position: "relative" }}
+                  title={`Choose ${opt.title}`}
+                >
+                  {isSelected && (
+                    <div className="birdBadge" aria-hidden="true">
+                      ✓
+                    </div>
+                  )}
+                  {opt.recommended && <div className="birdRec">Recommended</div>}
+
+                  <div className="birdRow">
+                    <div className="birdThumb" aria-hidden="true">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={opt.imgSrc} alt="" />
+                    </div>
+
+                    <div style={{ minWidth: 0 }}>
+                      <div className="birdTitle">{opt.title}</div>
+                      <div className="muted birdSub">{opt.subtitle}</div>
+                    </div>
+                  </div>
+                </button>
+
+                {/* ✅ Pop-up button beneath the selected card */}
                 {isSelected && (
-                  <div className="birdBadge" aria-hidden="true">
-                    ✓
-                  </div>
+                  <button
+                    type="button"
+                    className="btnPrimary writeOnBtn"
+                    onClick={() => go(opt.id)}
+                    title="Write your letter"
+                  >
+                    Write On!
+                  </button>
                 )}
-                {opt.recommended && <div className="birdRec">Recommended</div>}
-
-                <div className="birdRow">
-                  <div className="birdThumb" aria-hidden="true">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={opt.imgSrc} alt="" />
-                  </div>
-
-                  <div style={{ minWidth: 0 }}>
-                    <div className="birdTitle">{opt.title}</div>
-                    <div className="muted birdSub">{opt.subtitle}</div>
-                  </div>
-                </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -192,7 +202,8 @@ export default function NewPage() {
                   showToast("Coming soon — Future Fowls aren’t selectable yet.");
                 }}
               >
-                <div className="futurePill" aria-hidden="true">
+                {/* ✅ EXACT same colors as Recommended by reusing birdRec */}
+                <div className="birdRec futurePill" aria-hidden="true">
                   Coming soon
                 </div>
 
@@ -260,57 +271,66 @@ export default function NewPage() {
           </div>
         )}
 
-        {/* ✅ Future Fowls hover behavior */}
- <style jsx global>{`
-  .futureCard {
-    position: relative;
-    cursor: pointer; /* ✅ match selectable */
-  }
+        <style jsx global>{`
+          /* wrapper so the Write On button can live "beneath the chosen card" */
+          .birdPick {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+          }
 
-  /* make sure the pill is ABOVE the image */
-.futurePill {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 5;
-  pointer-events: none;
+          .writeOnBtn {
+            width: 100%;
+            border-radius: 14px;
+            padding: 12px 14px;
+            font-weight: 900;
+            letter-spacing: -0.01em;
+            animation: popIn 160ms ease-out;
+          }
 
-  padding: 6px 10px;
-  border-radius: 999px;
+          @keyframes popIn {
+            from {
+              transform: translateY(-6px);
+              opacity: 0;
+            }
+            to {
+              transform: translateY(0px);
+              opacity: 1;
+            }
+          }
 
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
+          .futureCard {
+            position: relative;
+            cursor: pointer; /* match selectable */
+          }
 
-  /* 🔵 Match Recommended pill vibe */
-  background: rgba(56, 132, 255, 0.12);
-  color: #1f5eff;
-  border: 1px solid rgba(56, 132, 255, 0.35);
+          /* positioning ONLY — colors come from .birdRec */
+          .futurePill {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 5;
+            pointer-events: none;
+          }
 
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.4),
-    0 1px 2px rgba(31, 94, 255, 0.15);
-}
+          .futureCard .birdThumb {
+            position: relative;
+            z-index: 1;
+          }
 
-  /* ALSO ensure the thumb doesn't float above overlays */
-  .futureCard .birdThumb {
-    position: relative;
-    z-index: 1;
-  }
+          /* grayscale by default */
+          .futureCard .birdThumb img {
+            filter: grayscale(1) saturate(0.85) contrast(1.05);
+            transition: filter 180ms ease, transform 180ms ease;
+            transform: translateZ(0);
+          }
 
-  /* grayscale by default */
-  .futureCard .birdThumb img {
-    filter: grayscale(1) saturate(0.85) contrast(1.05);
-    transition: filter 180ms ease, transform 180ms ease;
-    transform: translateZ(0);
-  }
-
-  /* hover/focus -> color */
-  .futureCard:hover .birdThumb img,
-  .futureCard:focus-visible .birdThumb img {
-    filter: grayscale(0) saturate(1) contrast(1);
-  }
-`}</style>
+          /* hover/focus -> color */
+          .futureCard:hover .birdThumb img,
+          .futureCard:focus-visible .birdThumb img {
+            filter: grayscale(0) saturate(1) contrast(1);
+          }
+        `}</style>
       </div>
     </main>
   );
