@@ -68,8 +68,10 @@ export default function NewPage() {
     []
   );
 
+  // ✅ Future Fowls (2 rows = 6 cards)
   const futureFowls = useMemo<FutureBirdOption[]>(
     () => [
+      // Row 1
       {
         id: "peregrine-falcon",
         title: "Peregrine Falcon",
@@ -87,6 +89,26 @@ export default function NewPage() {
         title: "White-throated Needletail",
         subtitle: "Blink-and-it’s-delivered speed.",
         imgSrc: "/birds/white-throated-needletail.gif",
+      },
+
+      // Row 2
+      {
+        id: "american-osprey",
+        title: "American Osprey",
+        subtitle: "Precision strikes. Fish not included.",
+        imgSrc: "/birds/American-Osprey.gif",
+      },
+      {
+        id: "northern-hawk-owl",
+        title: "Northern Hawk Owl",
+        subtitle: "Daylight hunter. Night-owl energy.",
+        imgSrc: "/birds/NorthernHawkOwl.gif",
+      },
+      {
+        id: "common-tern",
+        title: "Common Tern",
+        subtitle: "Coastal courier with stamina.",
+        imgSrc: "/birds/CommonTern.gif",
       },
     ],
     []
@@ -166,13 +188,14 @@ export default function NewPage() {
               <button
                 key={opt.id}
                 type="button"
-                className="card birdCard"
+                className="card birdCard futureFowlCard"
                 aria-disabled="true"
                 title={`${opt.title} (Coming soon)`}
                 onClick={() => showToast("Coming soon — Future Fowls aren’t selectable yet.")}
                 style={{
                   position: "relative",
-                  opacity: 0.75,
+                  opacity: 0.9,
+                  cursor: "not-allowed",
                 }}
               >
                 <div
@@ -188,9 +211,9 @@ export default function NewPage() {
                 </div>
 
                 <div className="birdRow">
-                  <div className="birdThumb" aria-hidden="true">
+                  <div className="birdThumb futureFowlThumb" aria-hidden="true">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={opt.imgSrc} alt="" />
+                    <img className="futureFowlImg" src={opt.imgSrc} alt="" />
                   </div>
 
                   <div style={{ minWidth: 0 }}>
@@ -200,6 +223,18 @@ export default function NewPage() {
                 </div>
               </button>
             ))}
+          </div>
+
+          {/* ✅ Cheeky footer */}
+          <div
+            className="muted"
+            style={{
+              marginTop: 10,
+              fontSize: 13,
+              opacity: 0.75,
+            }}
+          >
+            More birds are molting.
           </div>
         </div>
 
@@ -246,6 +281,29 @@ export default function NewPage() {
             <span style={{ opacity: 0.65, marginLeft: 8 }}>(tap to dismiss)</span>
           </div>
         )}
+
+        {/* ✅ Local styles: grayscale → color hover for Future Fowls */}
+        <style jsx>{`
+          .futureFowlImg {
+            filter: grayscale(1);
+            opacity: 0.9;
+            transition: filter 180ms ease, opacity 180ms ease, transform 180ms ease;
+            transform: translateZ(0);
+          }
+
+          .futureFowlCard:hover .futureFowlImg,
+          .futureFowlCard:focus-visible .futureFowlImg {
+            filter: grayscale(0);
+            opacity: 1;
+            transform: scale(1.02);
+          }
+
+          /* Keep it subtle: don’t let a disabled card feel “clicky” */
+          .futureFowlCard:hover,
+          .futureFowlCard:focus-visible {
+            transform: none;
+          }
+        `}</style>
       </div>
     </main>
   );
