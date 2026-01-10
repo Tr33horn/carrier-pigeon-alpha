@@ -18,7 +18,7 @@ export default function NewPage() {
   const router = useRouter();
   const [bird, setBird] = useState<BirdType>("pigeon");
 
-  const go = (b: BirdType) => router.push(`/write?bird=${b}`);
+  const go = (b: BirdType) => router.push(`/write?bird=${encodeURIComponent(b)}`);
 
   const options = useMemo<BirdOption[]>(
     () => [
@@ -63,7 +63,7 @@ export default function NewPage() {
           </p>
         </div>
 
-        {/* Bird cards */}
+        {/* Bird cards (click = select + go to write) */}
         <div className="birdGrid">
           {options.map((opt) => {
             const isSelected = bird === opt.id;
@@ -73,9 +73,13 @@ export default function NewPage() {
                 key={opt.id}
                 type="button"
                 className={`card birdCard ${isSelected ? "on" : ""}`}
-                onClick={() => setBird(opt.id)}
+                onClick={() => {
+                  setBird(opt.id);
+                  go(opt.id);
+                }}
                 aria-pressed={isSelected}
                 style={{ position: "relative" }}
+                title={`Choose ${opt.title}`}
               >
                 {/* Selected checkmark (top-right) */}
                 {isSelected && (
@@ -89,6 +93,7 @@ export default function NewPage() {
 
                 <div className="birdRow">
                   <div className="birdThumb" aria-hidden="true">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={opt.imgSrc} alt="" />
                   </div>
 
@@ -102,7 +107,7 @@ export default function NewPage() {
           })}
         </div>
 
-        {/* Continue / Skip (unchanged) */}
+        {/* Continue / Skip still works (optional redundancy) */}
         <div className="card" style={{ marginTop: 14 }}>
           <div className="sendRow">
             <button onClick={() => go(bird)} className="btnPrimary">
