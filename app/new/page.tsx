@@ -57,7 +57,7 @@ export default function NewPage() {
   const ctaTextFor = (b: BirdType) => {
     switch (b) {
       case "goose":
-        return "Honk & Send 😈";
+        return "Honk & Send";
       case "snipe":
         return "Snipe & Swipe";
       case "pigeon":
