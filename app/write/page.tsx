@@ -38,11 +38,11 @@ function normalizeBird(raw: string | null): BirdType {
 function birdLabel(bird: BirdType) {
   switch (bird) {
     case "snipe":
-      return "🏎️ Great Snipe";
+      return "Great Snipe";
     case "goose":
-      return "🪿 Canada Goose";
+      return "Canada Goose";
     default:
-      return "🕊️ Homing Pigeon";
+      return "Homing Pigeon";
   }
 }
 
@@ -237,7 +237,7 @@ function WritePageInner() {
           ← Dashboard
         </a>
 
-        {/* ✅ Header + bird preview */}
+        {/* ✅ Header + clickable bird preview */}
         <div className="writeHead" style={{ marginTop: 12 }}>
           <div style={{ minWidth: 0 }}>
             <div className="kicker">Compose</div>
@@ -255,10 +255,18 @@ function WritePageInner() {
             </p>
           </div>
 
-          <div className="birdPreview" title={`Your courier: ${birdLabel(bird)}`}>
+          <a
+            href="/new"
+            className="birdPreview"
+            aria-label="Change bird"
+            title="Change bird"
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img className="birdPreviewImg" src={birdGif} alt={`${birdLabel(bird)} preview`} />
-          </div>
+            <div className="birdPreviewHint" aria-hidden="true">
+              Change bird →
+            </div>
+          </a>
         </div>
 
         <div className="stack" style={{ marginTop: 14 }}>
@@ -476,7 +484,7 @@ function WritePageInner() {
           </div>
         </div>
 
-        {/* ✅ Styles for the bird preview */}
+        {/* ✅ Styles for the clickable bird preview */}
         <style jsx global>{`
           .writeHead {
             display: flex;
@@ -488,39 +496,71 @@ function WritePageInner() {
 
           .birdPreview {
             flex: 0 0 auto;
-            width: 84px;
-            height: 84px;
+            width: 120px;
+            height: 92px;
             border-radius: 18px;
             padding: 10px;
-            background: rgba(0, 0, 0, 0.03);
-            border: 1px solid rgba(0, 0, 0, 0.08);
+            background: #ffffff; /* ✅ white background for non-transparent GIFs */
+            border: 1px solid rgba(0, 0, 0, 0.10);
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
+            gap: 6px;
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+            text-decoration: none;
+            color: inherit;
+            cursor: pointer;
           }
 
           .birdPreviewImg {
-            width: 100%;
-            height: 100%;
+            width: 78px;
+            height: 58px;
             object-fit: contain;
-            filter: saturate(0.55) contrast(1.02);
+            filter: saturate(0.75) contrast(1.02);
             transition: filter 180ms ease, transform 180ms ease;
             transform: translateZ(0);
           }
 
+          .birdPreviewHint {
+            font-size: 12px;
+            line-height: 14px;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+            opacity: 0.75;
+            transition: opacity 180ms ease, transform 180ms ease;
+            transform: translateY(0px);
+            white-space: nowrap;
+          }
+
           .birdPreview:hover .birdPreviewImg,
-          .birdPreview:focus-within .birdPreviewImg {
+          .birdPreview:focus-visible .birdPreviewImg {
             filter: saturate(1) contrast(1);
             transform: scale(1.02);
           }
 
+          .birdPreview:hover .birdPreviewHint,
+          .birdPreview:focus-visible .birdPreviewHint {
+            opacity: 1;
+            transform: translateY(-1px);
+          }
+
+          /* Nice focus ring for keyboard users */
+          .birdPreview:focus-visible {
+            outline: 3px solid rgba(56, 132, 255, 0.35);
+            outline-offset: 3px;
+          }
+
           @media (max-width: 520px) {
             .birdPreview {
-              width: 72px;
-              height: 72px;
+              width: 108px;
+              height: 86px;
               border-radius: 16px;
               padding: 8px;
+            }
+            .birdPreviewImg {
+              width: 72px;
+              height: 54px;
             }
           }
         `}</style>
