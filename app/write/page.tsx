@@ -6,11 +6,7 @@ import { CITIES } from "../lib/cities";
 import { CityTypeahead } from "../components/CityTypeahead";
 
 /* ---------- helpers ---------- */
-function nearestCity(
-  lat: number,
-  lon: number,
-  cities: { name: string; lat: number; lon: number }[]
-) {
+function nearestCity(lat: number, lon: number, cities: { name: string; lat: number; lon: number }[]) {
   let best = cities[0];
   let bestDist = Infinity;
 
@@ -47,6 +43,17 @@ function birdLabel(bird: BirdType) {
       return "🪿 Canada Goose";
     default:
       return "🕊️ Homing Pigeon";
+  }
+}
+
+function birdGifSrc(bird: BirdType) {
+  switch (bird) {
+    case "snipe":
+      return "/birds/great-snipe.gif";
+    case "goose":
+      return "/birds/canada-goose.gif";
+    default:
+      return "/birds/homing-pigeon.gif";
   }
 }
 
@@ -217,18 +224,11 @@ function WritePageInner() {
   }
 
   const disableSend =
-    sending ||
-    !routeOk ||
-    !fromNameOk ||
-    !toNameOk ||
-    !messageOk ||
-    !senderEmailOk ||
-    !recipientEmailOk;
+    sending || !routeOk || !fromNameOk || !toNameOk || !messageOk || !senderEmailOk || !recipientEmailOk;
 
-  const routeLabel = useMemo(
-    () => `${origin.name} → ${destination.name}`,
-    [origin.name, destination.name]
-  );
+  const routeLabel = useMemo(() => `${origin.name} → ${destination.name}`, [origin.name, destination.name]);
+
+  const birdGif = birdGifSrc(bird);
 
   return (
     <main className="pageBg">
@@ -237,20 +237,28 @@ function WritePageInner() {
           ← Dashboard
         </a>
 
-        <div style={{ marginTop: 12 }}>
-          <div className="kicker">Compose</div>
-          <h1 className="h1">Write a Letter</h1>
+        {/* ✅ Header + bird preview */}
+        <div className="writeHead" style={{ marginTop: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <div className="kicker">Compose</div>
+            <h1 className="h1">Write a Letter</h1>
 
-          <p className="muted" style={{ marginTop: 6 }}>
-            Sending with <strong>{birdLabel(bird)}</strong>.{" "}
-            <a href="/new" className="link">
-              Change bird
-            </a>
-          </p>
+            <p className="muted" style={{ marginTop: 6 }}>
+              Sending with <strong>{birdLabel(bird)}</strong>.{" "}
+              <a href="/new" className="link">
+                Change bird
+              </a>
+            </p>
 
-          <p className="muted" style={{ marginTop: 6 }}>
-            It’ll unlock for the recipient when the bird lands.
-          </p>
+            <p className="muted" style={{ marginTop: 6 }}>
+              It’ll unlock for the recipient when the bird lands.
+            </p>
+          </div>
+
+          <div className="birdPreview" title={`Your courier: ${birdLabel(bird)}`}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="birdPreviewImg" src={birdGif} alt={`${birdLabel(bird)} preview`} />
+          </div>
         </div>
 
         <div className="stack" style={{ marginTop: 14 }}>
@@ -394,20 +402,11 @@ function WritePageInner() {
                   <div className="softValue">{origin.name}</div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={useMyLocationForOrigin}
-                  disabled={locating}
-                  className="btnGhost"
-                >
+                <button type="button" onClick={useMyLocationForOrigin} disabled={locating} className="btnGhost">
                   {locating ? "Finding your roost…" : "Use my location"}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => setShowOriginPicker((v) => !v)}
-                  className="btnSubtle"
-                >
+                <button type="button" onClick={() => setShowOriginPicker((v) => !v)} className="btnSubtle">
                   {showOriginPicker ? "Hide origin picker" : "Change origin"}
                 </button>
 
@@ -454,7 +453,11 @@ function WritePageInner() {
               </div>
             </div>
 
-            {error && <p className="errorText" style={{ marginTop: 12 }}>❌ {error}</p>}
+            {error && (
+              <p className="errorText" style={{ marginTop: 12 }}>
+                ❌ {error}
+              </p>
+            )}
 
             {result && (
               <div className="successBox" style={{ marginTop: 12 }}>
@@ -472,6 +475,55 @@ function WritePageInner() {
             )}
           </div>
         </div>
+
+        {/* ✅ Styles for the bird preview */}
+        <style jsx global>{`
+          .writeHead {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 14px;
+            flex-wrap: wrap;
+          }
+
+          .birdPreview {
+            flex: 0 0 auto;
+            width: 84px;
+            height: 84px;
+            border-radius: 18px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.03);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+          }
+
+          .birdPreviewImg {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            filter: saturate(0.55) contrast(1.02);
+            transition: filter 180ms ease, transform 180ms ease;
+            transform: translateZ(0);
+          }
+
+          .birdPreview:hover .birdPreviewImg,
+          .birdPreview:focus-within .birdPreviewImg {
+            filter: saturate(1) contrast(1);
+            transform: scale(1.02);
+          }
+
+          @media (max-width: 520px) {
+            .birdPreview {
+              width: 72px;
+              height: 72px;
+              border-radius: 16px;
+              padding: 8px;
+            }
+          }
+        `}</style>
       </div>
     </main>
   );
