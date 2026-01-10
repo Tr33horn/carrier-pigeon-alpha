@@ -53,6 +53,19 @@ export default function NewPage() {
 
   const go = (b: BirdType) => router.push(`/write?bird=${encodeURIComponent(b)}`);
 
+  // ✅ Per-bird CTA text (you can tweak these anytime)
+  const ctaTextFor = (b: BirdType) => {
+    switch (b) {
+      case "goose":
+        return "Honk & Send 😈";
+      case "snipe":
+        return "Snipe & Swipe";
+      case "pigeon":
+      default:
+        return "Let it Fly";
+    }
+  };
+
   const options = useMemo<BirdOption[]>(
     () => [
       {
@@ -80,19 +93,48 @@ export default function NewPage() {
 
   const futureFowls = useMemo<FutureBirdOption[]>(
     () => [
-      { id: "peregrine-falcon", title: "Peregrine Falcon", subtitle: "The airborne missile (politely).", imgSrc: "/birds/Peregrine-Falcon.gif" },
-      { id: "annas-hummingbird", title: "Anna’s Hummingbird", subtitle: "Tiny bird. Unhinged acceleration.", imgSrc: "/birds/AnnasHummingbird.gif" },
-      { id: "white-throated-needletail", title: "White-throated Needletail", subtitle: "Blink-and-it’s-delivered speed.", imgSrc: "/birds/white-throated-needletail.gif" },
-      { id: "american-osprey", title: "American Osprey", subtitle: "Precision strikes. Fish not included.", imgSrc: "/birds/American-Osprey.gif" },
-      { id: "northern-hawk-owl", title: "Northern Hawk Owl", subtitle: "Daylight hunter. Night-owl energy.", imgSrc: "/birds/NorthernHawkOwl.gif" },
-      { id: "common-tern", title: "Common Tern", subtitle: "Coastal courier with stamina.", imgSrc: "/birds/CommonTern.gif" },
+      {
+        id: "peregrine-falcon",
+        title: "Peregrine Falcon",
+        subtitle: "The airborne missile (politely).",
+        imgSrc: "/birds/Peregrine-Falcon.gif",
+      },
+      {
+        id: "annas-hummingbird",
+        title: "Anna’s Hummingbird",
+        subtitle: "Tiny bird. Unhinged acceleration.",
+        imgSrc: "/birds/AnnasHummingbird.gif",
+      },
+      {
+        id: "white-throated-needletail",
+        title: "White-throated Needletail",
+        subtitle: "Blink-and-it’s-delivered speed.",
+        imgSrc: "/birds/white-throated-needletail.gif",
+      },
+      {
+        id: "american-osprey",
+        title: "American Osprey",
+        subtitle: "Precision strikes. Fish not included.",
+        imgSrc: "/birds/American-Osprey.gif",
+      },
+      {
+        id: "northern-hawk-owl",
+        title: "Northern Hawk Owl",
+        subtitle: "Daylight hunter. Night-owl energy.",
+        imgSrc: "/birds/NorthernHawkOwl.gif",
+      },
+      {
+        id: "common-tern",
+        title: "Common Tern",
+        subtitle: "Coastal courier with stamina.",
+        imgSrc: "/birds/CommonTern.gif",
+      },
     ],
     []
   );
 
   // ✅ start/stop the "shake every 5s" loop when the button is visible
   useEffect(() => {
-    // clear any previous loop
     if (shakeIntervalRef.current) window.clearInterval(shakeIntervalRef.current);
     if (shakeTimeoutRef.current) window.clearTimeout(shakeTimeoutRef.current);
     setShake(false);
@@ -102,14 +144,12 @@ export default function NewPage() {
     const pulse = () => {
       setShake(true);
       if (shakeTimeoutRef.current) window.clearTimeout(shakeTimeoutRef.current);
-      shakeTimeoutRef.current = window.setTimeout(() => setShake(false), 650); // shake duration
+      shakeTimeoutRef.current = window.setTimeout(() => setShake(false), 650);
     };
 
-    // small initial delay so it doesn't feel frantic
     const initial = window.setTimeout(() => pulse(), 800);
     shakeTimeoutRef.current = initial as unknown as number;
 
-    // repeat every 5s
     shakeIntervalRef.current = window.setInterval(pulse, 5000);
 
     return () => {
@@ -149,7 +189,6 @@ export default function NewPage() {
                   className={`card birdCard ${isSelected ? "on" : ""}`}
                   onClick={() => {
                     if (isSelected) {
-                      // ✅ toggle: clicking the selected one hides/shows CTA
                       setShowWriteOn((v) => !v);
                     } else {
                       setBird(opt.id);
@@ -165,6 +204,8 @@ export default function NewPage() {
                       ✓
                     </div>
                   )}
+
+                  {/* ✅ Recommended pill always stays above image (z-index handled in CSS below) */}
                   {opt.recommended && <div className="birdRec">Recommended</div>}
 
                   <div className="birdRow">
@@ -180,7 +221,7 @@ export default function NewPage() {
                   </div>
                 </button>
 
-                {/* ✅ Pop-up button beneath the selected card (toggle-able) */}
+                {/* Pop-up button beneath the selected card (toggle-able) */}
                 {isSelected && showWriteOn && (
                   <button
                     type="button"
@@ -188,7 +229,7 @@ export default function NewPage() {
                     onClick={() => go(opt.id)}
                     title="Write your letter"
                   >
-                    Write On!
+                    {ctaTextFor(opt.id)}
                   </button>
                 )}
               </div>
@@ -196,7 +237,7 @@ export default function NewPage() {
           })}
         </div>
 
-        {/* ✅ Future Fowls */}
+        {/* Future Fowls */}
         <div style={{ marginTop: 14 }}>
           <div className="kicker">Coming soon</div>
           <h2 className="h2" style={{ marginTop: 6 }}>
@@ -219,6 +260,7 @@ export default function NewPage() {
                   showToast("Coming soon — Future Fowls aren’t selectable yet.");
                 }}
               >
+                {/* ✅ EXACT same colors as Recommended by reusing birdRec */}
                 <div className="birdRec futurePill" aria-hidden="true">
                   Coming soon
                 </div>
@@ -256,7 +298,7 @@ export default function NewPage() {
           </div>
         </div>
 
-        {/* ✅ Toast UI */}
+        {/* Toast UI */}
         {toast && (
           <div
             role="status"
@@ -288,6 +330,7 @@ export default function NewPage() {
         )}
 
         <style jsx global>{`
+          /* wrapper so the CTA can live beneath the chosen card */
           .birdPick {
             display: flex;
             flex-direction: column;
@@ -315,19 +358,33 @@ export default function NewPage() {
             }
           }
 
-          /* ✅ intermittent shake: only when .shakeNow is applied */
+          /* intermittent shake: only when .shakeNow is applied */
           .shakeNow {
             animation: popIn 160ms ease-out, shake 520ms ease-in-out;
           }
 
           @keyframes shake {
-            0%   { transform: translateX(0) rotate(0deg); }
-            12%  { transform: translateX(-2px) rotate(-0.5deg); }
-            25%  { transform: translateX(3px) rotate(0.6deg); }
-            38%  { transform: translateX(-3px) rotate(-0.6deg); }
-            52%  { transform: translateX(2px) rotate(0.4deg); }
-            68%  { transform: translateX(-1px) rotate(-0.2deg); }
-            100% { transform: translateX(0) rotate(0deg); }
+            0% {
+              transform: translateX(0) rotate(0deg);
+            }
+            12% {
+              transform: translateX(-2px) rotate(-0.5deg);
+            }
+            25% {
+              transform: translateX(3px) rotate(0.6deg);
+            }
+            38% {
+              transform: translateX(-3px) rotate(-0.6deg);
+            }
+            52% {
+              transform: translateX(2px) rotate(0.4deg);
+            }
+            68% {
+              transform: translateX(-1px) rotate(-0.2deg);
+            }
+            100% {
+              transform: translateX(0) rotate(0deg);
+            }
           }
 
           @media (prefers-reduced-motion: reduce) {
@@ -337,11 +394,32 @@ export default function NewPage() {
             }
           }
 
+          /* =========================================
+             ✅ Layering fix: pills/check always above image
+             ========================================= */
+          .birdCard {
+            position: relative;
+          }
+
+          .birdCard .birdThumb {
+            position: relative;
+            z-index: 1; /* image layer */
+          }
+
+          .birdCard .birdRec,
+          .birdCard .birdBadge {
+            z-index: 5; /* overlay layer */
+          }
+
+          /* =========================================
+             Future Fowls
+             ========================================= */
           .futureCard {
             position: relative;
             cursor: pointer;
           }
 
+          /* positioning only — colors come from .birdRec */
           .futurePill {
             position: absolute;
             top: 10px;
@@ -350,89 +428,62 @@ export default function NewPage() {
             pointer-events: none;
           }
 
-          .futureCard .birdThumb {
-            position: relative;
-            z-index: 1;
-          }
-
+          /* muted color by default (NOT full grayscale) */
           .futureCard .birdThumb img {
-            filter: grayscale(1) saturate(0.85) contrast(1.05);
+            filter: saturate(0.3) contrast(1.02) brightness(0.98);
             transition: filter 180ms ease, transform 180ms ease;
             transform: translateZ(0);
           }
 
+          /* hover/focus -> full color */
           .futureCard:hover .birdThumb img,
           .futureCard:focus-visible .birdThumb img {
-            filter: grayscale(0) saturate(1) contrast(1);
+            filter: saturate(1) contrast(1) brightness(1);
           }
 
-          /* ===============================
-   Top-row bird grayscale behavior
-   =============================== */
+          /* =========================================
+             ✅ Current birds: muted color + scale + text dim
+             (single block — no duplicates)
+             ========================================= */
+          .birdCard:not(.on) .birdThumb img {
+            filter: saturate(0.35) contrast(1.02) brightness(0.98);
+            transition: filter 180ms ease, transform 180ms ease;
+            transform: translateZ(0);
+          }
 
-/* Default: unselected birds are grayscale */
-.birdCard:not(.on) .birdThumb img {
-  filter: grayscale(1) saturate(0.85) contrast(1.05);
-  transition: filter 180ms ease, transform 180ms ease;
-}
+          .birdCard:not(.on) .birdTitle {
+            opacity: 0.88;
+            transition: opacity 180ms ease;
+          }
+          .birdCard:not(.on) .birdSub {
+            opacity: 0.7;
+            transition: opacity 180ms ease;
+          }
 
-/* Hover / keyboard focus brings color back */
-.birdCard:not(.on):hover .birdThumb img,
-.birdCard:not(.on):focus-visible .birdThumb img {
-  filter: grayscale(0) saturate(1) contrast(1);
-}
+          .birdCard:not(.on):hover .birdThumb img,
+          .birdCard:not(.on):focus-visible .birdThumb img {
+            filter: saturate(1) contrast(1) brightness(1);
+            transform: scale(1.02);
+          }
 
-/* Selected bird: always full color */
-.birdCard.on .birdThumb img {
-  filter: none;
-}
+          .birdCard:not(.on):hover .birdTitle,
+          .birdCard:not(.on):focus-visible .birdTitle {
+            opacity: 1;
+          }
+          .birdCard:not(.on):hover .birdSub,
+          .birdCard:not(.on):focus-visible .birdSub {
+            opacity: 0.9;
+          }
 
-/* ===============================
-   Top-row (Current birds): grayscale + scale + text dim
-   =============================== */
+          .birdCard.on .birdThumb img {
+            filter: none;
+            transform: none;
+          }
 
-/* Default: unselected birds are grayscale and slightly dimmed */
-.birdCard:not(.on) .birdThumb img {
-  filter: grayscale(1) saturate(0.85) contrast(1.05);
-  transition: filter 180ms ease, transform 180ms ease;
-  transform: translateZ(0);
-}
-
-/* Slightly dim the text for unselected */
-.birdCard:not(.on) .birdTitle {
-  opacity: 0.88;
-  transition: opacity 180ms ease;
-}
-.birdCard:not(.on) .birdSub {
-  opacity: 0.70;
-  transition: opacity 180ms ease;
-}
-
-/* Hover/focus: restore color + tiny scale up + brighten text */
-.birdCard:not(.on):hover .birdThumb img,
-.birdCard:not(.on):focus-visible .birdThumb img {
-  filter: grayscale(0) saturate(1) contrast(1);
-  transform: scale(1.02);
-}
-
-.birdCard:not(.on):hover .birdTitle,
-.birdCard:not(.on):focus-visible .birdTitle {
-  opacity: 1;
-}
-.birdCard:not(.on):hover .birdSub,
-.birdCard:not(.on):focus-visible .birdSub {
-  opacity: 0.90;
-}
-
-/* Selected bird: always full color + full text */
-.birdCard.on .birdThumb img {
-  filter: none;
-  transform: none;
-}
-.birdCard.on .birdTitle,
-.birdCard.on .birdSub {
-  opacity: 1;
-}
+          .birdCard.on .birdTitle,
+          .birdCard.on .birdSub {
+            opacity: 1;
+          }
         `}</style>
       </div>
     </main>
