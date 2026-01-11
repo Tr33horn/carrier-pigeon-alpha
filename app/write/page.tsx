@@ -250,9 +250,9 @@ function WritePageInner() {
 
           {/* ✅ Bird label ABOVE the preview */}
           <div className="birdPreviewWrap">
-            <div className="birdTypeLabel" title="Selected bird">
-              {birdLabel(bird)}
-            </div>
+<div className="birdRec birdTypePill" title="Selected bird">
+  {birdLabel(bird)}
+</div>
 
             <a href="/new" className="birdPreview" aria-label="Change bird" title="Change bird">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -497,17 +497,19 @@ function WritePageInner() {
             flex: 0 0 auto;
           }
 
-          .birdTypeLabel {
-            font-size: 12px;
-            font-weight: 900;
-            letter-spacing: -0.01em;
-            opacity: 0.82;
-            padding: 6px 10px;
-            border-radius: 999px;
-            border: 1px solid rgba(0, 0, 0, 0.1);
-            background: rgba(255, 255, 255, 0.55);
-            backdrop-filter: blur(6px);
-          }
+.birdTypePill {
+  /* same exact colors as Recommended because it IS .birdRec */
+  /* these just make it fit nicely above the preview */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 14px;
+  font-weight: 900;
+  white-space: nowrap;
+}
 
           .birdPreview {
             width: 120px;
