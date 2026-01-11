@@ -229,6 +229,7 @@ function WritePageInner() {
   const routeLabel = useMemo(() => `${origin.name} → ${destination.name}`, [origin.name, destination.name]);
 
   const birdGif = birdGifSrc(bird);
+  const birdName = birdLabel(bird);
 
   return (
     <main className="pageBg">
@@ -248,21 +249,17 @@ function WritePageInner() {
             </p>
           </div>
 
-          {/* ✅ Bird label ABOVE the preview */}
-          <div className="birdPreviewWrap">
-            {/* IMPORTANT: birdTypePill (capital T + P) */}
-            <div className="birdRec birdTypePill" title="Selected bird">
-              {birdLabel(bird)}
-            </div>
+          {/* ✅ Bird name inside the same white box, above the GIF */}
+          <a href="/new" className="birdPreview" aria-label="Change bird" title="Change bird">
+            <div className="birdPreviewName">{birdName}</div>
 
-            <a href="/new" className="birdPreview" aria-label="Change bird" title="Change bird">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="birdPreviewImg" src={birdGif} alt={`${birdLabel(bird)} preview`} />
-              <div className="birdPreviewHint" aria-hidden="true">
-                Change bird →
-              </div>
-            </a>
-          </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="birdPreviewImg" src={birdGif} alt={`${birdName} preview`} />
+
+            <div className="birdPreviewHint" aria-hidden="true">
+              Change bird →
+            </div>
+          </a>
         </div>
 
         <div className="stack" style={{ marginTop: 14 }}>
@@ -490,46 +487,18 @@ function WritePageInner() {
             flex-wrap: wrap;
           }
 
-          /* make the H1 a bit bolder without changing your global h1 class */
           .h1Bold {
             font-weight: 900;
             letter-spacing: -0.02em;
           }
 
-          .birdPreviewWrap {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
-            flex: 0 0 auto;
-          }
-
-          /* ✅ Pill: uses .birdRec colors, but can't "disappear" */
-          .birdTypePill {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 6px 10px;
-            border-radius: 999px;
-            font-size: 12px;
-            line-height: 14px;
-
-            font-weight: 900; /* bold text */
-            letter-spacing: -0.01em;
-            white-space: nowrap;
-
-            /* safety: ensure visibility even if other pill styles change */
-            opacity: 1;
-            position: relative;
-            z-index: 2;
-          }
-
           .birdPreview {
-            width: 120px;
-            height: 96px;
+            flex: 0 0 auto;
+            width: 150px;
+            height: 120px;
             border-radius: 18px;
             padding: 10px;
-            background: #ffffff;
+            background: #ffffff; /* ✅ white background for non-transparent GIFs */
             border: 1px solid rgba(0, 0, 0, 0.1);
             display: flex;
             flex-direction: column;
@@ -543,11 +512,21 @@ function WritePageInner() {
             transform: translateZ(0);
           }
 
+          .birdPreviewName {
+            font-size: 13px;
+            line-height: 14px;
+            font-weight: 950;
+            letter-spacing: -0.01em;
+            text-align: center;
+            padding: 2px 6px;
+            opacity: 0.92;
+          }
+
           .birdPreviewImg {
-            width: 78px;
-            height: 58px;
+            width: 86px;
+            height: 62px;
             object-fit: contain;
-            filter: saturate(0.8) contrast(1.02);
+            filter: saturate(0.85) contrast(1.02);
             transition: filter 180ms ease, transform 180ms ease;
             transform: translateZ(0);
           }
@@ -557,7 +536,7 @@ function WritePageInner() {
             line-height: 14px;
             font-weight: 800;
             letter-spacing: -0.01em;
-            opacity: 0.72;
+            opacity: 0.70;
             transition: opacity 180ms ease, transform 180ms ease;
             transform: translateY(0px);
             white-space: nowrap;
@@ -575,6 +554,11 @@ function WritePageInner() {
           .birdPreview:focus-visible .birdPreviewHint {
             opacity: 1;
             transform: translateY(-1px);
+          }
+
+          .birdPreview:hover .birdPreviewName,
+          .birdPreview:focus-visible .birdPreviewName {
+            opacity: 1;
           }
 
           @keyframes tinyWiggle {
@@ -609,14 +593,14 @@ function WritePageInner() {
 
           @media (max-width: 520px) {
             .birdPreview {
-              width: 110px;
-              height: 92px;
+              width: 140px;
+              height: 114px;
               border-radius: 16px;
               padding: 8px;
             }
             .birdPreviewImg {
-              width: 72px;
-              height: 54px;
+              width: 82px;
+              height: 60px;
             }
           }
         `}</style>
