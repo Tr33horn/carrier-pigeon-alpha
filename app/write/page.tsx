@@ -246,27 +246,22 @@ function WritePageInner() {
             <p className="muted" style={{ marginTop: 6 }}>
               It’ll unlock for the recipient when the bird lands.
             </p>
-
-            <p className="muted" style={{ marginTop: 6 }}>
-              Sending with <strong>{birdLabel(bird)}</strong>.{" "}
-
-            </p>
-
-
           </div>
 
-          <a
-            href="/new"
-            className="birdPreview"
-            aria-label="Change bird"
-            title="Change bird"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="birdPreviewImg" src={birdGif} alt={`${birdLabel(bird)} preview`} />
-            <div className="birdPreviewHint" aria-hidden="true">
-              Change bird →
+          {/* ✅ Bird label ABOVE the preview */}
+          <div className="birdPreviewWrap">
+            <div className="birdTypeLabel" title="Selected bird">
+              {birdLabel(bird)}
             </div>
-          </a>
+
+            <a href="/new" className="birdPreview" aria-label="Change bird" title="Change bird">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="birdPreviewImg" src={birdGif} alt={`${birdLabel(bird)} preview`} />
+              <div className="birdPreviewHint" aria-hidden="true">
+                Change bird →
+              </div>
+            </a>
+          </div>
         </div>
 
         <div className="stack" style={{ marginTop: 14 }}>
@@ -494,14 +489,33 @@ function WritePageInner() {
             flex-wrap: wrap;
           }
 
-          .birdPreview {
+          .birdPreviewWrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
             flex: 0 0 auto;
+          }
+
+          .birdTypeLabel {
+            font-size: 12px;
+            font-weight: 900;
+            letter-spacing: -0.01em;
+            opacity: 0.82;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            background: rgba(255, 255, 255, 0.55);
+            backdrop-filter: blur(6px);
+          }
+
+          .birdPreview {
             width: 120px;
-            height: 92px;
+            height: 96px;
             border-radius: 18px;
             padding: 10px;
             background: #ffffff; /* ✅ white background for non-transparent GIFs */
-            border: 1px solid rgba(0, 0, 0, 0.10);
+            border: 1px solid rgba(0, 0, 0, 0.1);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -511,13 +525,14 @@ function WritePageInner() {
             text-decoration: none;
             color: inherit;
             cursor: pointer;
+            transform: translateZ(0);
           }
 
           .birdPreviewImg {
             width: 78px;
             height: 58px;
             object-fit: contain;
-            filter: saturate(0.75) contrast(1.02);
+            filter: saturate(0.8) contrast(1.02);
             transition: filter 180ms ease, transform 180ms ease;
             transform: translateZ(0);
           }
@@ -527,16 +542,18 @@ function WritePageInner() {
             line-height: 14px;
             font-weight: 800;
             letter-spacing: -0.01em;
-            opacity: 0.75;
+            opacity: 0.72;
             transition: opacity 180ms ease, transform 180ms ease;
             transform: translateY(0px);
             white-space: nowrap;
           }
 
+          /* ✅ tiny "alive" wiggle ONLY on hover/focus */
           .birdPreview:hover .birdPreviewImg,
           .birdPreview:focus-visible .birdPreviewImg {
             filter: saturate(1) contrast(1);
             transform: scale(1.02);
+            animation: tinyWiggle 680ms ease-in-out;
           }
 
           .birdPreview:hover .birdPreviewHint,
@@ -545,16 +562,41 @@ function WritePageInner() {
             transform: translateY(-1px);
           }
 
+          @keyframes tinyWiggle {
+            0% {
+              transform: scale(1.02) rotate(0deg);
+            }
+            20% {
+              transform: scale(1.02) rotate(-0.6deg) translateY(-0.5px);
+            }
+            45% {
+              transform: scale(1.02) rotate(0.7deg) translateY(0px);
+            }
+            70% {
+              transform: scale(1.02) rotate(-0.4deg) translateY(-0.3px);
+            }
+            100% {
+              transform: scale(1.02) rotate(0deg);
+            }
+          }
+
           /* Nice focus ring for keyboard users */
           .birdPreview:focus-visible {
             outline: 3px solid rgba(56, 132, 255, 0.35);
             outline-offset: 3px;
           }
 
+          @media (prefers-reduced-motion: reduce) {
+            .birdPreview:hover .birdPreviewImg,
+            .birdPreview:focus-visible .birdPreviewImg {
+              animation: none !important;
+            }
+          }
+
           @media (max-width: 520px) {
             .birdPreview {
-              width: 108px;
-              height: 86px;
+              width: 110px;
+              height: 92px;
               border-radius: 16px;
               padding: 8px;
             }
