@@ -205,7 +205,7 @@ function WritePageInner() {
           message,
           origin,
           destination,
-          bird, // ✅ chosen bird
+          bird,
         }),
       });
 
@@ -241,7 +241,7 @@ function WritePageInner() {
         <div className="writeHead" style={{ marginTop: 12 }}>
           <div style={{ minWidth: 0 }}>
             <div className="kicker">Compose</div>
-            <h1 className="h1">Write a Letter</h1>
+            <h1 className="h1 h1Bold">Write a Letter</h1>
 
             <p className="muted" style={{ marginTop: 6 }}>
               It’ll unlock for the recipient when the bird lands.
@@ -250,9 +250,10 @@ function WritePageInner() {
 
           {/* ✅ Bird label ABOVE the preview */}
           <div className="birdPreviewWrap">
-<div className="birdRec birdTypePill" title="Selected bird">
-  {birdLabel(bird)}
-</div>
+            {/* IMPORTANT: birdTypePill (capital T + P) */}
+            <div className="birdRec birdTypePill" title="Selected bird">
+              {birdLabel(bird)}
+            </div>
 
             <a href="/new" className="birdPreview" aria-label="Change bird" title="Change bird">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -489,6 +490,12 @@ function WritePageInner() {
             flex-wrap: wrap;
           }
 
+          /* make the H1 a bit bolder without changing your global h1 class */
+          .h1Bold {
+            font-weight: 900;
+            letter-spacing: -0.02em;
+          }
+
           .birdPreviewWrap {
             display: flex;
             flex-direction: column;
@@ -497,26 +504,32 @@ function WritePageInner() {
             flex: 0 0 auto;
           }
 
-.birdTypePill {
-  /* same exact colors as Recommended because it IS .birdRec */
-  /* these just make it fit nicely above the preview */
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  line-height: 14px;
-  font-weight: 900;
-  white-space: nowrap;
-}
+          /* ✅ Pill: uses .birdRec colors, but can't "disappear" */
+          .birdTypePill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            line-height: 14px;
+
+            font-weight: 900; /* bold text */
+            letter-spacing: -0.01em;
+            white-space: nowrap;
+
+            /* safety: ensure visibility even if other pill styles change */
+            opacity: 1;
+            position: relative;
+            z-index: 2;
+          }
 
           .birdPreview {
             width: 120px;
             height: 96px;
             border-radius: 18px;
             padding: 10px;
-            background: #ffffff; /* ✅ white background for non-transparent GIFs */
+            background: #ffffff;
             border: 1px solid rgba(0, 0, 0, 0.1);
             display: flex;
             flex-direction: column;
@@ -582,7 +595,6 @@ function WritePageInner() {
             }
           }
 
-          /* Nice focus ring for keyboard users */
           .birdPreview:focus-visible {
             outline: 3px solid rgba(56, 132, 255, 0.35);
             outline-offset: 3px;
