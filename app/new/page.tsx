@@ -125,7 +125,7 @@ export default function NewPage() {
       },
       {
         id: "common-tern",
-        title: "Common Tern",
+        title: "Arctic Tern",
         subtitle: "Coastal courier with stamina.",
         imgSrc: "/birds/CommonTern.gif",
       },
