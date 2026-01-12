@@ -328,8 +328,8 @@ function buildSleepEvents(args: {
    Route handler
 ------------------------------------------------- */
 
-export async function GET(_req: NextRequest, ctx: { params: { token: string } }) {
-  const { token } = ctx.params;
+export async function GET(_req: NextRequest, { params }: { params: { token: string } }) {
+  const { token } = params;
 
   const { data: meta, error: metaErr } = await supabaseServer
     .from("letters")
