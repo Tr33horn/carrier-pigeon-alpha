@@ -44,7 +44,7 @@ function getCarto(style: MapStyle) {
   // 🖋️ Crisp pen & ink vibe (Stamen Toner Lite via Stadia Maps)
   if (style === "ink-sketch") {
     return {
-      url: `https://tiles.stadiamaps.com/tiles/stamen_toner_lite/{z}/{x}/{y}{r}.png${q}`,
+      url: `https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}{r}.png${q}`,
       attribution:
         '&copy; <a href="https://stadiamaps.com/" target="_blank" rel="noreferrer">Stadia Maps</a> ' +
         '&copy; <a href="https://stamen.com/" target="_blank" rel="noreferrer">Stamen Design</a> ' +
