@@ -39,6 +39,7 @@ type Checkpoint = {
   name: string;
   at: string;
   geo_text?: string;
+  kind?: "checkpoint" | "sleep"; // ✅ add this
 };
 
 type BadgeItem = {
@@ -913,10 +914,10 @@ export default function LetterStatusPage() {
       if (!timelineFinal && !isPastOrCurrent) continue;
 
       base.push({
-        key: `cp-${cp.id}`,
+        key: `${cp.kind || "checkpoint"}-${cp.id}`,
         name: cp.name,
         at: atISO,
-        kind: isSleepCheckpoint(cp, atISO) ? "sleep" : "checkpoint",
+        kind: (cp.kind === "sleep" ? "sleep" : "checkpoint"),
       });
     }
 

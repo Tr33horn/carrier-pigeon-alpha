@@ -19,6 +19,9 @@ import {
 // ✅ Single source of truth for bird rules
 import { BIRD_RULES, normalizeBird, type BirdType } from "@/app/lib/birds";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 /* -------------------------------------------------
    tiny helpers
 ------------------------------------------------- */
@@ -29,6 +32,23 @@ function clamp(n: number, a: number, b: number) {
 
 function stripOverPrefix(s: string) {
   return (s || "").replace(/^over\s+/i, "").trim();
+}
+
+/** Normalize “Over ___” output for UI/email consistency */
+function ensureOver(s: string) {
+  const raw = (s || "").trim();
+  if (!raw) return "";
+
+  // terminal-ish words should remain as-is
+  if (/^(delivered|canceled|cancelled|sleeping)$/i.test(raw)) return raw;
+
+  // already has “over”
+  if (/^over\s+/i.test(raw)) return raw.replace(/^over\s+/i, "Over ");
+
+  // your geo helper sometimes returns “somewhere over the U.S.” — keep it
+  if (/over\s+/i.test(raw)) return raw;
+
+  return `Over ${raw}`;
 }
 
 /* -------------------------------------------------
@@ -308,8 +328,8 @@ function buildSleepEvents(args: {
    Route handler
 ------------------------------------------------- */
 
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
-  const { token } = await ctx.params;
+export async function GET(_req: NextRequest, ctx: { params: { token: string } }) {
+  const { token } = ctx.params;
 
   const { data: meta, error: metaErr } = await supabaseServer
     .from("letters")
@@ -513,7 +533,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
       if (Number.isFinite(t) && t <= nowMsFinal) cur = cp;
       else break;
     }
-    current_over_text = cur?.geo_text || current_over_text;
+    current_over_text = ensureOver(cur?.geo_text || current_over_text);
   }
 
   const geoBase = delivered ? "Delivered" : stripOverPrefix(current_over_text);
@@ -602,47 +622,47 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
       : "Canceled"
     : formatUtc(etaAdjustedISO);
 
-  return NextResponse.json({
-    archived,
-    archived_at: archived ? archived_at : null,
-
-    canceled,
-    canceled_at: canceled ? canceled_at : null,
-
-    server_now_iso,
-    server_now_utc_text,
-
-    letter: {
-      ...meta,
-      bird,
-      body,
-
-      speed_kmh: speedKmh,
-
-      eta_at_adjusted,
-      eta_utc_text,
-
+  return NextResponse.json(
+    {
+      archived,
       archived_at: archived ? archived_at : null,
+
+      canceled,
       canceled_at: canceled ? canceled_at : null,
+
+      server_now_iso,
+      server_now_utc_text,
+
+      letter: {
+        ...meta,
+        bird,
+        body,
+
+        speed_kmh: speedKmh,
+
+        eta_at_adjusted,
+        eta_utc_text,
+
+        archived_at: archived ? archived_at : null,
+        canceled_at: canceled ? canceled_at : null,
+      },
+
+      checkpoints: cps,
+      delivered,
+      current_over_text,
+
+      flight: {
+        progress,
+        sleeping,
+        sleep_until_iso,
+        sleep_local_text,
+        tooltip_text,
+        marker_mode: canceled ? "canceled" : delivered ? "delivered" : sleeping ? "sleeping" : "flying",
+        current_speed_kmh,
+      },
+
+      items: { badges, addons },
     },
-
-    checkpoints: cps,
-    delivered,
-    current_over_text,
-
-    flight: {
-      progress,
-      sleeping,
-      sleep_until_iso,
-      sleep_local_text,
-      tooltip_text,
-
-      // ✅ CRITICAL: canceled must not become delivered (prevents body reveal)
-      marker_mode: canceled ? "canceled" : delivered ? "delivered" : sleeping ? "sleeping" : "flying",
-
-      current_speed_kmh,
-    },
-
-    items: { badges, addons },
-  });
+    { headers: { "Cache-Control": "no-store, max-age=0" } }
+  );
 }

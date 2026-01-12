@@ -32,8 +32,8 @@ function niceMilestoneLabel(m: 25 | 50 | 75) {
 function cleanOverText(s?: string | null) {
   const raw = (s || "").trim();
   if (!raw) return "";
-  // If your backend already sends “Over ___” we won’t double-prefix it.
-  return /^over\s+/i.test(raw) ? raw : `Over ${raw}`;
+  // If backend already sends “Over ___” we won’t double-prefix it.
+  return /^over\s+/i.test(raw) ? raw.replace(/^over\s+/i, "Over ") : `Over ${raw}`;
 }
 
 export function LetterProgressUpdateEmail({
@@ -44,7 +44,12 @@ export function LetterProgressUpdateEmail({
   etaTextUtc,
   funLine,
   bird,
-  locationText, // ✅ NEW
+
+  // ✅ prefer the new prop name used by the cron route…
+  overText,
+
+  // ✅ …but keep backwards compatibility with your earlier draft
+  locationText,
 }: {
   milestone: 25 | 50 | 75;
   pct: number;
@@ -54,14 +59,17 @@ export function LetterProgressUpdateEmail({
   funLine: string;
   bird?: BirdType | null;
 
-  /** ✅ NEW: “Over the Issaquah Alps”, “Over Seattle Metro”, etc */
+  /** ✅ NEW preferred: “Over Seattle Metro”, etc */
+  overText?: string | null;
+
+  /** ✅ Back-compat */
   locationText?: string | null;
 }) {
-  const href = joinUrl(APP_URL, statusUrl);
+  const href = statusUrl.startsWith("http") ? statusUrl : joinUrl(APP_URL, statusUrl);
 
-  const overLine = cleanOverText(locationText);
+  const overLine = cleanOverText(overText || locationText);
 
-  // ✅ Replace the old “halfway there / 75% complete” vibe with location-first preview.
+  // ✅ Location-first preview (this is what most inboxes show)
   const preview = overLine
     ? `${overLine}.`
     : milestone === 25
@@ -100,7 +108,7 @@ export function LetterProgressUpdateEmail({
 
       <Section style={{ textAlign: "center", marginTop: 10 }}>
         <Button href={href} style={BUTTON}>
-          Check flight status ({pct}%)
+          Check flight status ({Math.round(pct)}%)
         </Button>
       </Section>
 
@@ -121,7 +129,7 @@ export default function Preview() {
       etaTextUtc="2026-01-08 02:30 UTC"
       funLine="The bird stopped briefly for a dramatic skyline moment."
       bird="goose"
-      locationText="Over Seattle Metro"
+      overText="Over Seattle Metro"
     />
   );
 }
