@@ -876,18 +876,44 @@ export default function LetterStatusPage() {
 
   const timelineFinal = uiDelivered || archived || canceled;
 
+  // ✅ Timeline items: show only past/current checkpoints + sleep (unless final)
+  // ✅ Adds "Departed • {origin}" using sent_at (never weird)
   const timelineItems = useMemo(() => {
-    const base: TimelineItem[] = (checkpointsByTime as any[]).map((cp) => {
-      const atISO = cp._atAdj || cp.at;
-      return {
-        key: `cp-${cp.id}`,
-        name: cp.name,
-        at: atISO,
-        kind: isSleepCheckpoint(cp, atISO) ? "sleep" : "checkpoint",
-      };
-    });
+    const nowMs = now.getTime();
 
-    // ✅ if delivered, append a delivered row
+    // Base rows from checkpoints (skip any redundant "departed" checkpoint if present)
+    const fromCheckpoints: TimelineItem[] = (checkpointsByTime as any[])
+      .filter((cp) => {
+        const nm = String(cp?.name || "").toLowerCase();
+        return !nm.includes("departed");
+      })
+      .map((cp) => {
+        const atISO = cp._atAdj || cp.at;
+        return {
+          key: `cp-${cp.id}`,
+          name: cp.name,
+          at: atISO,
+          kind: isSleepCheckpoint(cp, atISO) ? "sleep" : "checkpoint",
+        } as TimelineItem;
+      });
+
+    // Departed row (always)
+    const departedISO = (letter?.sent_at && String(letter.sent_at).trim()) || null;
+    const departedName = `Departed • ${letter?.origin_name || "Origin"}`;
+
+    const base: TimelineItem[] = [];
+    if (departedISO) {
+      base.push({
+        key: "departed",
+        name: departedName,
+        at: departedISO,
+        kind: "checkpoint",
+      });
+    }
+
+    base.push(...fromCheckpoints);
+
+    // Delivered row (only when delivered)
     if (uiDelivered && !canceled) {
       base.push({
         key: "delivered",
@@ -897,11 +923,27 @@ export default function LetterStatusPage() {
       });
     }
 
-    // ✅ Group by day (local display)
+    // Sort (in case Departed isn't earliest due to server weirdness)
+    base.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+
+    // Filter: only show checkpoint/sleep if past or current (unless final)
+    const visible = timelineFinal
+      ? base
+      : base.filter((it) => {
+          if (it.kind === "day") return true;
+          if (it.kind === "delivered") return true; // delivered won't exist unless delivered, but fine
+          if (it.kind === "checkpoint" || it.kind === "sleep") {
+            const t = new Date(it.at).getTime();
+            return Number.isFinite(t) ? t <= nowMs : true;
+          }
+          return true;
+        });
+
+    // Group by day
     const grouped: TimelineItem[] = [];
     let lastDay = "";
 
-    for (const it of base) {
+    for (const it of visible) {
       const d = dayLabelLocal(it.at);
       if (d && d !== lastDay) {
         grouped.push({ key: `day-${d}`, name: d, at: it.at, kind: "day" });
@@ -911,7 +953,16 @@ export default function LetterStatusPage() {
     }
 
     return grouped;
-  }, [checkpointsByTime, uiDelivered, canceled, effectiveEtaISO]);
+  }, [
+    checkpointsByTime,
+    uiDelivered,
+    canceled,
+    effectiveEtaISO,
+    now,
+    timelineFinal,
+    letter?.sent_at,
+    letter?.origin_name,
+  ]);
 
   // ✅ when sleeping, current highlight prefers the latest sleep event
   const currentTimelineKey = useMemo(() => {
