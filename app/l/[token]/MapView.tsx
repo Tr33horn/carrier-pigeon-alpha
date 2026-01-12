@@ -5,14 +5,10 @@ import { MapContainer, TileLayer, Polyline, Marker, Tooltip, useMap } from "reac
 import L from "leaflet";
 
 // ✅ dev-only sleep overlay helpers (pure functions)
-import {
-  isSleepingAt,
-  offsetMinutesFromLon,
-  initialSleepSkipUntilUtcMs,
-} from "@/app/lib/flightSleep";
+import { isSleepingAt, offsetMinutesFromLon, initialSleepSkipUntilUtcMs } from "@/app/lib/flightSleep";
 
 // ✅ Match the LetterStatusPage values
-export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
+export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels" | "ink-sketch";
 export type MarkerMode = "flying" | "sleeping" | "delivered" | "canceled";
 
 type LatLon = { lat: number; lon: number };
@@ -37,6 +33,26 @@ function isFiniteLatLon(p: any): p is LatLon {
 }
 
 function getCarto(style: MapStyle) {
+  // Optional but recommended in production:
+  // add NEXT_PUBLIC_STADIA_MAPS_KEY to your env
+  const key =
+    typeof process !== "undefined"
+      ? (process.env.NEXT_PUBLIC_STADIA_MAPS_KEY || "").trim()
+      : "";
+  const q = key ? `?api_key=${encodeURIComponent(key)}` : "";
+
+  // 🖋️ Crisp pen & ink vibe (Stamen Toner Lite via Stadia Maps)
+  if (style === "ink-sketch") {
+    return {
+      url: `https://tiles.stadiamaps.com/tiles/stamen_toner_lite/{z}/{x}/{y}{r}.png${q}`,
+      attribution:
+        '&copy; <a href="https://stadiamaps.com/" target="_blank" rel="noreferrer">Stadia Maps</a> ' +
+        '&copy; <a href="https://stamen.com/" target="_blank" rel="noreferrer">Stamen Design</a> ' +
+        '&copy; <a href="https://openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a> ' +
+        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
+    };
+  }
+
   if (style === "carto-voyager") {
     return {
       url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
@@ -105,12 +121,7 @@ function seedFromCoords(o: LatLon, d: LatLon) {
  * - Static at a given progress value (depends on progress, not time)
  * - Drift grows gently with distance traveled
  */
-function makeNearStraightDriftPath(args: {
-  origin: LatLon;
-  dest: LatLon;
-  progress: number; // 0..1
-  points?: number;
-}) {
+function makeNearStraightDriftPath(args: { origin: LatLon; dest: LatLon; progress: number; points?: number }) {
   const { origin, dest } = args;
   const steps = Math.max(18, args.points ?? 56);
   const p = clamp01(args.progress);
@@ -170,13 +181,7 @@ function makeNearStraightDriftPath(args: {
  * ✅ IMPORTANT: respects your "skip initial sleep window" policy
  * by treating [sent..skipUntil) as awake.
  */
-function buildSleepOverlaySegments(args: {
-  origin: LatLon;
-  dest: LatLon;
-  sentAtISO?: string;
-  etaAtISO?: string;
-  samples?: number;
-}) {
+function buildSleepOverlaySegments(args: { origin: LatLon; dest: LatLon; sentAtISO?: string; etaAtISO?: string; samples?: number }) {
   const sentMs = args.sentAtISO ? Date.parse(args.sentAtISO) : NaN;
   const etaMs = args.etaAtISO ? Date.parse(args.etaAtISO) : NaN;
 
@@ -203,10 +208,7 @@ function buildSleepOverlaySegments(args: {
     const tMs = sentMs + (etaMs - sentMs) * f;
 
     // Treat initial skipped window as awake
-    const sleeping =
-      skipUntil && tMs < skipUntil
-        ? false
-        : isSleepingAt(tMs, offMin);
+    const sleeping = skipUntil && tMs < skipUntil ? false : isSleepingAt(tMs, offMin);
 
     const lat = lerp(args.origin.lat, args.dest.lat, f);
     const lon = lerp(args.origin.lon, args.dest.lon, f);
@@ -408,11 +410,7 @@ export default function MapView(props: {
 
   return (
     <div className="mapShell">
-      <MapContainer
-        zoom={4}
-        scrollWheelZoom={false}
-        style={{ height: "100%", width: "100%" }}
-      >
+      <MapContainer zoom={4} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
         <TileLayer attribution={tile.attribution} url={tile.url} />
 
         <FitBoundsOnRouteChange origin={origin} dest={dest} />

@@ -83,7 +83,7 @@ type Flight = {
   current_speed_kmh?: number;
 };
 
-type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels";
+type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels" | "ink-sketch";
 
 type TimelineKind = "checkpoint" | "sleep" | "day" | "delivered";
 
@@ -634,7 +634,10 @@ export default function LetterStatusPage() {
       return;
     }
 
-    if (saved === "carto-positron" || saved === "carto-voyager" || saved === "carto-positron-nolabels") {
+    if (  saved === "carto-positron" ||
+  saved === "carto-voyager" ||
+  saved === "carto-positron-nolabels" ||
+  saved === "ink-sketch") {
       setMapStyle(saved);
     }
   }, []);
@@ -1276,6 +1279,14 @@ export default function LetterStatusPage() {
                 >
                   No Labels
                 </button>
+                <button
+  type="button"
+  className={`mapStyleBtn ${mapStyle === "ink-sketch" ? "on" : ""}`}
+  onClick={() => setMapStyle("ink-sketch")}
+  aria-pressed={mapStyle === "ink-sketch"}
+>
+  Ink
+</button>
               </div>
             </div>
 
