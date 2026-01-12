@@ -546,37 +546,34 @@ function rarityLabel(r?: string) {
 }
 
 /**
- * ✅ Sleep checkpoint detection, but ONLY if the timestamp is inside the sleep window.
- * This prevents weird “Pigeon slept” cards at 1:30 PM.
- *
- * Uses *viewer-local time* (browser) — good enough to stop the obvious junk.
- * If you want “true local to pigeon” later, we’ll pass timezone/flags from the API.
+ * ✅ Sleep checkpoint detection:
+ * - ONLY trust explicit sleep signals (no fuzzy “slept / wakes at”)
+ * - Guard by a UTC hour window so midday doesn’t become “sleep”
  */
-const SLEEP_START_HOUR = 22; // 10pm
-const SLEEP_END_HOUR = 6; // 6am
-function isWithinSleepWindowLocal(iso: string) {
+const SLEEP_START_HOUR = 22; // 10pm (UTC-based guard)
+const SLEEP_END_HOUR = 6; // 6am (UTC-based guard)
+
+function isWithinSleepWindowUTC(iso: string) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return false;
-  const h = d.getHours();
+  const h = d.getUTCHours();
   return h >= SLEEP_START_HOUR || h < SLEEP_END_HOUR;
 }
 
 function isSleepCheckpoint(cp: Checkpoint, atISO: string) {
   const id = (cp.id || "").toLowerCase();
-  const name = (cp.name || "").toLowerCase();
   const geo = (cp.geo_text || "").toLowerCase();
+  const name = (cp.name || "").toLowerCase();
 
-  const looksLikeSleep =
+  const explicitSleep =
     id.startsWith("sleep-") ||
     geo === "sleeping" ||
-    name.startsWith("sleep") ||
-    name.includes("slept") ||
-    name.includes("wakes at");
+    name === "sleeping" ||
+    name.startsWith("sleep ");
 
-  if (!looksLikeSleep) return false;
+  if (!explicitSleep) return false;
 
-  // ✅ Guard: only treat as sleep if the time is within the sleep window.
-  return isWithinSleepWindowLocal(atISO);
+  return isWithinSleepWindowUTC(atISO);
 }
 
 export default function LetterStatusPage() {
@@ -876,44 +873,54 @@ export default function LetterStatusPage() {
 
   const timelineFinal = uiDelivered || archived || canceled;
 
-  // ✅ Timeline items: show only past/current checkpoints + sleep (unless final)
-  // ✅ Adds "Departed • {origin}" using sent_at (never weird)
+  /**
+   * ✅ Timeline items:
+   * - Always include "Departed" at sent_at
+   * - Only include checkpoints/sleeps if they are <= now (unless final)
+   * - Append delivered row on delivery
+   * - Group by day
+   */
   const timelineItems = useMemo(() => {
-    const nowMs = now.getTime();
+    const nowT = now.getTime();
 
-    // Base rows from checkpoints (skip any redundant "departed" checkpoint if present)
-    const fromCheckpoints: TimelineItem[] = (checkpointsByTime as any[])
-      .filter((cp) => {
-        const nm = String(cp?.name || "").toLowerCase();
-        return !nm.includes("departed");
-      })
-      .map((cp) => {
-        const atISO = cp._atAdj || cp.at;
-        return {
-          key: `cp-${cp.id}`,
-          name: cp.name,
-          at: atISO,
-          kind: isSleepCheckpoint(cp, atISO) ? "sleep" : "checkpoint",
-        } as TimelineItem;
-      });
+    const safeSentAt = letter?.sent_at && String(letter.sent_at).trim() ? String(letter.sent_at) : null;
 
-    // Departed row (always)
-    const departedISO = (letter?.sent_at && String(letter.sent_at).trim()) || null;
-    const departedName = `Departed • ${letter?.origin_name || "Origin"}`;
+    // ✅ FIXED: the old code accidentally used optional-call syntax.
+    const firstCp: any = (checkpointsByTime as any[])[0] || null;
+    const firstCpAt: string | null = firstCp ? String(firstCp._atAdj || firstCp.at || "").trim() : null;
+
+    const departedAt = safeSentAt || firstCpAt || new Date().toISOString();
+
+    // "Departed" — tweak label (and never weird)
+    const departedName = letter?.origin_name ? `Departed · ${letter.origin_name}` : "Departed";
 
     const base: TimelineItem[] = [];
-    if (departedISO) {
+
+    // Add departed (always visible)
+    base.push({
+      key: "departed",
+      name: departedName,
+      at: departedAt,
+      kind: "checkpoint",
+    });
+
+    // Add past/current checkpoints only (unless final)
+    for (const cp of checkpointsByTime as any[]) {
+      const atISO = cp._atAdj || cp.at;
+      const t = new Date(atISO).getTime();
+      const isPastOrCurrent = Number.isFinite(t) ? t <= nowT : true;
+
+      if (!timelineFinal && !isPastOrCurrent) continue;
+
       base.push({
-        key: "departed",
-        name: departedName,
-        at: departedISO,
-        kind: "checkpoint",
+        key: `cp-${cp.id}`,
+        name: cp.name,
+        at: atISO,
+        kind: isSleepCheckpoint(cp, atISO) ? "sleep" : "checkpoint",
       });
     }
 
-    base.push(...fromCheckpoints);
-
-    // Delivered row (only when delivered)
+    // Delivered row
     if (uiDelivered && !canceled) {
       base.push({
         key: "delivered",
@@ -923,27 +930,14 @@ export default function LetterStatusPage() {
       });
     }
 
-    // Sort (in case Departed isn't earliest due to server weirdness)
+    // Sort (just in case departed got a funky time)
     base.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
 
-    // Filter: only show checkpoint/sleep if past or current (unless final)
-    const visible = timelineFinal
-      ? base
-      : base.filter((it) => {
-          if (it.kind === "day") return true;
-          if (it.kind === "delivered") return true; // delivered won't exist unless delivered, but fine
-          if (it.kind === "checkpoint" || it.kind === "sleep") {
-            const t = new Date(it.at).getTime();
-            return Number.isFinite(t) ? t <= nowMs : true;
-          }
-          return true;
-        });
-
-    // Group by day
+    // Group by day (local)
     const grouped: TimelineItem[] = [];
     let lastDay = "";
 
-    for (const it of visible) {
+    for (const it of base) {
       const d = dayLabelLocal(it.at);
       if (d && d !== lastDay) {
         grouped.push({ key: `day-${d}`, name: d, at: it.at, kind: "day" });
@@ -953,16 +947,7 @@ export default function LetterStatusPage() {
     }
 
     return grouped;
-  }, [
-    checkpointsByTime,
-    uiDelivered,
-    canceled,
-    effectiveEtaISO,
-    now,
-    timelineFinal,
-    letter?.sent_at,
-    letter?.origin_name,
-  ]);
+  }, [now, letter?.sent_at, letter?.origin_name, checkpointsByTime, timelineFinal, uiDelivered, canceled, effectiveEtaISO]);
 
   // ✅ when sleeping, current highlight prefers the latest sleep event
   const currentTimelineKey = useMemo(() => {

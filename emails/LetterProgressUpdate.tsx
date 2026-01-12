@@ -23,6 +23,19 @@ const BUTTON = {
   letterSpacing: "-0.01em",
 } as const;
 
+function niceMilestoneLabel(m: 25 | 50 | 75) {
+  if (m === 25) return "Update: 25%";
+  if (m === 50) return "Update: 50%";
+  return "Update: 75%";
+}
+
+function cleanOverText(s?: string | null) {
+  const raw = (s || "").trim();
+  if (!raw) return "";
+  // If your backend already sends “Over ___” we won’t double-prefix it.
+  return /^over\s+/i.test(raw) ? raw : `Over ${raw}`;
+}
+
 export function LetterProgressUpdateEmail({
   milestone,
   pct,
@@ -31,6 +44,7 @@ export function LetterProgressUpdateEmail({
   etaTextUtc,
   funLine,
   bird,
+  locationText, // ✅ NEW
 }: {
   milestone: 25 | 50 | 75;
   pct: number;
@@ -39,14 +53,24 @@ export function LetterProgressUpdateEmail({
   etaTextUtc: string;
   funLine: string;
   bird?: BirdType | null;
+
+  /** ✅ NEW: “Over the Issaquah Alps”, “Over Seattle Metro”, etc */
+  locationText?: string | null;
 }) {
   const href = joinUrl(APP_URL, statusUrl);
 
-  const preview =
-    milestone === 25 ? "25% of the way there." : milestone === 50 ? "Halfway there." : "75% complete (incoming).";
+  const overLine = cleanOverText(locationText);
 
-  const title =
-    milestone === 25 ? "Update: 25%" : milestone === 50 ? "Update: 50%" : "Update: 75%";
+  // ✅ Replace the old “halfway there / 75% complete” vibe with location-first preview.
+  const preview = overLine
+    ? `${overLine}.`
+    : milestone === 25
+    ? "25% of the way there."
+    : milestone === 50
+    ? "Halfway there."
+    : "75% complete (incoming).";
+
+  const title = overLine ? `${niceMilestoneLabel(milestone)} · ${overLine}` : niceMilestoneLabel(milestone);
 
   return (
     <EmailLayout preview={preview}>
@@ -56,9 +80,15 @@ export function LetterProgressUpdateEmail({
         {title}
       </Text>
 
-      <Text style={{ margin: "0 0 14px", textAlign: "center" }}>
+      <Text style={{ margin: "0 0 10px", textAlign: "center" }}>
         Your sealed letter from <strong>{fromName || "someone"}</strong> is still in flight.
       </Text>
+
+      {overLine ? (
+        <Text style={{ margin: "0 0 14px", color: "#444", textAlign: "center" }}>
+          Current location: <strong>{overLine}</strong>
+        </Text>
+      ) : null}
 
       <Text style={{ margin: "0 0 14px", color: "#444", textAlign: "center" }}>
         ETA (UTC): <strong>{etaTextUtc}</strong>
@@ -91,6 +121,7 @@ export default function Preview() {
       etaTextUtc="2026-01-08 02:30 UTC"
       funLine="The bird stopped briefly for a dramatic skyline moment."
       bird="goose"
+      locationText="Over Seattle Metro"
     />
   );
 }
