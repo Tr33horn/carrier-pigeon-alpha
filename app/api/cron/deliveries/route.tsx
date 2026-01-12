@@ -22,6 +22,9 @@ import {
 // ✅ Single source of truth for bird rules
 import { BIRD_RULES, normalizeBird, type BirdType } from "@/app/lib/birds";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 /* -------------------- tiny helpers -------------------- */
 
 function clamp01(n: number) {
@@ -197,7 +200,8 @@ function computeAdjustedEtaAndPct(args: {
       ? etaFromRequiredAwakeMsWithSkip(sentMs, requiredAwakeMs, offsetMin, sleepCfg, skipUntilMs, ignoresSleep)
       : Date.parse(args.eta_at);
 
-  const endMs = Math.min(args.nowMs, etaAdjustedMs);
+  const safeEtaAdjustedMs = Number.isFinite(etaAdjustedMs) ? etaAdjustedMs : Date.parse(args.eta_at);
+  const endMs = Math.min(args.nowMs, safeEtaAdjustedMs);
 
   const awakeSoFar =
     Number.isFinite(sentMs) && args.nowMs > sentMs && Number.isFinite(endMs)
@@ -209,8 +213,8 @@ function computeAdjustedEtaAndPct(args: {
 
   return {
     pct,
-    etaAdjustedMs,
-    etaAdjustedISO: Number.isFinite(etaAdjustedMs) ? new Date(etaAdjustedMs).toISOString() : args.eta_at,
+    etaAdjustedMs: safeEtaAdjustedMs,
+    etaAdjustedISO: Number.isFinite(safeEtaAdjustedMs) ? new Date(safeEtaAdjustedMs).toISOString() : args.eta_at,
     offsetMin,
   };
 }
@@ -373,7 +377,7 @@ export async function GET(req: Request) {
     .is("archived_at", null)
     .is("canceled_at", null)
     .lte("sent_at", nowISO)
-    // we’ll compute adjusted ETA; this just keeps query sane
+    // keep query sane; we rely on adjusted ETA checks below
     .gt("eta_at", new Date(nowMs - 7 * 24 * 3600_000).toISOString());
 
   if (inflightErr) {
@@ -491,7 +495,7 @@ export async function GET(req: Request) {
             etaTextUtc={etaUtcText}
             funLine={funLine}
             bird={bird}
-            overText={overText} // ✅ preferred prop (your email also supports locationText if you want)
+            overText={overText} // ✅ preferred prop (email supports back-compat too)
           />
         ),
         tags: [
@@ -522,26 +526,29 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({
-    ok: true,
-    ran_at: nowISO,
+  return NextResponse.json(
+    {
+      ok: true,
+      ran_at: nowISO,
 
-    deliveries: {
-      candidates: (deliverCandidates ?? []).length,
-      eligible_by_adjusted_eta: deliveries_eligible,
-      delivered_recipient_emails,
-      delivered_sender_receipts,
+      deliveries: {
+        candidates: (deliverCandidates ?? []).length,
+        eligible_by_adjusted_eta: deliveries_eligible,
+        delivered_recipient_emails,
+        delivered_sender_receipts,
+      },
+
+      midflight: {
+        eligible: (inFlight ?? []).length,
+        sent_25: midflight_25,
+        sent_50: midflight_50,
+        sent_75: midflight_75,
+        skipped_no_email: midflight_skipped_no_email,
+        skipped_already_delivered_by_adjusted_eta: midflight_skipped_already_delivered,
+      },
+
+      ...(debug ? { debug_inflight } : {}),
     },
-
-    midflight: {
-      eligible: (inFlight ?? []).length,
-      sent_25: midflight_25,
-      sent_50: midflight_50,
-      sent_75: midflight_75,
-      skipped_no_email: midflight_skipped_no_email,
-      skipped_already_delivered_by_adjusted_eta: midflight_skipped_already_delivered,
-    },
-
-    ...(debug ? { debug_inflight } : {}),
-  });
+    { headers: { "Cache-Control": "no-store, max-age=0" } }
+  );
 }

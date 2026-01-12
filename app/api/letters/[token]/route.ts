@@ -9,11 +9,11 @@ import {
   offsetMinutesFromLon,
   isSleepingAt,
   awakeMsBetween,
-  etaFromRequiredAwakeMs,
   nextWakeUtcMs,
   sleepUntilLocalText,
   initialSleepSkipUntilUtcMs,
   type SleepConfig,
+  etaFromRequiredAwakeMs, // <- used by etaFromRequiredAwakeMsWithSkip helper below
 } from "@/app/lib/flightSleep";
 
 // ✅ Single source of truth for bird rules
@@ -239,6 +239,7 @@ function etaFromRequiredAwakeMsWithSkip(
   if (skipUntilMs && sentMs < skipUntilMs) {
     const initialAwakeBudget = skipUntilMs - sentMs;
     if (requiredAwakeMs <= initialAwakeBudget) return sentMs + requiredAwakeMs;
+
     const remaining = requiredAwakeMs - initialAwakeBudget;
     return etaFromRequiredAwakeMs(skipUntilMs, remaining, offsetMin, cfg);
   }
@@ -328,8 +329,9 @@ function buildSleepEvents(args: {
    Route handler
 ------------------------------------------------- */
 
-export async function GET(_req: NextRequest, { params }: { params: { token: string } }) {
-  const { token } = params;
+// ✅ IMPORTANT: in your Next build, params is a Promise (typegen expects this)
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
 
   const { data: meta, error: metaErr } = await supabaseServer
     .from("letters")
@@ -438,7 +440,14 @@ export async function GET(_req: NextRequest, { params }: { params: { token: stri
 
   const awakeSoFar =
     Number.isFinite(sentMs) && nowMsFinal > sentMs
-      ? awakeMsBetweenWithSkip(sentMs, Math.min(nowMsFinal, etaAdjustedMs), offsetMin, sleepCfg, skipUntilMs, ignoresSleep)
+      ? awakeMsBetweenWithSkip(
+          sentMs,
+          Math.min(nowMsFinal, etaAdjustedMs),
+          offsetMin,
+          sleepCfg,
+          skipUntilMs,
+          ignoresSleep
+        )
       : 0;
 
   const progress = requiredAwakeMs > 0 ? clamp(awakeSoFar / requiredAwakeMs, 0, 1) : 1;
@@ -524,7 +533,7 @@ export async function GET(_req: NextRequest, { params }: { params: { token: stri
 
   const cps = [...cpsBase, ...sleepEvents].sort((a: any, b: any) => Date.parse(a.at) - Date.parse(b.at));
 
-  // ✅ Current over text respects canceled
+  // ✅ Current over text respects canceled/delivered AND stays “Over ___” when appropriate
   let current_over_text = canceled ? "Canceled" : delivered ? "Delivered" : "somewhere over the U.S.";
   if (!delivered && !canceled && cpsBase.length) {
     let cur = cpsBase[0];
@@ -534,6 +543,8 @@ export async function GET(_req: NextRequest, { params }: { params: { token: stri
       else break;
     }
     current_over_text = ensureOver(cur?.geo_text || current_over_text);
+  } else {
+    current_over_text = ensureOver(current_over_text);
   }
 
   const geoBase = delivered ? "Delivered" : stripOverPrefix(current_over_text);
