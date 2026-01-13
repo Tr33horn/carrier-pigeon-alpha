@@ -19,6 +19,9 @@
   overflow: hidden;
   border: 1px solid rgba(0,0,0,0.10);
   box-shadow: 0 12px 24px rgba(0,0,0,0.08);
+
+  /* perf: keeps repaint damage inside the map container */
+  contain: paint;
 }
 
 .map{ height: 100%; width: 100%; }
@@ -32,7 +35,8 @@
   height: 100%;
   object-fit: cover;
   pointer-events: none;
-  /* keep high but not “nuke everything” high */
+
+  /* high enough to sit above tiles, below tooltips */
   z-index: 500;
   opacity: 0.12;
   mix-blend-mode: multiply;
@@ -77,9 +81,8 @@
   border: 2px solid rgba(17,17,17,0.65);
   transform: scale(0.35);
   opacity: 0;
-  animation: pigeon-pulse 1.6s cubic-bezier(.2,.85,.2,1) infinite;
+  animation: pigeon-pulse 1.6s var(--ease-out, cubic-bezier(.2,.85,.2,1)) infinite;
   z-index: 1;
-  will-change: transform, opacity;
 }
 .pigeonPulseRing.ring2 { animation-delay: 0.8s; }
 
@@ -96,7 +99,6 @@
   opacity: 0;
   z-index: 2;      /* above flight rings, below dot */
   display: none;   /* only in sleep mode */
-  will-change: transform, opacity;
 }
 
 /* Moon glyph (optional; MapView injects <span class="pigeonMoon">🌙</span>) */
@@ -109,7 +111,9 @@
   line-height: 1;
   opacity: 0;
   transform: scale(0.9);
-  transition: opacity 160ms ease, transform 160ms ease;
+  transition:
+    opacity var(--dur-2, 180ms) var(--ease-out, ease),
+    transform var(--dur-2, 180ms) var(--ease-out, ease);
   pointer-events: none;
   z-index: 4; /* above dot when it’s dimmed */
 }
@@ -178,15 +182,6 @@
   32%  { transform: scale(0.76); opacity: 0.20; }
   40%  { transform: scale(0.90); opacity: 0.22; }
   100% { transform: scale(1.06); opacity: 0.00; }
-}
-
-/* Motion safety: if user prefers reduced motion, stop all pulsing */
-@media (prefers-reduced-motion: reduce) {
-  .pigeonPulseRing,
-  .pigeonSleepRing,
-  .pigeonLiveDot {
-    animation: none !important;
-  }
 }
 
 /* -------------------------------------------------
@@ -260,7 +255,6 @@
   box-shadow: 0 0 0 0 rgba(204, 239, 253, 0.85);
   animation: pulseBlue 1.4s ease-out infinite;
   display: inline-block;
-  will-change: transform, box-shadow;
 }
 
 /* sleeping tooltip dot */
@@ -306,16 +300,35 @@
   font-weight: 900;
   font-size: 12px;
   cursor: pointer;
+  user-select: none;
+  line-height: 1;
+  min-height: 36px;
 
-  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+  transition:
+    transform var(--dur-2, 180ms) var(--ease-out, ease),
+    background var(--dur-2, 180ms) var(--ease-out, ease),
+    border-color var(--dur-2, 180ms) var(--ease-out, ease),
+    box-shadow var(--dur-2, 180ms) var(--ease-out, ease);
 }
-.mapStyleBtn:hover{
-  transform: translateY(-1px);
-  background: rgba(255,255,255,0.92);
-  border-color: rgba(0,0,0,0.14);
+
+/* hover effects only on real-hover devices (no weird “sticky hover” on touch) */
+@media (hover: hover) and (pointer: fine) {
+  .mapStyleBtn:hover{
+    transform: translateY(-1px);
+    background: rgba(255,255,255,0.92);
+    border-color: rgba(0,0,0,0.14);
+    box-shadow: 0 10px 18px rgba(0,0,0,0.08);
+  }
 }
 .mapStyleBtn:active{
   transform: translateY(0px);
+}
+
+/* keyboard focus: consistent with the rest of the app */
+.mapStyleBtn:focus-visible{
+  outline: none;
+  box-shadow: 0 0 0 4px var(--alp-blue-18);
+  border-color: rgba(0,0,0,0.22);
 }
 
 .mapStyleBtn.on{
@@ -351,4 +364,20 @@
   margin-right: 8px;
   transform: translateY(1px);
   filter: drop-shadow(0 2px 6px rgba(0,0,0,0.22));
+}
+
+/* -------------------------------------------------
+   Reduced motion safety (map pulses + button motion)
+------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .pigeonPulseRing,
+  .pigeonSleepRing,
+  .pigeonLiveDot {
+    animation: none !important;
+  }
+
+  .pigeonMarker .pigeonMoon,
+  .mapStyleBtn {
+    transition: none !important;
+  }
 }
