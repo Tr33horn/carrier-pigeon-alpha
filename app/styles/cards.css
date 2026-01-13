@@ -20,7 +20,8 @@
   transition:
     transform var(--dur-2, 180ms) var(--ease-out, ease),
     box-shadow var(--dur-2, 180ms) var(--ease-out, ease),
-    border-color var(--dur-2, 180ms) var(--ease-out, ease);
+    border-color var(--dur-2, 180ms) var(--ease-out, ease),
+    background var(--dur-2, 180ms) var(--ease-out, ease);
 }
 
 .cardHead {
@@ -44,9 +45,11 @@
 .card.isClickable:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
+  border-color: rgba(0,0,0,0.12);
 }
 .card.isClickable:active {
   transform: translateY(0px);
+  box-shadow: var(--shadow-md);
 }
 
 /* -------------------------------------------------
@@ -81,6 +84,7 @@
   border-radius: 999px;
   font-weight: 900;
   font-size: var(--text-xs, 12px);
+  line-height: 1;
   text-decoration: none;
   background: rgba(0,0,0,0.04);
   border: 1px solid rgba(0,0,0,0.10);
@@ -88,17 +92,23 @@
   transition:
     transform var(--dur-2, 180ms) var(--ease-out, ease),
     background var(--dur-2, 180ms) var(--ease-out, ease),
-    border-color var(--dur-2, 180ms) var(--ease-out, ease);
+    border-color var(--dur-2, 180ms) var(--ease-out, ease),
+    box-shadow var(--dur-2, 180ms) var(--ease-out, ease);
 }
 .linkPill:hover {
   transform: translateY(-1px);
   background: rgba(0,0,0,0.055);
   border-color: rgba(0,0,0,0.14);
+  box-shadow: 0 10px 18px rgba(0,0,0,0.07);
 }
 .linkPill:active {
   transform: translateY(0px);
+  box-shadow: none;
 }
 
+/* ---------------------------------------------
+   Buttons: consistent feel + sane tap targets
+--------------------------------------------- */
 .btnPrimary,
 .btnGhost,
 .btnSubtle {
@@ -110,6 +120,7 @@
   min-height: 44px; /* tap-target sanity */
   line-height: 1;
   user-select: none;
+  -webkit-font-smoothing: antialiased;
 
   transition:
     transform var(--dur-2, 180ms) var(--ease-out, ease),
@@ -132,7 +143,12 @@
   transform: translateY(0px);
   box-shadow: 0 8px 16px rgba(0,0,0,0.12);
 }
-.btnPrimary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+.btnPrimary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.10);
+}
 
 .btnGhost {
   background: rgba(0,0,0,0.04);
@@ -142,9 +158,18 @@
   transform: translateY(-1px);
   background: rgba(0,0,0,0.055);
   border-color: rgba(0,0,0,0.16);
+  box-shadow: 0 10px 18px rgba(0,0,0,0.06);
 }
-.btnGhost:active { transform: translateY(0px); }
-.btnGhost:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+.btnGhost:active {
+  transform: translateY(0px);
+  box-shadow: none;
+}
+.btnGhost:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
 
 .btnSubtle {
   background: transparent;
@@ -158,7 +183,9 @@
   border-color: rgba(0,0,0,0.18);
   background: rgba(0,0,0,0.02);
 }
-.btnSubtle:active { transform: translateY(0px); }
+.btnSubtle:active {
+  transform: translateY(0px);
+}
 
 /* Keyboard focus: consistent + classy */
 .btnPrimary:focus-visible,
@@ -167,7 +194,11 @@
 .linkPill:focus-visible,
 .metaPill:focus-visible,
 .pillBtn:focus-visible,
-.typeItem:focus-visible {
+.typeItem:focus-visible,
+.tabBtn:focus-visible,
+.dashSelect:focus-visible,
+.topBrandLink:focus-visible,
+.flokMarkLink:focus-visible {
   outline: none;
   box-shadow: 0 0 0 4px var(--alp-blue-18);
   border-color: rgba(0,0,0,0.22);
@@ -188,6 +219,7 @@
   cursor: pointer;
   min-height: 40px;
   line-height: 1;
+  -webkit-font-smoothing: antialiased;
 
   transition:
     transform var(--dur-2, 180ms) var(--ease-out, ease),
@@ -232,7 +264,12 @@
   .btnGhost,
   .btnSubtle,
   .pillBtn,
-  .tabBtn {
+  .tabBtn,
+  .routeThumb,
+  .birdStatusCard,
+  .badgeTile,
+  .topBrandLink,
+  .flokMarkLink {
     transition: none !important;
   }
 }
@@ -256,6 +293,9 @@
   cursor: pointer;
   padding: var(--space-4, 16px);
   border-radius: 20px;
+
+  /* ✅ keeps bird badges anchored to the card */
+  position: relative;
 
   transition:
     transform var(--dur-2, 180ms) var(--ease-out, ease),
@@ -311,6 +351,7 @@
   font-size: var(--text-xs, 12px);
   opacity: 0.7;
   font-weight: 850;
+  line-height: 1.35;
 }
 
 .birdBadge{
@@ -339,6 +380,7 @@
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.02em;
+  line-height: 1;
   background: var(--alp-blue-30);
   border: 1px solid rgba(0,0,0,0.10);
   box-shadow: 0 6px 14px rgba(0,0,0,0.10);
@@ -559,6 +601,7 @@
   font-size: 13px;
   cursor: pointer;
   user-select: none;
+  line-height: 1;
 
   transition:
     transform var(--dur-2, 180ms) var(--ease-out, ease),
@@ -606,8 +649,9 @@
   justify-content: center;
   border-radius: 12px;
   padding: 6px;
-  transition: transform var(--dur-2, 180ms) var(--ease-out, ease),
-              background var(--dur-2, 180ms) var(--ease-out, ease);
+  transition:
+    transform var(--dur-2, 180ms) var(--ease-out, ease),
+    background var(--dur-2, 180ms) var(--ease-out, ease);
 }
 .flokMarkLink:hover {
   background: rgba(0,0,0,0.04);
@@ -633,8 +677,9 @@
   display: inline-flex;
   padding: 6px;
   border-radius: 12px;
-  transition: transform var(--dur-2, 180ms) var(--ease-out, ease),
-              background var(--dur-2, 180ms) var(--ease-out, ease);
+  transition:
+    transform var(--dur-2, 180ms) var(--ease-out, ease),
+    background var(--dur-2, 180ms) var(--ease-out, ease);
 }
 .topBrandLink:hover {
   background: rgba(0,0,0,0.04);
