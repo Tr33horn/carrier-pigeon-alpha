@@ -449,28 +449,28 @@ export default function MapView(props: {
         <Marker position={[dest.lat, dest.lon]} icon={destIcon} />
 
         <Marker position={[current.lat, current.lon]} icon={liveIcon}>
-          <Tooltip
-            direction="top"
-            offset={[0, -10]}
-            opacity={1}
-            permanent
-            interactive={false}
-            className={`pigeonTooltip ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} ${isDelivered ? "delivered" : ""} ${
-              isCanceled ? "canceled" : ""
-            }`}
-          >
-            <span className="pigeonTooltipRow">
-              {isCanceled ? (
-                <span className="pigeonStatusGlyph" aria-hidden>
-                  💀
-                </span>
-              ) : !isDelivered ? (
-                <span className={`pigeonLiveDot ${isSleeping ? "sleep" : ""}`} />
-              ) : null}
+        <Tooltip
+  direction="top"
+  offset={[0, isSleeping ? -30 : -26]}
+  opacity={1}
+  permanent
+  interactive={false}
+  className={`pigeonTooltip ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} ${isDelivered ? "delivered" : ""} ${
+    isCanceled ? "canceled" : ""
+  }`}
+>
+  <span className="pigeonTooltipRow">
+    {isCanceled ? (
+      <span className="pigeonStatusGlyph" aria-hidden>
+        💀
+      </span>
+    ) : !isDelivered ? (
+      <span className={`pigeonLiveDot ${isSleeping ? "sleep" : ""}`} />
+    ) : null}
 
-              <span className="pigeonTooltipText">{tooltip}</span>
-            </span>
-          </Tooltip>
+    <span className="pigeonTooltipText">{tooltip}</span>
+  </span>
+</Tooltip>
         </Marker>
       </MapContainer>
     </div>
