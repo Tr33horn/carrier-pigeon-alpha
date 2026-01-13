@@ -4,8 +4,10 @@
 
 /* -------------------------------------------------
    Design tokens (shared across all pages) — LIGHT ONLY
+   Safety: global tokens only. If you add component styling here, future refactors hurt.
 ------------------------------------------------- */
 :root {
+  /* Core surfaces */
   --bg: #f6f6f4;
   --card: #ffffff;
   --soft: #f0f0ed;
@@ -22,6 +24,7 @@
   --ok-green-30: rgba(22, 163, 74, 0.30);
   --ok-green-55: rgba(22, 163, 74, 0.55);
 
+  /* Edges / elevation */
   --border: rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.10);
   --shadow-md: 0 8px 18px rgba(0, 0, 0, 0.10);
@@ -29,22 +32,91 @@
   /* Route line colors (used by map + thumbs) */
   --route-ideal: rgba(18,18,18,0.35);
   --route-flown: rgba(22,163,74,0.85);
+
+  /* -------------------------------------------------
+     Spacing scale (rhythm)
+     Safety: Use these for layout gaps/padding so the UI stays consistent.
+  ------------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+
+  /* -------------------------------------------------
+     Typography scale
+     Safety: If you change these, do it once here instead of chasing random px values.
+  ------------------------------------------------- */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 18px;
+  --text-xl: 34px;
+
+  --lh-tight: 1.15;
+  --lh-normal: 1.45;
+  --lh-relaxed: 1.6;
+
+  /* -------------------------------------------------
+     Micro-motion
+     Safety: Keep transitions short + consistent; disable for reduced motion.
+  ------------------------------------------------- */
+  --ease-out: cubic-bezier(0.2, 0.9, 0.2, 1);
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --dur-3: 260ms;
 }
 
 /* -------------------------------------------------
    Base / reset-ish
+   Safety: keep this tiny. Heavy resets tend to break third-party UI (Leaflet, etc.)
 ------------------------------------------------- */
-* { box-sizing: border-box; }
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
 html, body { height: 100%; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+}
 
 body {
   color: var(--ink);
   background: var(--bg);
   font-family: "Bricolage Grotesque", system-ui, -apple-system, Segoe UI, Roboto, Arial, Helvetica, sans-serif;
+  line-height: var(--lh-normal);
+  font-size: var(--text-md);
+}
+
+/* Safer default media behavior (prevents overflow surprises) */
+img, svg, video, canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Default selection feels premium (tiny touch, big vibe) */
+::selection {
+  background: var(--alp-blue-30);
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* -------------------------------------------------
    Page wrappers
+   Safety: layout primitives only (no component styling)
 ------------------------------------------------- */
 .pageBg {
   min-height: 100vh;
@@ -67,17 +139,21 @@ body {
 }
 
 .wrap {
-  padding: 24px;
+  padding: var(--space-6);
   max-width: 1050px;
   margin: 0 auto;
 }
 
-.stack { display: grid; gap: 14px; }
+@media (max-width: 640px) {
+  .wrap { padding: var(--space-5); }
+}
+
+.stack { display: grid; gap: var(--space-4); }
 
 .twoCol {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
 }
 @media (max-width: 860px) {
   .twoCol { grid-template-columns: 1fr; }
@@ -85,13 +161,14 @@ body {
 
 /* -------------------------------------------------
    Home page (center aligned)
+   Safety: layout-only wrappers are okay; visual hero styles should live in page CSS.
 ------------------------------------------------- */
 .homeCenter{
   min-height: calc(100vh - 48px);
   display: grid;
   place-items: center;
-  gap: 14px;
-  padding: 28px 0;
+  gap: var(--space-4);
+  padding: var(--space-7) 0;
 }
 
 .homeCenter > *{
@@ -110,36 +187,43 @@ body {
   position: relative;
 }
 
+@media (max-width: 520px) {
+  .homeHero { height: 380px; border-radius: 22px; }
+}
+
 .homeHeroInner{
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
   text-align: center;
-  gap: 6px;
-  padding: 18px;
+  gap: var(--space-2);
+  padding: var(--space-5);
 }
 
 /* -------------------------------------------------
    Typography
+   Safety: keep semantic helpers stable; use tokens so components don’t hardcode px.
 ------------------------------------------------- */
 .h1 {
-  font-size: 34px;
+  font-size: var(--text-xl);
   font-weight: 900;
   letter-spacing: -0.03em;
+  line-height: var(--lh-tight);
   margin: 0;
 }
 
 .h2 {
-  font-size: 18px;
+  font-size: var(--text-lg);
   font-weight: 900;
   letter-spacing: -0.02em;
+  line-height: var(--lh-tight);
   margin: 0;
-  margin-top: 4px;
+  margin-top: var(--space-1);
 }
 
 .kicker {
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 900;
   opacity: 0.6;
   letter-spacing: 0.08em;
@@ -149,27 +233,42 @@ body {
 .muted {
   opacity: 0.65;
   font-weight: 750;
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 
 .mutedStrong {
   opacity: 0.75;
   font-weight: 900;
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 
 .err,
 .errorText {
   color: #d92d20;
   font-weight: 900;
-  font-size: 12px;
+  font-size: var(--text-xs);
+}
+
+/* -------------------------------------------------
+   Links (tiny baseline helper)
+------------------------------------------------- */
+a {
+  color: inherit;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
 /* -------------------------------------------------
    Forms
+   Safety: form primitives only. Per-component form layout goes elsewhere.
 ------------------------------------------------- */
-.field { display: grid; gap: 6px; }
-.fieldLabel { font-weight: 900; font-size: 12px; opacity: 0.8; }
+.field { display: grid; gap: var(--space-2); }
+
+.fieldLabel {
+  font-weight: 900;
+  font-size: var(--text-xs);
+  opacity: 0.8;
+}
 
 .input,
 .textarea {
@@ -181,6 +280,11 @@ body {
   color: inherit;
   font-weight: 750;
   outline: none;
+
+  transition:
+    border-color var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out),
+    transform var(--dur-2) var(--ease-out);
 }
 
 .textarea { resize: vertical; }
@@ -191,8 +295,21 @@ body {
   box-shadow: 0 0 0 4px var(--alp-blue-18);
 }
 
+/* Subtle “lift” on focus for tactile feel (safe + tiny) */
+.input:focus-visible,
+.textarea:focus-visible {
+  transform: translateY(-1px);
+}
+
 .input.invalid,
 .textarea.invalid {
   border-color: rgba(217, 45, 32, 0.8);
   box-shadow: 0 0 0 4px rgba(217, 45, 32, 0.10);
+}
+
+/* Placeholder polish (helps perceived quality) */
+.input::placeholder,
+.textarea::placeholder {
+  opacity: 0.55;
+  font-weight: 750;
 }
