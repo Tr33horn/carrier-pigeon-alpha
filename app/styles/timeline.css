@@ -3,6 +3,10 @@
    - Only status / progression UI
    - No map markers or generic cards
    - Animations tied to delivery progress belong here
+
+   Safety:
+   - Avoid styling generic components (buttons/cards) here.
+   - Prefer reduced-motion fallbacks for all progress animations.
 */
 
 /* -------------------------------------------------
@@ -19,7 +23,9 @@
 .barFill {
   height: 100%;
   background: var(--ink);
-  transition: width 0.4s ease;
+  /* feels nicer than linear */
+  transition: width 0.45s cubic-bezier(.2,.85,.2,1);
+  will-change: width;
 }
 
 .barTick {
@@ -60,6 +66,8 @@
   font-size: 12px;
   font-weight: 900;
   opacity: 0.55;
+  /* crisper “pill” feel */
+  letter-spacing: -0.005em;
 }
 
 .chip.on {
@@ -93,7 +101,10 @@
   color: #fff;
   font-weight: 900;
   font-size: 12px;
+  /* tiny “premium” crispness */
+  -webkit-font-smoothing: antialiased;
 }
+
 .liveText { letter-spacing: 0.10em; }
 
 .liveDot {
@@ -102,17 +113,18 @@
   border-radius: 999px;
   background: var(--ok-green);
   box-shadow: 0 0 0 0 var(--ok-green-55);
-  animation: livePulseGreen 1.15s ease-out infinite;
+  animation: livePulseGreen 1.15s cubic-bezier(.2,.85,.2,1) infinite;
   display: inline-block;
+  will-change: transform, box-shadow;
 }
 
 .liveWrap.sleep { background: rgba(217, 45, 32, 0.92); }
 .liveDot.sleep { background: #fff; box-shadow: none; animation: none; }
 
 @keyframes livePulseGreen {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 var(--ok-green-55); }
-  70% { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(22, 163, 74, 0); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+  0%   { transform: scale(1);    box-shadow: 0 0 0 0 var(--ok-green-55); }
+  70%  { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(22, 163, 74, 0); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
 }
 
 /* -------------------------------------------------
@@ -136,6 +148,16 @@
     linear-gradient(135deg, var(--alp-blue-30), rgba(204,239,253,0) 58%),
     linear-gradient(0deg, rgba(0,0,0,0.03), rgba(0,0,0,0));
   pointer-events: none;
+}
+
+/* subtle “inner depth” without changing UI */
+.routeBanner::before{
+  content:"";
+  position:absolute;
+  inset: 0;
+  pointer-events:none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.65);
+  opacity: 0.55;
 }
 
 .bannerTop {
@@ -280,20 +302,23 @@
   line-height: 1;
 }
 
+/* completed */
 .railNode.past .railDot {
   background: var(--ok-green);
   color: #fff;
   box-shadow: 0 0 0 7px var(--ok-green-30);
 }
 
+/* milestone “special” ring ONLY while not past */
 .railNode.milestone:not(.past) .railDot {
   box-shadow: 0 0 0 7px var(--alp-blue-30);
 }
 
-.railNode.pop .railDot { animation: pop 420ms ease-out both; }
+/* reward pop: less toy-ish, more “micro-reward” */
+.railNode.pop .railDot { animation: pop 420ms cubic-bezier(.2,.85,.2,1) both; }
 @keyframes pop {
-  0% { transform: scale(0.75); }
-  55% { transform: scale(1.25); }
+  0%   { transform: scale(0.78); }
+  55%  { transform: scale(1.18); }
   100% { transform: scale(1); }
 }
 
@@ -303,27 +328,45 @@
   padding: 12px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: rgba(0, 0, 0, 0.035);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
 }
 
+/* done */
 .railCard.past {
   background: rgba(22,163,74,0.10);
   border-color: rgba(22,163,74,0.35);
 }
 
+/* milestone card */
 .railCard.milestone {
   background: var(--alp-blue-30);
   border-color: rgba(0, 0, 0, 0.08);
 }
 
+/* if a milestone is past, let it look “done” */
 .railCard.milestone.past {
   background: rgba(22,163,74,0.10);
   border-color: rgba(22,163,74,0.35);
 }
 
+/* CURRENT marker highlight */
 .railCard.current {
   background: rgba(22,163,74,0.16);
   border-color: rgba(22,163,74,0.55);
   box-shadow: 0 10px 20px rgba(22,163,74,0.12);
+}
+
+/* subtle “hover acknowledgement” on desktop */
+@media (hover:hover){
+  .railCard:hover{
+    transform: translateY(-1px);
+    border-color: rgba(0,0,0,0.12);
+    box-shadow: 0 12px 22px rgba(0,0,0,0.10);
+  }
+  .railCard.current:hover{
+    border-color: rgba(22,163,74,0.65);
+    box-shadow: 0 14px 26px rgba(22,163,74,0.14);
+  }
 }
 
 .railTitleRow {
@@ -346,6 +389,7 @@
   white-space: nowrap;
 }
 
+/* "Pigeon is here" tag */
 .pigeonTag {
   position: absolute;
   top: -10px;
@@ -391,6 +435,7 @@
   opacity:.5;
   transform:scale(.6);
   animation: livePulse 1.4s ease-out infinite;
+  will-change: transform, opacity;
 }
 
 @keyframes livePulse{
@@ -506,20 +551,20 @@
 }
 
 .seal.crack {
-  animation: crack 520ms ease-out forwards;
+  animation: crack 520ms cubic-bezier(.2,.85,.2,1) forwards;
   transform-origin: 50% 60%;
 }
 
 @keyframes crack {
-  0% { transform: scale(1) rotate(0deg); opacity: 1; filter: none; }
-  55% { transform: scale(1.02) rotate(-1deg); opacity: 1; filter: brightness(1.02); }
+  0%   { transform: scale(1) rotate(0deg); opacity: 1; filter: none; }
+  55%  { transform: scale(1.02) rotate(-1deg); opacity: 1; filter: brightness(1.02); }
   100% { transform: scale(0.98) rotate(3deg) translateY(10px); opacity: 0; filter: blur(2px); }
 }
 
-.bodyReveal { animation: reveal 420ms ease-out forwards; }
+.bodyReveal { animation: reveal 420ms cubic-bezier(.2,.85,.2,1) forwards; }
 @keyframes reveal {
   from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* confetti */
@@ -541,6 +586,7 @@
   background: rgba(18, 18, 18, 0.9);
   transform: translateX(-50%);
   animation: confettiFall 1100ms ease-out forwards;
+  will-change: transform, opacity;
 }
 
 .confetti-bit:nth-child(3n) {
@@ -569,7 +615,20 @@
 .confetti-bit:nth-child(18){ left: 88%; animation-delay: 270ms; }
 
 @keyframes confettiFall {
-  0% { transform: translateX(-50%) translateY(0) rotate(0deg); opacity: 0; }
-  10% { opacity: 1; }
+  0%   { transform: translateX(-50%) translateY(0) rotate(0deg); opacity: 0; }
+  10%  { opacity: 1; }
   100% { transform: translateX(-50%) translateY(220px) rotate(160deg); opacity: 0; }
+}
+
+/* -------------------------------------------------
+   Reduced motion safety (timeline + confetti)
+------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .barFill { transition: none; }
+  .liveDot { animation: none !important; box-shadow: none; }
+  .livePulseDot::after { animation: none !important; opacity: 0; }
+  .railNode.pop .railDot { animation: none !important; }
+  .seal.crack { animation: none !important; }
+  .bodyReveal { animation: none !important; }
+  .confetti-bit { animation: none !important; opacity: 0; }
 }
