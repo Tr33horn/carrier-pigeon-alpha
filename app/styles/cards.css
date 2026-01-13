@@ -278,19 +278,7 @@
   border-radius: 999px;
 }
 
-.dashBrand {
-  flex: 0 0 auto;
-  width: 64px;
-  height: 64px;
-  display: grid;
-  place-items: center;
-}
-.dashLogo {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-}
+
 
 .thumbPulse{
   transform-origin: center;

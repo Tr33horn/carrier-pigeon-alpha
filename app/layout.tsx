@@ -1,3 +1,6 @@
+// CSS load order matters:
+// base → cards → timeline → map (map wins on specificity)
+
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "leaflet/dist/leaflet.css";
