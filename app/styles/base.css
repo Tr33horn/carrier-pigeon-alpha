@@ -7,6 +7,9 @@
    Safety: global tokens only. If you add component styling here, future refactors hurt.
 ------------------------------------------------- */
 :root {
+  /* Helps native controls stay consistent in light mode */
+  color-scheme: light;
+
   /* Core surfaces */
   --bg: #f6f6f4;
   --card: #ffffff;
@@ -83,6 +86,9 @@ html, body { height: 100%; }
 html {
   -webkit-text-size-adjust: 100%;
   text-rendering: optimizeLegibility;
+
+  /* Prevent layout shift when scrollbars appear/disappear */
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -91,6 +97,10 @@ body {
   font-family: "Bricolage Grotesque", system-ui, -apple-system, Segoe UI, Roboto, Arial, Helvetica, sans-serif;
   line-height: var(--lh-normal);
   font-size: var(--text-md);
+
+  /* subtle smoothing without going nuclear */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Safer default media behavior (prevents overflow surprises) */
@@ -104,13 +114,20 @@ img, svg, video, canvas {
   background: var(--alp-blue-30);
 }
 
-/* Respect reduced motion */
+/* Respect reduced motion
+   Safety: keep strong, but avoid breaking unrelated third-party transitions too hard. */
 @media (prefers-reduced-motion: reduce) {
-  * {
+  html:focus-within {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
-    scroll-behavior: auto !important;
+    transition-delay: 0ms !important;
   }
 }
 
@@ -295,7 +312,7 @@ a {
   box-shadow: 0 0 0 4px var(--alp-blue-18);
 }
 
-/* Subtle “lift” on focus for tactile feel (safe + tiny) */
+/* Subtle “lift” on keyboard focus only (prevents mouse-induced jitter) */
 .input:focus-visible,
 .textarea:focus-visible {
   transform: translateY(-1px);
