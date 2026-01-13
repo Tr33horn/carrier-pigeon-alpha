@@ -980,89 +980,24 @@ export default function LetterStatusPage() {
           <div className="token">Token: {letter.public_token}</div>
         </div>
 
-        <div className="grid">
-          <div className="card">
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-              <div className="kicker">Map</div>
-
-              <div className="mapStyleRow" role="group" aria-label="Map style">
-                <button
-                  type="button"
-                  className={`mapStyleBtn ${mapStyle === "carto-positron" ? "on" : ""}`}
-                  onClick={() => setMapStyle("carto-positron")}
-                  aria-pressed={mapStyle === "carto-positron"}
-                >
-                  Light
-                </button>
-
-                <button
-                  type="button"
-                  className={`mapStyleBtn ${mapStyle === "carto-voyager" ? "on" : ""}`}
-                  onClick={() => setMapStyle("carto-voyager")}
-                  aria-pressed={mapStyle === "carto-voyager"}
-                >
-                  Voyager
-                </button>
-
-                <button
-                  type="button"
-                  className={`mapStyleBtn ${mapStyle === "carto-positron-nolabels" ? "on" : ""}`}
-                  onClick={() => setMapStyle("carto-positron-nolabels")}
-                  aria-pressed={mapStyle === "carto-positron-nolabels"}
-                >
-                  No Labels
-                </button>
-
-                <button
-                  type="button"
-                  className={`mapStyleBtn ${mapStyle === "ink-sketch" ? "on" : ""}`}
-                  onClick={() => setMapStyle("ink-sketch")}
-                  aria-pressed={mapStyle === "ink-sketch"}
-                >
-                  Ink
-                </button>
-              </div>
-            </div>
-
-<MapSection
-  mapStyle={mapStyle}
-  setMapStyle={setMapStyle}
-  origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-  dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-  progress={progress}
-  progressPctFloor={progressPctFloor}
-  tooltipText={mapTooltip}
-  markerMode={markerMode}
-  showLive={showLive}
-  sentAtISO={letter.sent_at}
-  etaAtISO={effectiveEtaISO}
-  currentlyOver={currentlyOver}
-  milestones={milestones}
-/>
-
-            <div style={{ marginTop: 14 }}>
-              <div className="bar">
-                <div className="barFill" style={{ width: `${progressPctFloor}%` }} />
-                {[25, 50, 75].map((p) => (
-                  <span key={p} className="barTick" style={{ left: `${p}%` }} />
-                ))}
-              </div>
-
-              <div className="barMeta">
-                <div className="mutedStrong">{progressPctFloor}%</div>
-                <div className="muted">{`Current: ${currentlyOver}`}</div>
-              </div>
-
-              <div className="chips">
-                {milestones.map((m) => (
-                  <div key={m.pct} className={`chip ${m.isPast ? "on" : ""}`}>
-                    <span className="chipDot">{m.isPast ? "●" : "○"}</span>
-                    <span className="chipLabel">{m.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+<div className="grid">
+  <div className="card">
+    <MapSection
+      mapStyle={mapStyle}
+      setMapStyle={setMapStyle}
+      origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+      dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+      progress={progress}
+      progressPctFloor={progressPctFloor}
+      tooltipText={mapTooltip}
+      markerMode={markerMode}
+      showLive={showLive}
+      sentAtISO={letter.sent_at}
+      etaAtISO={effectiveEtaISO}
+      currentlyOver={currentlyOver}
+      milestones={milestones}
+    />
+  </div>
 
           <div className="stack">
             <div className="card">
