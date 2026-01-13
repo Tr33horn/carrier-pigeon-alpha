@@ -191,7 +191,7 @@
   width: 22px;
   height: 28px;
 }
-.map-dark .destPin { color: #fff; }
+
 .destPin::after {
   content: "";
   position: absolute;

@@ -278,8 +278,6 @@
   border-radius: 999px;
 }
 
-
-
 .thumbPulse{
   transform-origin: center;
   animation: thumbPulse 1.5s ease-out infinite;
