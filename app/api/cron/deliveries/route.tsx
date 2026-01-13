@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import React from "react";
 import { supabaseServer } from "../../../lib/supabaseServer";
 import { sendEmail } from "../../../lib/email/send";
 
