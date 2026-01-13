@@ -1,4 +1,3 @@
-import * as React from "react";
 import { Button, Section, Text } from "@react-email/components";
 import { EmailLayout } from "./components/Layout";
 import { BirdStateImage, type BirdType } from "./components/BirdStateImage";

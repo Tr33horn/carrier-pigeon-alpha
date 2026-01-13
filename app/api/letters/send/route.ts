@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import React from "react";
+import { createElement } from "react";
 import { supabaseServer } from "../../../lib/supabaseServer";
 import { sendEmail } from "../../../lib/email/send";
 
@@ -365,24 +365,24 @@ export async function POST(req: Request) {
     const absoluteStatusUrl = joinUrl(baseUrl, statusPath);
     const etaTextUtc = formatUtc(letter.eta_at);
 
-    const result = await sendEmail({
-      to: normalizedToEmail,
-      subject: "A letter is on the way",
-      react: React.createElement(LetterOnTheWayEmail as any, {
-        toName: letter.to_name,
-        fromName: letter.from_name,
-        originName: letter.origin_name || origin.name || "Origin",
-        destName: letter.dest_name || destination.name || "Destination",
-        etaTextUtc,
-        statusUrl: absoluteStatusUrl,
-        bird: (letter.bird as BirdType) || bird,
-        debugToken: publicToken,
-      }),
-      tags: [
-        { name: "kind", value: "letter_on_the_way" },
-        { name: "token", value: publicToken },
-      ],
-    });
+const result = await sendEmail({
+  to: normalizedToEmail,
+  subject: "A letter is on the way",
+  react: createElement(LetterOnTheWayEmail as any, {
+    toName: letter.to_name,
+    fromName: letter.from_name,
+    originName: letter.origin_name || origin.name || "Origin",
+    destName: letter.dest_name || destination.name || "Destination",
+    etaTextUtc,
+    statusUrl: absoluteStatusUrl,
+    bird: (letter.bird as BirdType) || bird,
+    debugToken: publicToken,
+  }),
+  tags: [
+    { name: "kind", value: "letter_on_the_way" },
+    { name: "token", value: publicToken },
+  ],
+});
 
     if (result && "error" in (result as any) && (result as any).error) {
       console.error("RESEND SEND FAILED", {

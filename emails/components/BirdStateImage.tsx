@@ -1,4 +1,3 @@
-import * as React from "react";
 import { Img, Section } from "@react-email/components";
 import { APP_URL } from "@/app/lib/email/config";
 

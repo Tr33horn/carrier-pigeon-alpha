@@ -1,6 +1,5 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -8,7 +7,6 @@ import TimelineRail from "./_components/TimelineRail";
 import { buildTimelineItems, pickCurrentTimelineKey } from "./_lib/letterStatusTimeline";
 import MapSection from "./_components/MapSection";
 
-const MapView = dynamic(() => import("./MapView"), { ssr: false });
 
 type Letter = {
   id: string;
@@ -1141,3 +1139,4 @@ export default function LetterStatusPage() {
     </main>
   );
 }
+

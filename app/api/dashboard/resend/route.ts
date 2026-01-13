@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createElement } from "react";
 import { supabaseServer } from "../../../lib/supabaseServer";
 import { sendEmail } from "../../../lib/email/send";
 import { LetterStatusLinkResentEmail } from "@/emails/LetterStatusLinkResent";
@@ -20,10 +21,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Valid from_email required" }, { status: 400 });
   }
 
-  const base =
-    process.env.APP_URL ||
-    process.env.APP_BASE_URL ||
-    "http://localhost:3000";
+  const base = process.env.APP_URL || process.env.APP_BASE_URL || "http://localhost:3000";
 
   const { data: letter, error } = await supabaseServer
     .from("letters")
@@ -36,10 +34,7 @@ export async function POST(req: Request) {
   }
 
   if ((letter.from_email || "").trim().toLowerCase() !== from_email) {
-    return NextResponse.json(
-      { error: "Sender email does not match this letter" },
-      { status: 403 }
-    );
+    return NextResponse.json({ error: "Sender email does not match this letter" }, { status: 403 });
   }
 
   const url = `${base}/l/${letter.public_token}`;
@@ -47,7 +42,7 @@ export async function POST(req: Request) {
   await sendEmail({
     to: from_email,
     subject: "Your status link (re-sent)",
-    react: LetterStatusLinkResentEmail({
+    react: createElement(LetterStatusLinkResentEmail as any, {
       subject: letter.subject || "(No subject)",
       originName: letter.origin_name || "",
       destName: letter.dest_name || "",

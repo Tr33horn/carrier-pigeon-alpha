@@ -1,5 +1,5 @@
 // lib/email/send.ts
-import React from "react";
+import type { ReactElement } from "react";
 import { Resend } from "resend";
 import { render } from "@react-email/render";
 import { BRAND, getMailFrom } from "./config";
@@ -7,7 +7,7 @@ import { BRAND, getMailFrom } from "./config";
 type SendArgs = {
   to: string | string[];
   subject: string;
-  react: React.ReactElement;
+  react: ReactElement;
   replyTo?: string;
   /**
    * Optional: add tags/metadata for easier filtering in Resend logs.
@@ -33,11 +33,6 @@ function getResendClient() {
   return _resend;
 }
 
-/**
- * Resend typically returns:
- *  - success: { data: { id: string }, error: null, headers?: ... }
- *  - failure: { data: null, error: {...}, headers?: ... }
- */
 type ResendSendResult = {
   data: { id?: string } | null;
   error: unknown | null;
@@ -47,10 +42,8 @@ type ResendSendResult = {
 export async function sendEmail({ to, subject, react, replyTo, tags }: SendArgs) {
   const resend = getResendClient();
 
-  // ✅ Validate MAIL_FROM at send-time (and auto-strip accidental quotes)
   const from = getMailFrom();
 
-  // HTML + text improves deliverability & lets recipients preview cleanly
   const html = await render(react, { pretty: false });
   const text = await render(react, { plainText: true });
 
@@ -60,7 +53,6 @@ export async function sendEmail({ to, subject, react, replyTo, tags }: SendArgs)
     subject,
     html,
     text,
-    // Support both shapes across SDK versions
     replyTo: replyTo || BRAND.supportEmail,
     reply_to: replyTo || BRAND.supportEmail,
   };
