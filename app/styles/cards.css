@@ -3,6 +3,8 @@
    - No global layout or page wrappers
    - No map or timeline styles
    - Components must be portable across pages
+
+   Safety: If it depends on a specific page grid, it doesn't belong here.
 */
 
 /* -------------------------------------------------
@@ -11,23 +13,40 @@
 .card {
   background: var(--card);
   border-radius: 20px;
-  padding: 16px;
+  padding: var(--space-4, 16px);
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--border);
+
+  transition:
+    transform var(--dur-2, 180ms) var(--ease-out, ease),
+    box-shadow var(--dur-2, 180ms) var(--ease-out, ease),
+    border-color var(--dur-2, 180ms) var(--ease-out, ease);
 }
 
 .cardHead {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--space-3, 12px);
 }
 
 .soft {
   background: var(--soft);
   border-radius: 18px;
-  padding: 14px;
+  padding: var(--space-4, 14px);
   border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* Optional “tactile” hover for cards that are clickable */
+.card.isClickable {
+  cursor: pointer;
+}
+.card.isClickable:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+.card.isClickable:active {
+  transform: translateY(0px);
 }
 
 /* -------------------------------------------------
@@ -36,13 +55,19 @@
 .metaPill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2, 8px);
   border-radius: 999px;
   padding: 8px 12px;
   font-weight: 850;
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
+  line-height: 1;
   background: rgba(0, 0, 0, 0.04);
   border: 1px solid rgba(0, 0, 0, 0.10);
+
+  transition:
+    transform var(--dur-2, 180ms) var(--ease-out, ease),
+    background var(--dur-2, 180ms) var(--ease-out, ease),
+    border-color var(--dur-2, 180ms) var(--ease-out, ease);
 }
 .metaPill.faint { opacity: 0.75; }
 
@@ -51,13 +76,27 @@
 .linkPill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2, 8px);
   padding: 10px 14px;
   border-radius: 999px;
   font-weight: 900;
+  font-size: var(--text-xs, 12px);
   text-decoration: none;
   background: rgba(0,0,0,0.04);
   border: 1px solid rgba(0,0,0,0.10);
+
+  transition:
+    transform var(--dur-2, 180ms) var(--ease-out, ease),
+    background var(--dur-2, 180ms) var(--ease-out, ease),
+    border-color var(--dur-2, 180ms) var(--ease-out, ease);
+}
+.linkPill:hover {
+  transform: translateY(-1px);
+  background: rgba(0,0,0,0.055);
+  border-color: rgba(0,0,0,0.14);
+}
+.linkPill:active {
+  transform: translateY(0px);
 }
 
 .btnPrimary,
@@ -68,6 +107,16 @@
   font-weight: 900;
   cursor: pointer;
   border: 1px solid rgba(0,0,0,0.12);
+  min-height: 44px; /* tap-target sanity */
+  line-height: 1;
+  user-select: none;
+
+  transition:
+    transform var(--dur-2, 180ms) var(--ease-out, ease),
+    box-shadow var(--dur-2, 180ms) var(--ease-out, ease),
+    border-color var(--dur-2, 180ms) var(--ease-out, ease),
+    background var(--dur-2, 180ms) var(--ease-out, ease),
+    opacity var(--dur-2, 180ms) var(--ease-out, ease);
 }
 
 .btnPrimary {
@@ -75,25 +124,60 @@
   color: #fff;
   box-shadow: 0 10px 20px rgba(0,0,0,0.12);
 }
-.btnPrimary:disabled { opacity: 0.6; cursor: not-allowed; }
+.btnPrimary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 22px rgba(0,0,0,0.14);
+}
+.btnPrimary:active {
+  transform: translateY(0px);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.12);
+}
+.btnPrimary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
 .btnGhost {
   background: rgba(0,0,0,0.04);
   white-space: nowrap;
 }
-.btnGhost:disabled { opacity: 0.6; cursor: not-allowed; }
+.btnGhost:hover {
+  transform: translateY(-1px);
+  background: rgba(0,0,0,0.055);
+  border-color: rgba(0,0,0,0.16);
+}
+.btnGhost:active { transform: translateY(0px); }
+.btnGhost:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
 .btnSubtle {
   background: transparent;
   border-style: dashed;
-  opacity: 0.8;
+  opacity: 0.85;
   padding: 10px 12px;
 }
+.btnSubtle:hover {
+  transform: translateY(-1px);
+  opacity: 1;
+  border-color: rgba(0,0,0,0.18);
+  background: rgba(0,0,0,0.02);
+}
+.btnSubtle:active { transform: translateY(0px); }
 
+/* Keyboard focus: consistent + classy */
+.btnPrimary:focus-visible,
+.btnGhost:focus-visible,
+.btnSubtle:focus-visible,
+.linkPill:focus-visible,
+.metaPill:focus-visible,
+.pillBtn:focus-visible,
+.typeItem:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--alp-blue-18);
+  border-color: rgba(0,0,0,0.22);
+}
+
+/* Pill button (secondary CTA) */
 .pillBtn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2, 8px);
   border-radius: 999px;
   padding: 10px 14px;
   font-weight: 900;
@@ -101,10 +185,34 @@
   background: #fff;
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
   user-select: none;
+  cursor: pointer;
+  min-height: 40px;
+  line-height: 1;
+
+  transition:
+    transform var(--dur-2, 180ms) var(--ease-out, ease),
+    box-shadow var(--dur-2, 180ms) var(--ease-out, ease),
+    border-color var(--dur-2, 180ms) var(--ease-out, ease),
+    background var(--dur-2, 180ms) var(--ease-out, ease);
 }
+.pillBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.10);
+  border-color: rgba(0,0,0,0.18);
+}
+.pillBtn:active {
+  transform: translateY(0px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+}
+
 .pillBtn.subtle {
   background: rgba(0, 0, 0, 0.04);
   border: 1px solid rgba(0, 0, 0, 0.10);
+  box-shadow: none;
+}
+.pillBtn.subtle:hover {
+  background: rgba(0,0,0,0.055);
+  border-color: rgba(0,0,0,0.14);
   box-shadow: none;
 }
 
@@ -115,14 +223,28 @@
   height: 18px;
 }
 
+/* Reduced motion safety */
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .metaPill,
+  .linkPill,
+  .btnPrimary,
+  .btnGhost,
+  .btnSubtle,
+  .pillBtn,
+  .tabBtn {
+    transition: none !important;
+  }
+}
+
 /* -------------------------------------------------
-   Choose Bird page
+   Choose Bird page (portable components used by that page)
 ------------------------------------------------- */
 .birdGrid{
-  margin-top: 14px;
+  margin-top: var(--space-4, 14px);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: var(--space-3, 10px);
 }
 @media (max-width: 860px){
   .birdGrid{ grid-template-columns: 1fr; }
@@ -132,8 +254,14 @@
   text-align: left;
   width: 100%;
   cursor: pointer;
-  padding: 16px;
-  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+  padding: var(--space-4, 16px);
+  border-radius: 20px;
+
+  transition:
+    transform var(--dur-2, 180ms) var(--ease-out, ease),
+    box-shadow var(--dur-2, 180ms) var(--ease-out, ease),
+    border-color var(--dur-2, 180ms) var(--ease-out, ease),
+    background var(--dur-2, 180ms) var(--ease-out, ease);
 }
 .birdCard:hover{ transform: translateY(-2px); }
 .birdCard:active{ transform: translateY(0); box-shadow: var(--shadow-md); }
@@ -150,7 +278,7 @@
 
 .birdRow{
   display: flex;
-  gap: 12px;
+  gap: var(--space-3, 12px);
   align-items: center;
 }
 
@@ -175,9 +303,15 @@
 .birdTitle{
   font-weight: 900;
   letter-spacing: -0.01em;
-  line-height: 1.1;
+  line-height: var(--lh-tight, 1.15);
+  font-size: 14px;
 }
-.birdSub{ margin-top: 2px; }
+.birdSub{
+  margin-top: var(--space-1, 2px);
+  font-size: var(--text-xs, 12px);
+  opacity: 0.7;
+  font-weight: 850;
+}
 
 .birdBadge{
   position: absolute;
@@ -212,6 +346,7 @@
 
 /* -------------------------------------------------
    Dashboard: selects + toast + row layout + route thumb
+   Safety: these classes are reusable; any page wrapper belongs in base.css.
 ------------------------------------------------- */
 .dashSelect{
   border: 1px solid rgba(0,0,0,0.12);
@@ -219,8 +354,17 @@
   border-radius: 999px;
   padding: 8px 10px;
   font-weight: 900;
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
   outline: none;
+
+  transition:
+    transform var(--dur-2, 180ms) var(--ease-out, ease),
+    border-color var(--dur-2, 180ms) var(--ease-out, ease),
+    box-shadow var(--dur-2, 180ms) var(--ease-out, ease);
+}
+.dashSelect:focus-visible{
+  box-shadow: 0 0 0 4px var(--alp-blue-18);
+  border-color: rgba(0,0,0,0.22);
 }
 
 .dashToast{
@@ -234,16 +378,22 @@
   background: var(--ink);
   color: #fff;
   font-weight: 900;
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
   box-shadow: 0 12px 24px rgba(0,0,0,0.18);
   border: 1px solid rgba(255,255,255,0.22);
+
+  animation: toastIn var(--dur-3, 260ms) var(--ease-out, ease);
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 .dashRowTop{
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--space-3, 12px);
 }
 
 .dashRowMain{
@@ -263,6 +413,16 @@
   color: var(--ink);
   box-shadow: 0 10px 18px rgba(0,0,0,0.08);
   overflow: hidden;
+
+  transition:
+    transform var(--dur-2, 180ms) var(--ease-out, ease),
+    box-shadow var(--dur-2, 180ms) var(--ease-out, ease),
+    border-color var(--dur-2, 180ms) var(--ease-out, ease);
+}
+.routeThumb:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 12px 20px rgba(0,0,0,0.10);
+  border-color: rgba(0,0,0,0.14);
 }
 
 .routeThumbPct{
@@ -271,8 +431,8 @@
   bottom: 8px;
   font-size: 11px;
   font-weight: 900;
-  opacity: 0.75;
-  background: rgba(255,255,255,0.70);
+  opacity: 0.78;
+  background: rgba(255,255,255,0.72);
   border: 1px solid rgba(0,0,0,0.10);
   padding: 4px 8px;
   border-radius: 999px;
@@ -288,6 +448,11 @@
   100% { transform: scale(1.25); opacity: 0; }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .thumbPulse { animation: none !important; }
+  .dashToast { animation: none !important; }
+}
+
 @media (max-width: 680px){
   .dashRowTop{ flex-direction: column; }
   .routeThumb{ width: 100%; height: 86px; }
@@ -299,18 +464,28 @@
 .badgeGrid{
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 12px;
-  margin-top: 10px;
+  gap: var(--space-3, 12px);
+  margin-top: var(--space-3, 10px);
 }
 
 .badgeTile{
   display: flex;
-  gap: 12px;
+  gap: var(--space-3, 12px);
   align-items: flex-start;
-  padding: 12px;
+  padding: var(--space-3, 12px);
   border-radius: 18px;
   background: var(--soft);
   border: 1px solid rgba(0,0,0,0.06);
+
+  transition:
+    transform var(--dur-2, 180ms) var(--ease-out, ease),
+    border-color var(--dur-2, 180ms) var(--ease-out, ease),
+    box-shadow var(--dur-2, 180ms) var(--ease-out, ease);
+}
+.badgeTile:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px rgba(0,0,0,0.08);
+  border-color: rgba(0,0,0,0.08);
 }
 
 .badgeIcon{
@@ -329,21 +504,22 @@
   font-weight: 900;
   letter-spacing: -0.01em;
   font-size: 13px;
-  line-height: 1.2;
+  line-height: var(--lh-tight, 1.15);
 }
 
 .badgeSub{
-  margin-top: 4px;
-  opacity: 0.65;
+  margin-top: var(--space-1, 4px);
+  opacity: 0.68;
   font-weight: 750;
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
+  line-height: var(--lh-normal, 1.45);
 }
 
 .badgeMetaRow{
   display: flex;
-  gap: 8px;
+  gap: var(--space-2, 8px);
   align-items: center;
-  margin-top: 8px;
+  margin-top: var(--space-2, 8px);
   flex-wrap: wrap;
 }
 
@@ -353,7 +529,8 @@
   padding: 4px 10px;
   border-radius: 999px;
   font-weight: 900;
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
+  line-height: 1;
   background: rgba(255,255,255,0.70);
   border: 1px solid rgba(0,0,0,0.10);
 }
@@ -378,22 +555,32 @@
   background: rgba(255,255,255,0.7);
   border-radius: 999px;
   padding: 8px 12px;
-  font-weight: 700;
+  font-weight: 750;
   font-size: 13px;
   cursor: pointer;
-  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+  user-select: none;
+
+  transition:
+    transform var(--dur-2, 180ms) var(--ease-out, ease),
+    background var(--dur-2, 180ms) var(--ease-out, ease),
+    border-color var(--dur-2, 180ms) var(--ease-out, ease),
+    box-shadow var(--dur-2, 180ms) var(--ease-out, ease);
 }
 
 .tabBtn:hover {
   transform: translateY(-1px);
   background: rgba(255,255,255,0.95);
   border-color: rgba(0,0,0,0.14);
+  box-shadow: 0 10px 18px rgba(0,0,0,0.07);
 }
 
 .tabBtn.on {
   background: rgba(0,0,0,0.06);
   border-color: rgba(0,0,0,0.16);
+  box-shadow: none;
 }
+
+.tabBtn:active { transform: translateY(0px); }
 
 .tabCount { opacity: 0.65; font-weight: 800; }
 
@@ -419,7 +606,8 @@
   justify-content: center;
   border-radius: 12px;
   padding: 6px;
-  transition: transform 180ms ease, background 180ms ease;
+  transition: transform var(--dur-2, 180ms) var(--ease-out, ease),
+              background var(--dur-2, 180ms) var(--ease-out, ease);
 }
 .flokMarkLink:hover {
   background: rgba(0,0,0,0.04);
@@ -445,7 +633,14 @@
   display: inline-flex;
   padding: 6px;
   border-radius: 12px;
+  transition: transform var(--dur-2, 180ms) var(--ease-out, ease),
+              background var(--dur-2, 180ms) var(--ease-out, ease);
 }
+.topBrandLink:hover {
+  background: rgba(0,0,0,0.04);
+  transform: translateY(-1px);
+}
+
 .topBrandLogo {
   width: 100px;
   height: 100px;
@@ -467,11 +662,21 @@
   border-radius: 18px;
   padding: 10px 12px;
   box-shadow: 0 10px 18px rgba(0,0,0,0.08);
+
+  transition:
+    transform var(--dur-2, 180ms) var(--ease-out, ease),
+    box-shadow var(--dur-2, 180ms) var(--ease-out, ease),
+    border-color var(--dur-2, 180ms) var(--ease-out, ease);
+}
+.birdStatusCard:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 12px 20px rgba(0,0,0,0.10);
+  border-color: rgba(0,0,0,0.14);
 }
 
 .birdStatusRow{
   display:flex;
-  gap: 10px;
+  gap: var(--space-2, 10px);
   align-items:center;
 }
 
@@ -493,6 +698,7 @@
   display:block;
 }
 
+/* Tiny “state hint” treatments (portable) */
 .birdStatusThumb.sleeping{
   box-shadow: inset 0 0 0 2px rgba(88,80,236,0.25);
   background: rgba(88,80,236,0.08);
@@ -509,7 +715,7 @@
 .birdStatusTitle{
   font-weight: 900;
   letter-spacing: -0.01em;
-  line-height: 1.1;
+  line-height: var(--lh-tight, 1.15);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -531,22 +737,24 @@
   z-index: 30;
   left: 0;
   right: 0;
-  margin-top: 8px;
+  margin-top: var(--space-2, 8px);
   border-radius: 16px;
   background: var(--card);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
   padding: 6px;
-
   max-height: 320px;
   overflow-y: auto;
+
+  /* smoother scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
 }
 
 .typeEmpty {
   padding: 10px 12px;
   opacity: 0.7;
   font-weight: 850;
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
 }
 
 .typeItem {
@@ -561,18 +769,30 @@
   cursor: pointer;
   font-weight: 900;
   letter-spacing: -0.01em;
+  line-height: 1.15;
+
+  transition:
+    background var(--dur-1, 120ms) var(--ease-out, ease),
+    border-color var(--dur-1, 120ms) var(--ease-out, ease),
+    transform var(--dur-1, 120ms) var(--ease-out, ease);
 }
 
-.typeItem:hover { background: rgba(0, 0, 0, 0.04); }
+.typeItem:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
 
 .typeItem.active {
   background: var(--alp-blue-30);
   border-color: rgba(0, 0, 0, 0.10);
 }
 
+.typeItem:active {
+  transform: translateY(1px);
+}
+
 .typeSelected {
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
   opacity: 0.7;
-  margin-top: 8px;
+  margin-top: var(--space-2, 8px);
   font-weight: 850;
 }
