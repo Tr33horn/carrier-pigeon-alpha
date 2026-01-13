@@ -1,3 +1,5 @@
+/* base.css: tokens + layout + typography (no component specifics) */
+
 @import "tailwindcss";
 
 /* -------------------------------------------------

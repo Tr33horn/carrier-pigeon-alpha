@@ -1,3 +1,10 @@
+/* cards.css: reusable UI components (cards, buttons, forms, pills, typeahead)
+   Rules:
+   - No global layout or page wrappers
+   - No map or timeline styles
+   - Components must be portable across pages
+*/
+
 /* -------------------------------------------------
    Cards / surfaces
 ------------------------------------------------- */

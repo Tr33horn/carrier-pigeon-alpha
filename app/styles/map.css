@@ -1,3 +1,10 @@
+/* map.css: Leaflet map, route, and marker visuals
+   Rules:
+   - Single source of truth for pigeon markers + animations
+   - No cards, buttons, or generic UI styles
+   - Map tooltips and status glyphs live here
+*/
+
 @import "leaflet/dist/leaflet.css";
 
 /* -------------------------------------------------
