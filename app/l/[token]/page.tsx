@@ -4,6 +4,10 @@ import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import TimelineRail from "./_components/TimelineRail";
+import { buildTimelineItems, pickCurrentTimelineKey } from "./_lib/letterStatusTimeline";
+import MapSection from "./_components/MapSection";
+
 const MapView = dynamic(() => import("./MapView"), { ssr: false });
 
 type Letter = {
@@ -39,7 +43,7 @@ type Checkpoint = {
   name: string;
   at: string;
   geo_text?: string;
-  kind?: "checkpoint" | "sleep"; // ✅ add this
+  kind?: "checkpoint" | "sleep";
 };
 
 type BadgeItem = {
@@ -84,16 +88,6 @@ type Flight = {
 };
 
 type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels" | "ink-sketch";
-
-type TimelineKind = "checkpoint" | "sleep" | "day" | "delivered";
-
-type TimelineItem = {
-  key: string;
-  name: string;
-  at: string; // ISO
-  kind: TimelineKind;
-};
-
 type BirdType = "pigeon" | "snipe" | "goose";
 
 /* ------------------- helpers ------------------- */
@@ -172,23 +166,6 @@ function formatUtc(iso: string) {
 /** Back-compat name */
 function formatUtcFallback(iso: string) {
   return formatUtc(iso);
-}
-
-function dayLabelLocal(iso: string) {
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function timeLabelLocal(iso: string) {
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "";
-  return d.toLocaleString();
 }
 
 /** ✅ Short, nice-looking “Opens at …” line */
@@ -421,160 +398,10 @@ function ConfettiBurst({ show }: { show: boolean }) {
   );
 }
 
-/* ---------- timeline rail (grouped by day + sleep blocks) ---------- */
-function RailTimeline({
-  items,
-  now,
-  currentKey,
-  birdName,
-  final,
-}: {
-  items: TimelineItem[];
-  now: Date;
-  currentKey: string | null;
-  birdName: string;
-  final: boolean;
-}) {
-  const [popped, setPopped] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    const updates: Record<string, boolean> = {};
-    let changed = false;
-
-    for (const it of items) {
-      if (it.kind === "day") continue;
-      const isPast = final || new Date(it.at).getTime() <= now.getTime();
-      if (isPast && !popped[it.key]) {
-        updates[it.key] = true;
-        changed = true;
-      }
-    }
-
-    if (changed) setPopped((prev) => ({ ...prev, ...updates }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, now, final]);
-
-  return (
-    <div className="rail">
-      <div className="railLine" />
-      <div className="railList">
-        {items.map((it) => {
-          if (it.kind === "day") {
-            return (
-              <div key={it.key} style={{ margin: "10px 0 2px 0" }}>
-                <div
-                  className="metaPill faint"
-                  style={{
-                    display: "inline-flex",
-                    background: "rgba(0,0,0,0.03)",
-                    border: "1px solid rgba(0,0,0,0.08)",
-                    padding: "6px 10px",
-                    fontSize: 11,
-                  }}
-                >
-                  {it.name}
-                </div>
-              </div>
-            );
-          }
-
-          const isDeliveredRow = it.kind === "delivered";
-          const isSleep = it.kind === "sleep";
-
-          const isPast = final || isDeliveredRow || new Date(it.at).getTime() <= now.getTime();
-          const shouldPop = popped[it.key] && isPast;
-          const isCurrent = currentKey === it.key;
-
-          return (
-            <div key={it.key} className="railItem">
-              <div className={`railNode ${isPast ? "past" : ""} ${shouldPop ? "pop" : ""}`}>
-                <span
-                  className="railDot"
-                  style={
-                    isSleep
-                      ? {
-                          background: isPast ? "rgba(88,80,236,0.95)" : "rgba(88,80,236,0.75)",
-                          boxShadow: "0 0 0 7px rgba(88,80,236,0.12)",
-                          color: "#fff",
-                        }
-                      : isDeliveredRow
-                      ? {
-                          background: "rgba(34,197,94,0.95)",
-                          boxShadow: "0 0 0 7px rgba(34,197,94,0.12)",
-                          color: "#fff",
-                        }
-                      : undefined
-                  }
-                >
-                  {isSleep ? "🌙" : isDeliveredRow ? "✓" : isPast ? "✓" : ""}
-                </span>
-              </div>
-
-              <div
-                className={`railCard ${isPast ? "past" : ""} ${isCurrent ? "current" : ""}`}
-                style={
-                  isSleep
-                    ? { background: "rgba(88,80,236,0.08)", borderColor: "rgba(88,80,236,0.35)" }
-                    : isDeliveredRow
-                    ? { background: "rgba(34,197,94,0.10)", borderColor: "rgba(34,197,94,0.40)" }
-                    : undefined
-                }
-              >
-                {isCurrent && (
-                  <div className="pigeonTag livePulseRow" style={isSleep ? { background: "rgb(88,80,236)" } : undefined}>
-                    <span className="livePulseDot" aria-hidden />
-                    <span>{isSleep ? `${birdName} is sleeping` : `${birdName} is here`}</span>
-                  </div>
-                )}
-
-                <div className="railTitleRow">
-                  <div className="railTitle">{it.name}</div>
-                  <div className="railTime">{timeLabelLocal(it.at)}</div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function rarityLabel(r?: string) {
   if (r === "legendary") return "Legendary";
   if (r === "rare") return "Rare";
   return "Common";
-}
-
-/**
- * ✅ Sleep checkpoint detection:
- * - ONLY trust explicit sleep signals (no fuzzy “slept / wakes at”)
- * - Guard by a UTC hour window so midday doesn’t become “sleep”
- */
-const SLEEP_START_HOUR = 22; // 10pm (UTC-based guard)
-const SLEEP_END_HOUR = 6; // 6am (UTC-based guard)
-
-function isWithinSleepWindowUTC(iso: string) {
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return false;
-  const h = d.getUTCHours();
-  return h >= SLEEP_START_HOUR || h < SLEEP_END_HOUR;
-}
-
-function isSleepCheckpoint(cp: Checkpoint, atISO: string) {
-  const id = (cp.id || "").toLowerCase();
-  const geo = (cp.geo_text || "").toLowerCase();
-  const name = (cp.name || "").toLowerCase();
-
-  const explicitSleep =
-    id.startsWith("sleep-") ||
-    geo === "sleeping" ||
-    name === "sleeping" ||
-    name.startsWith("sleep ");
-
-  if (!explicitSleep) return false;
-
-  return isWithinSleepWindowUTC(atISO);
 }
 
 export default function LetterStatusPage() {
@@ -634,10 +461,12 @@ export default function LetterStatusPage() {
       return;
     }
 
-    if (  saved === "carto-positron" ||
-  saved === "carto-voyager" ||
-  saved === "carto-positron-nolabels" ||
-  saved === "ink-sketch") {
+    if (
+      saved === "carto-positron" ||
+      saved === "carto-voyager" ||
+      saved === "carto-positron-nolabels" ||
+      saved === "ink-sketch"
+    ) {
       setMapStyle(saved);
     }
   }, []);
@@ -794,7 +623,6 @@ export default function LetterStatusPage() {
   }, [flight, letter, effectiveEtaISO, now]);
 
   const progressPctFloor = useMemo(() => {
-    // ✅ prevents “25% reached” from lighting early due to rounding/jitter
     if (!Number.isFinite(progress)) return 0;
     return Math.max(0, Math.min(100, Math.floor(progress * 100)));
   }, [progress]);
@@ -874,123 +702,30 @@ export default function LetterStatusPage() {
   }, [flight?.tooltip_text, canceled, uiDelivered, currentlyOver]);
 
   const showLive = !archived && !canceled && !uiDelivered;
-
   const timelineFinal = uiDelivered || archived || canceled;
 
-  /**
-   * ✅ Timeline items:
-   * - Always include "Departed" at sent_at
-   * - Only include checkpoints/sleeps if they are <= now (unless final)
-   * - Append delivered row on delivery
-   * - Group by day
-   */
   const timelineItems = useMemo(() => {
-    const nowT = now.getTime();
-
-    const safeSentAt = letter?.sent_at && String(letter.sent_at).trim() ? String(letter.sent_at) : null;
-
-    // ✅ FIXED: the old code accidentally used optional-call syntax.
-    const firstCp: any = (checkpointsByTime as any[])[0] || null;
-    const firstCpAt: string | null = firstCp ? String(firstCp._atAdj || firstCp.at || "").trim() : null;
-
-    const departedAt = safeSentAt || firstCpAt || new Date().toISOString();
-
-    // "Departed" — tweak label (and never weird)
-    const departedName = letter?.origin_name ? `Departed · ${letter.origin_name}` : "Departed";
-
-    const base: TimelineItem[] = [];
-
-    // Add departed (always visible)
-    base.push({
-      key: "departed",
-      name: departedName,
-      at: departedAt,
-      kind: "checkpoint",
+    if (!letter) return [];
+    return buildTimelineItems({
+      now,
+      letter,
+      checkpointsByTime,
+      timelineFinal,
+      uiDelivered,
+      canceled,
+      effectiveEtaISO,
     });
+  }, [now, letter, checkpointsByTime, timelineFinal, uiDelivered, canceled, effectiveEtaISO]);
 
-    // Add past/current checkpoints only (unless final)
-    for (const cp of checkpointsByTime as any[]) {
-      const atISO = cp._atAdj || cp.at;
-      const t = new Date(atISO).getTime();
-      const isPastOrCurrent = Number.isFinite(t) ? t <= nowT : true;
-
-      if (!timelineFinal && !isPastOrCurrent) continue;
-
-      base.push({
-        key: `${cp.kind || "checkpoint"}-${cp.id}`,
-        name: cp.name,
-        at: atISO,
-        kind: (cp.kind === "sleep" ? "sleep" : "checkpoint"),
-      });
-    }
-
-    // Delivered row
-    if (uiDelivered && !canceled) {
-      base.push({
-        key: "delivered",
-        name: "Delivered ✅",
-        at: effectiveEtaISO || new Date().toISOString(),
-        kind: "delivered",
-      });
-    }
-
-    // Sort (just in case departed got a funky time)
-    base.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
-
-    // Group by day (local)
-    const grouped: TimelineItem[] = [];
-    let lastDay = "";
-
-    for (const it of base) {
-      const d = dayLabelLocal(it.at);
-      if (d && d !== lastDay) {
-        grouped.push({ key: `day-${d}`, name: d, at: it.at, kind: "day" });
-        lastDay = d;
-      }
-      grouped.push(it);
-    }
-
-    return grouped;
-  }, [now, letter?.sent_at, letter?.origin_name, checkpointsByTime, timelineFinal, uiDelivered, canceled, effectiveEtaISO]);
-
-  // ✅ when sleeping, current highlight prefers the latest sleep event
   const currentTimelineKey = useMemo(() => {
-    if (uiDelivered || canceled) return null;
-
-    const realItems = timelineItems.filter((it) => it.kind !== "day");
-    if (!realItems.length) return null;
-
-    const nowT = now.getTime();
-
-    if (sleeping) {
-      let bestSleep: TimelineItem | null = null;
-      let bestT = -Infinity;
-
-      for (const it of realItems) {
-        if (it.kind !== "sleep") continue;
-        const t = new Date(it.at).getTime();
-        if (t <= nowT && t >= bestT) {
-          bestT = t;
-          bestSleep = it;
-        }
-      }
-
-      if (bestSleep) return bestSleep.key;
-    }
-
-    let bestKey: string | null = null;
-    let bestT = -Infinity;
-
-    for (const it of realItems) {
-      const t = new Date(it.at).getTime();
-      if (t <= nowT && t >= bestT) {
-        bestT = t;
-        bestKey = it.key;
-      }
-    }
-
-    return bestKey ?? realItems[0].key;
-  }, [timelineItems, now, uiDelivered, canceled, sleeping]);
+    return pickCurrentTimelineKey({
+      items: timelineItems,
+      now,
+      sleeping,
+      uiDelivered,
+      canceled,
+    });
+  }, [timelineItems, now, sleeping, uiDelivered, canceled]);
 
   const etaTextUTC = useMemo(() => {
     if (!letter) return "";
@@ -1279,30 +1014,33 @@ export default function LetterStatusPage() {
                 >
                   No Labels
                 </button>
+
                 <button
-  type="button"
-  className={`mapStyleBtn ${mapStyle === "ink-sketch" ? "on" : ""}`}
-  onClick={() => setMapStyle("ink-sketch")}
-  aria-pressed={mapStyle === "ink-sketch"}
->
-  Ink
-</button>
+                  type="button"
+                  className={`mapStyleBtn ${mapStyle === "ink-sketch" ? "on" : ""}`}
+                  onClick={() => setMapStyle("ink-sketch")}
+                  aria-pressed={mapStyle === "ink-sketch"}
+                >
+                  Ink
+                </button>
               </div>
             </div>
 
-            <div style={{ marginTop: 12 }}>
-              <MapView
-                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-                progress={progress}
-                tooltipText={mapTooltip}
-                mapStyle={mapStyle}
-                markerMode={markerMode}
-                // ✅ Dev-only sleep overlay inputs only when live (prevents weird overlays in terminal states)
-                sentAtISO={showLive ? letter.sent_at : undefined}
-                etaAtISO={showLive ? effectiveEtaISO : undefined}
-              />
-            </div>
+<MapSection
+  mapStyle={mapStyle}
+  setMapStyle={setMapStyle}
+  origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+  dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+  progress={progress}
+  progressPctFloor={progressPctFloor}
+  tooltipText={mapTooltip}
+  markerMode={markerMode}
+  showLive={showLive}
+  sentAtISO={letter.sent_at}
+  etaAtISO={effectiveEtaISO}
+  currentlyOver={currentlyOver}
+  milestones={milestones}
+/>
 
             <div style={{ marginTop: 14 }}>
               <div className="bar">
@@ -1344,7 +1082,7 @@ export default function LetterStatusPage() {
                 </div>
               </div>
 
-              <RailTimeline items={timelineItems} now={now} currentKey={currentTimelineKey} birdName={birdName} final={timelineFinal} />
+              <TimelineRail items={timelineItems} now={now} currentKey={currentTimelineKey} birdName={birdName} final={timelineFinal} />
             </div>
 
             <div className="card">
