@@ -1,0 +1,585 @@
+/* -------------------------------------------------
+   Cards / surfaces
+------------------------------------------------- */
+.card {
+  background: var(--card);
+  border-radius: 20px;
+  padding: 16px;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border);
+}
+
+.cardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.soft {
+  background: var(--soft);
+  border-radius: 18px;
+  padding: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* -------------------------------------------------
+   Pills / links / buttons
+------------------------------------------------- */
+.metaPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 850;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.10);
+}
+.metaPill.faint { opacity: 0.75; }
+
+.link { text-decoration: underline; font-weight: 900; }
+
+.linkPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-weight: 900;
+  text-decoration: none;
+  background: rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.10);
+}
+
+.btnPrimary,
+.btnGhost,
+.btnSubtle {
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-weight: 900;
+  cursor: pointer;
+  border: 1px solid rgba(0,0,0,0.12);
+}
+
+.btnPrimary {
+  background: var(--ink);
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.12);
+}
+.btnPrimary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btnGhost {
+  background: rgba(0,0,0,0.04);
+  white-space: nowrap;
+}
+.btnGhost:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btnSubtle {
+  background: transparent;
+  border-style: dashed;
+  opacity: 0.8;
+  padding: 10px 12px;
+}
+
+.pillBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 900;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  background: #fff;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+  user-select: none;
+}
+.pillBtn.subtle {
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  box-shadow: none;
+}
+
+.ico {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+}
+
+/* -------------------------------------------------
+   Choose Bird page
+------------------------------------------------- */
+.birdGrid{
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 860px){
+  .birdGrid{ grid-template-columns: 1fr; }
+}
+
+.birdCard{
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  padding: 16px;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+.birdCard:hover{ transform: translateY(-2px); }
+.birdCard:active{ transform: translateY(0); box-shadow: var(--shadow-md); }
+
+.birdCard.on{
+  border-color: rgba(0,0,0,0.18);
+  box-shadow:
+    0 14px 30px rgba(0,0,0,0.14),
+    inset 0 0 0 2px var(--alp-blue-30);
+  background:
+    linear-gradient(135deg, var(--alp-blue-18), rgba(255,255,255,0) 55%),
+    var(--card);
+}
+
+.birdRow{
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.birdThumb{
+  width: 100px;
+  height: 100px;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.08);
+  background: rgba(0,0,0,0.035);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.birdThumb img{
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.birdTitle{
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+.birdSub{ margin-top: 2px; }
+
+.birdBadge{
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 900;
+  background: var(--ink);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.18);
+  border: 1px solid rgba(255,255,255,0.25);
+}
+
+.birdRec{
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  background: var(--alp-blue-30);
+  border: 1px solid rgba(0,0,0,0.10);
+  box-shadow: 0 6px 14px rgba(0,0,0,0.10);
+}
+
+/* -------------------------------------------------
+   Dashboard: selects + toast + row layout + route thumb
+------------------------------------------------- */
+.dashSelect{
+  border: 1px solid rgba(0,0,0,0.12);
+  background: rgba(255,255,255,0.75);
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-weight: 900;
+  font-size: 12px;
+  outline: none;
+}
+
+.dashToast{
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-weight: 900;
+  font-size: 12px;
+  box-shadow: 0 12px 24px rgba(0,0,0,0.18);
+  border: 1px solid rgba(255,255,255,0.22);
+}
+
+.dashRowTop{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.dashRowMain{
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.routeThumb{
+  width: 160px;
+  height: 74px;
+  border-radius: 16px;
+  border: 1px solid rgba(0,0,0,0.10);
+  background: rgba(0,0,0,0.035);
+  display: grid;
+  place-items: center;
+  position: relative;
+  color: var(--ink);
+  box-shadow: 0 10px 18px rgba(0,0,0,0.08);
+  overflow: hidden;
+}
+
+.routeThumbPct{
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  font-size: 11px;
+  font-weight: 900;
+  opacity: 0.75;
+  background: rgba(255,255,255,0.70);
+  border: 1px solid rgba(0,0,0,0.10);
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.dashBrand {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+}
+.dashLogo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.thumbPulse{
+  transform-origin: center;
+  animation: thumbPulse 1.5s ease-out infinite;
+}
+@keyframes thumbPulse{
+  0%   { transform: scale(0.65); opacity: 0.55; }
+  70%  { transform: scale(1.25); opacity: 0; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+
+@media (max-width: 680px){
+  .dashRowTop{ flex-direction: column; }
+  .routeThumb{ width: 100%; height: 86px; }
+}
+
+/* -------------------------------------------------
+   Badges (Status / Collectibles)
+------------------------------------------------- */
+.badgeGrid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.badgeTile{
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: 18px;
+  background: var(--soft);
+  border: 1px solid rgba(0,0,0,0.06);
+}
+
+.badgeIcon{
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(0,0,0,0.08);
+  background: rgba(0,0,0,0.03);
+  flex: 0 0 auto;
+  font-size: 20px;
+}
+
+.badgeTitle{
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.badgeSub{
+  margin-top: 4px;
+  opacity: 0.65;
+  font-weight: 750;
+  font-size: 12px;
+}
+
+.badgeMetaRow{
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.badgeRarity{
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 900;
+  font-size: 12px;
+  background: rgba(255,255,255,0.70);
+  border: 1px solid rgba(0,0,0,0.10);
+}
+.badgeRarity.common{ background: rgba(255,255,255,0.70); }
+.badgeRarity.rare{
+  background: var(--alp-blue-18);
+  border-color: rgba(0,0,0,0.10);
+}
+.badgeRarity.legendary{
+  background: rgba(22,163,74,0.10);
+  border-color: rgba(22,163,74,0.30);
+  box-shadow: 0 10px 18px rgba(22,163,74,0.10);
+}
+
+/* -------------------------------------------------
+   Tabs + micro-animations
+------------------------------------------------- */
+.tabsPill { padding: 6px; }
+
+.tabBtn {
+  border: 1px solid rgba(0,0,0,0.08);
+  background: rgba(255,255,255,0.7);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+}
+
+.tabBtn:hover {
+  transform: translateY(-1px);
+  background: rgba(255,255,255,0.95);
+  border-color: rgba(0,0,0,0.14);
+}
+
+.tabBtn.on {
+  background: rgba(0,0,0,0.06);
+  border-color: rgba(0,0,0,0.16);
+}
+
+.tabCount { opacity: 0.65; font-weight: 800; }
+
+@keyframes tabFadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.tabStage { animation: tabFadeUp 220ms ease; }
+
+@keyframes badgePop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+.badgePop { animation: badgePop 520ms ease; }
+
+/* -------------------------------------------------
+   Brand marks (top + footer)
+------------------------------------------------- */
+.flokMarkLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  padding: 6px;
+  transition: transform 180ms ease, background 180ms ease;
+}
+.flokMarkLink:hover {
+  background: rgba(0,0,0,0.04);
+  transform: translateY(-1px);
+}
+
+.flokMark {
+  display: block;
+  height: 22px;
+  width: auto;
+  opacity: 0.75;
+}
+@media (min-width: 640px) {
+  .flokMark { height: 24px; }
+}
+
+.topBrand {
+  display: flex;
+  justify-content: center;
+  margin: 0px 0 0px;
+}
+.topBrandLink {
+  display: inline-flex;
+  padding: 6px;
+  border-radius: 12px;
+}
+.topBrandLogo {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+  display: block;
+}
+@media (max-width: 480px) {
+  .topBrand { margin: 8px 0 12px; }
+  .topBrandLogo { width: 60px; height: 60px; }
+}
+
+/* -------------------------------------------------
+   Bird status mini card (status page)
+------------------------------------------------- */
+.birdStatusCard{
+  display:inline-flex;
+  background: rgba(255,255,255,0.70);
+  border: 1px solid rgba(0,0,0,0.10);
+  border-radius: 18px;
+  padding: 10px 12px;
+  box-shadow: 0 10px 18px rgba(0,0,0,0.08);
+}
+
+.birdStatusRow{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+}
+
+.birdStatusThumb{
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.10);
+  background: rgba(0,0,0,0.035);
+  overflow: hidden;
+  display:grid;
+  place-items:center;
+  flex: 0 0 auto;
+}
+.birdStatusThumb img{
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display:block;
+}
+
+.birdStatusThumb.sleeping{
+  box-shadow: inset 0 0 0 2px rgba(88,80,236,0.25);
+  background: rgba(88,80,236,0.08);
+}
+.birdStatusThumb.delivered{
+  box-shadow: inset 0 0 0 2px rgba(22,163,74,0.25);
+  background: rgba(22,163,74,0.08);
+}
+.birdStatusThumb.canceled{
+  box-shadow: inset 0 0 0 2px rgba(220,38,38,0.25);
+  background: rgba(220,38,38,0.08);
+}
+
+.birdStatusTitle{
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+/* -------------------------------------------------
+   CityTypeahead (global)
+------------------------------------------------- */
+.typeahead { position: relative; }
+
+.typeLabel {
+  font-weight: 900;
+  display: block;
+}
+
+.typeMenu {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  margin-top: 8px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.typeEmpty {
+  padding: 10px 12px;
+  opacity: 0.7;
+  font-weight: 850;
+  font-size: 12px;
+}
+
+.typeItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+.typeItem:hover { background: rgba(0, 0, 0, 0.04); }
+
+.typeItem.active {
+  background: var(--alp-blue-30);
+  border-color: rgba(0, 0, 0, 0.10);
+}
+
+.typeSelected {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-top: 8px;
+  font-weight: 850;
+}

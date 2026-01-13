@@ -1,0 +1,307 @@
+@import "leaflet/dist/leaflet.css";
+
+/* -------------------------------------------------
+   Map (Leaflet)
+------------------------------------------------- */
+.mapShell{
+  position: relative;
+  height: 340px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(0,0,0,0.10);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.08);
+}
+
+.map{ height: 100%; width: 100%; }
+
+.mapUiOverlay{
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  z-index: 999;
+  opacity: 0.12;
+  mix-blend-mode: multiply;
+}
+
+/* Leaflet divIcon className targets these */
+.pigeonMarker,
+.routeMarker{
+  background: transparent;
+  border: none;
+  filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.18));
+}
+
+/* -------------------------------------------------
+   Pigeon marker (flight / sleep / canceled)
+------------------------------------------------- */
+.pigeonPulseWrap {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+}
+
+.pigeonDot {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #111;
+  border: 2px solid #fff;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.18);
+  z-index: 3;
+  position: relative;
+}
+
+.pigeonPulseRing {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 2px solid rgba(17,17,17,0.65);
+  transform: scale(0.35);
+  opacity: 0;
+  animation: pigeon-pulse 1.6s ease-out infinite;
+  z-index: 1;
+}
+.pigeonPulseRing.ring2 { animation-delay: 0.8s; }
+
+/* Only pulse while flying (.live gets added by your marker mode) */
+.pigeonMarker:not(.live) .pigeonPulseRing { display: none; }
+
+/* Sleep ring element (your MapView injects <span class="pigeonSleepRing"></span>) */
+.pigeonSleepRing{
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 2px solid rgba(217, 45, 32, 0.55);
+  transform: scale(0.60);
+  opacity: 0;
+  z-index: 2;      /* above flight rings, below dot */
+  display: none;   /* only in sleep mode */
+}
+
+/* Moon glyph (optional; MapView injects <span class="pigeonMoon">🌙</span>) */
+.pigeonMarker .pigeonMoon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 160ms ease, transform 160ms ease;
+  pointer-events: none;
+}
+
+/* Sleep mode */
+.pigeonMarker.sleep .pigeonPulseRing { display: none !important; }
+.pigeonMarker.sleep .pigeonSleepRing{
+  display: block;
+  animation: sleepyHeartbeat 2.6s ease-in-out infinite;
+}
+.pigeonMarker.sleep .pigeonDot{
+  background: #d92d20;
+  border-color: #fff;
+  opacity: 0.35; /* keeps moon visible if you use it */
+}
+.pigeonMarker.sleep .pigeonMoon{
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Canceled mode */
+.pigeonMarker.canceled .pigeonPulseRing,
+.pigeonMarker.canceled .pigeonSleepRing{
+  display: none !important;
+  animation: none !important;
+}
+.pigeonMarker.canceled .pigeonDot{
+  background: #d92d20;
+  border-color: #fff;
+  box-shadow: 0 10px 18px rgba(217,45,32,0.18);
+}
+.pigeonMarker.canceled .pigeonPulseWrap::after{
+  content: "✕";
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  background: #fff;
+  color: #d92d20;
+  border: 1px solid rgba(0,0,0,0.10);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.14);
+}
+
+/* -------------------------------------------------
+   Marker keyframes
+------------------------------------------------- */
+@keyframes pigeon-pulse {
+  0%   { transform: scale(0.35); opacity: 0.0; }
+  20%  { opacity: 0.55; }
+  100% { transform: scale(1.0); opacity: 0.0; }
+}
+
+/* A calm double-beat: bump...bump...rest */
+@keyframes sleepyHeartbeat {
+  0%   { transform: scale(0.60); opacity: 0.00; }
+  12%  { opacity: 0.55; }
+  20%  { transform: scale(0.82); opacity: 0.28; }
+  32%  { transform: scale(0.76); opacity: 0.20; }
+  40%  { transform: scale(0.90); opacity: 0.22; }
+  100% { transform: scale(1.06); opacity: 0.00; }
+}
+
+/* -------------------------------------------------
+   Origin/destination markers
+------------------------------------------------- */
+.originDot span {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #111;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+}
+
+.destPin {
+  position: relative;
+  color: #111;
+  filter: drop-shadow(0 6px 10px rgba(0,0,0,0.25));
+}
+.destPin svg {
+  display: block;
+  width: 22px;
+  height: 28px;
+}
+.map-dark .destPin { color: #fff; }
+.destPin::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  opacity: 0.25;
+}
+
+/* -------------------------------------------------
+   Tooltip
+------------------------------------------------- */
+.pigeonTooltip.leaflet-tooltip {
+  background: rgba(204, 239, 253, 0.3);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 999px;
+  padding: 8px 12px;
+  box-shadow: 0 12px 18px rgba(0, 0, 0, 0.14);
+  color: #121212;
+  font-family: "Bricolage Grotesque", system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  font-weight: 900;
+  font-size: 12px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+.pigeonTooltip.leaflet-tooltip::before {
+  border-top-color: rgba(204, 239, 253, 0.3);
+}
+
+.pigeonTooltipRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pigeonLiveDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #121212;
+  box-shadow: 0 0 0 0 rgba(204, 239, 253, 0.85);
+  animation: pulseBlue 1.4s ease-out infinite;
+  display: inline-block;
+}
+
+/* sleeping tooltip dot */
+.pigeonLiveDot.sleep {
+  background: #d92d20;
+  box-shadow: none;
+  animation: none;
+}
+
+/* canceled tooltip look */
+.pigeonTooltip.canceled.leaflet-tooltip{
+  background: rgba(217,45,32,0.10);
+  border-color: rgba(217,45,32,0.30);
+}
+.pigeonTooltip.canceled.leaflet-tooltip::before{
+  border-top-color: rgba(217,45,32,0.10);
+}
+
+@keyframes pulseBlue {
+  0% { box-shadow: 0 0 0 0 rgba(204, 239, 253, 0.75); transform: scale(1); }
+  70% { box-shadow: 0 0 0 10px rgba(204, 239, 253, 0); transform: scale(1.05); }
+  100% { box-shadow: 0 0 0 0 rgba(204, 239, 253, 0); transform: scale(1); }
+}
+
+/* -------------------------------------------------
+   Map style switcher
+------------------------------------------------- */
+.mapStyleRow{
+  display:inline-flex;
+  gap:8px;
+  padding:6px;
+  border-radius:999px;
+  background: rgba(0,0,0,0.04);
+  border:1px solid rgba(0,0,0,0.10);
+}
+
+.mapStyleBtn{
+  border:1px solid rgba(0,0,0,0.12);
+  background: rgba(255,255,255,0.75);
+  border-radius:999px;
+  padding:8px 10px;
+  font-weight:900;
+  font-size:12px;
+  cursor:pointer;
+}
+
+.mapStyleBtn.on{
+  background: var(--ink);
+  color:#fff;
+  border-color: rgba(0,0,0,0.22);
+}
+
+/* small alignment tweak */
+.subRow .metaPill{ align-self: flex-start; }
+
+/* skull glyph helpers (if you use them) */
+.pigeonMarker .pigeonSkull {
+  width: 18px;
+  height: 18px;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  line-height: 18px;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.25));
+  transform: translateY(-1px);
+}
+
+.pigeonTooltipRow .pigeonStatusGlyph {
+  display: inline-flex;
+  margin-right: 8px;
+  transform: translateY(1px);
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.22));
+}
