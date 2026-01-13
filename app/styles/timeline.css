@@ -24,8 +24,8 @@
   height: 100%;
   background: var(--ink);
   /* feels nicer than linear */
-  transition: width 0.45s cubic-bezier(.2,.85,.2,1);
-  will-change: width;
+  transition: width 0.45s var(--ease-out, cubic-bezier(.2,.85,.2,1));
+  /* avoid will-change unless you're animating constantly */
 }
 
 .barTick {
@@ -38,36 +38,37 @@
 }
 
 .barMeta {
-  margin-top: 8px;
+  margin-top: var(--space-2, 8px);
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 12px;
+  gap: var(--space-3, 12px);
 }
 
 /* -------------------------------------------------
    Chips (Status milestones)
 ------------------------------------------------- */
 .chips {
-  margin-top: 10px;
+  margin-top: var(--space-3, 10px);
   display: flex;
-  gap: 8px;
+  gap: var(--space-2, 8px);
   flex-wrap: wrap;
 }
 
 .chip {
   display: inline-flex;
-  gap: 8px;
+  gap: var(--space-2, 8px);
   align-items: center;
   padding: 8px 12px;
   border-radius: 999px;
   border: 1px solid rgba(0, 0, 0, 0.10);
   background: rgba(255, 255, 255, 0.70);
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
   font-weight: 900;
   opacity: 0.55;
   /* crisper “pill” feel */
   letter-spacing: -0.005em;
+  line-height: 1;
 }
 
 .chip.on {
@@ -85,7 +86,7 @@
 .liveStack{
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2, 6px);
   flex: 0 0 auto;
   align-self: flex-start;
 }
@@ -93,14 +94,14 @@
 .liveWrap {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2, 8px);
   padding: 8px 12px;
   border-radius: 999px;
   background: var(--ink);
   border: 1px solid rgba(0, 0, 0, 0.20);
   color: #fff;
   font-weight: 900;
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
   /* tiny “premium” crispness */
   -webkit-font-smoothing: antialiased;
 }
@@ -113,9 +114,8 @@
   border-radius: 999px;
   background: var(--ok-green);
   box-shadow: 0 0 0 0 var(--ok-green-55);
-  animation: livePulseGreen 1.15s cubic-bezier(.2,.85,.2,1) infinite;
+  animation: livePulseGreen 1.15s var(--ease-out, cubic-bezier(.2,.85,.2,1)) infinite;
   display: inline-block;
-  will-change: transform, box-shadow;
 }
 
 .liveWrap.sleep { background: rgba(217, 45, 32, 0.92); }
@@ -132,7 +132,7 @@
 ------------------------------------------------- */
 .routeBanner {
   border-radius: 24px;
-  padding: 18px;
+  padding: var(--space-5, 18px);
   background: var(--card);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
@@ -163,27 +163,27 @@
 .bannerTop {
   display: flex;
   justify-content: space-between;
-  gap: 14px;
+  gap: var(--space-4, 14px);
   align-items: flex-start;
   position: relative;
   z-index: 1;
 }
 
 .routeHeadline {
-  font-size: 34px;
+  font-size: var(--text-xl, 34px);
   font-weight: 900;
   letter-spacing: -0.035em;
-  margin-top: 8px;
+  margin-top: var(--space-2, 8px);
   line-height: 1.05;
 }
 
 .arrow { opacity: 0.35; margin: 0 8px; }
 
 .subRow{
-  margin-top: 10px;
+  margin-top: var(--space-3, 10px);
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--space-3, 10px);
   align-items: flex-start;
 }
 
@@ -196,32 +196,32 @@
 }
 
 .etaTime {
-  font-size: 14px;
+  font-size: var(--text-md, 14px);
   font-weight: 900;
   letter-spacing: -0.01em;
-  margin-top: 4px;
+  margin-top: var(--space-1, 4px);
   line-height: 1.2;
 }
 
 .etaSub {
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
   font-weight: 900;
   opacity: 0.7;
-  margin-top: 2px;
+  margin-top: var(--space-1, 2px);
 }
 
 .statsRow {
-  margin-top: 14px;
+  margin-top: var(--space-4, 14px);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: var(--space-3, 10px);
   position: relative;
   z-index: 1;
 }
 
 .stat {
   display: flex;
-  gap: 10px;
+  gap: var(--space-3, 10px);
   align-items: center;
   padding: 12px 12px;
   border-radius: 18px;
@@ -238,17 +238,17 @@
 }
 
 .statValue {
-  font-size: 14px;
+  font-size: var(--text-md, 14px);
   font-weight: 900;
   letter-spacing: -0.01em;
-  margin-top: 2px;
+  margin-top: var(--space-1, 2px);
 }
 
 .grid {
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
-  gap: 14px;
-  margin-top: 14px;
+  gap: var(--space-4, 14px);
+  margin-top: var(--space-4, 14px);
 }
 
 @media (max-width: 980px) {
@@ -261,7 +261,7 @@
 /* -------------------------------------------------
    Timeline rail (Status page)
 ------------------------------------------------- */
-.rail { position: relative; margin-top: 14px; padding-left: 16px; }
+.rail { position: relative; margin-top: var(--space-4, 14px); padding-left: 16px; }
 
 .railLine {
   position: absolute;
@@ -273,12 +273,12 @@
   border-radius: 999px;
 }
 
-.railList { display: grid; gap: 10px; }
+.railList { display: grid; gap: var(--space-3, 10px); }
 
 .railItem {
   display: grid;
   grid-template-columns: 28px 1fr;
-  gap: 10px;
+  gap: var(--space-3, 10px);
   align-items: stretch;
 }
 
@@ -315,7 +315,7 @@
 }
 
 /* reward pop: less toy-ish, more “micro-reward” */
-.railNode.pop .railDot { animation: pop 420ms cubic-bezier(.2,.85,.2,1) both; }
+.railNode.pop .railDot { animation: pop 420ms var(--ease-out, cubic-bezier(.2,.85,.2,1)) both; }
 @keyframes pop {
   0%   { transform: scale(0.78); }
   55%  { transform: scale(1.18); }
@@ -328,7 +328,10 @@
   padding: 12px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: rgba(0, 0, 0, 0.035);
-  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  transition:
+    transform var(--dur-2, 180ms) var(--ease-out, ease),
+    box-shadow var(--dur-2, 180ms) var(--ease-out, ease),
+    border-color var(--dur-2, 180ms) var(--ease-out, ease);
 }
 
 /* done */
@@ -356,8 +359,8 @@
   box-shadow: 0 10px 20px rgba(22,163,74,0.12);
 }
 
-/* subtle “hover acknowledgement” on desktop */
-@media (hover:hover){
+/* subtle “hover acknowledgement” on desktop (touch-safe) */
+@media (hover: hover) and (pointer: fine) {
   .railCard:hover{
     transform: translateY(-1px);
     border-color: rgba(0,0,0,0.12);
@@ -372,18 +375,19 @@
 .railTitleRow {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3, 12px);
   align-items: baseline;
 }
 
 .railTitle {
   font-weight: 900;
   letter-spacing: -0.01em;
-  font-size: 13px;
+  font-size: var(--text-sm, 13px);
+  line-height: var(--lh-tight, 1.15);
 }
 
 .railTime {
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
   font-weight: 850;
   opacity: 0.65;
   white-space: nowrap;
@@ -396,7 +400,7 @@
   right: 10px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2, 8px);
   padding: 6px 10px;
   border-radius: 999px;
   background: var(--ok-green);
@@ -414,7 +418,7 @@
 .livePulseRow{
   display:flex;
   align-items:center;
-  gap:8px;
+  gap: var(--space-2, 8px);
 }
 
 .livePulseDot{
@@ -435,7 +439,6 @@
   opacity:.5;
   transform:scale(.6);
   animation: livePulse 1.4s ease-out infinite;
-  will-change: transform, opacity;
 }
 
 @keyframes livePulse{
@@ -449,20 +452,20 @@
 ------------------------------------------------- */
 .subject {
   font-weight: 900;
-  margin-bottom: 10px;
-  font-size: 14px;
+  margin-bottom: var(--space-3, 10px);
+  font-size: var(--text-md, 14px);
   letter-spacing: -0.01em;
 }
 
 .body {
   white-space: pre-wrap;
-  line-height: 1.55;
-  font-size: 14px;
+  line-height: var(--lh-relaxed, 1.6);
+  font-size: var(--text-md, 14px);
   font-weight: 650;
 }
 
 .token {
-  margin-top: 14px;
+  margin-top: var(--space-4, 14px);
   opacity: 0.55;
   font-size: 11px;
   font-weight: 900;
@@ -471,7 +474,7 @@
 .sealCard {
   position: relative;
   border-radius: 18px;
-  padding: 18px;
+  padding: var(--space-5, 18px);
   background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.40));
   overflow: hidden;
   box-shadow: var(--shadow-md);
@@ -491,7 +494,7 @@
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--space-4, 14px);
 }
 
 /* Wax seal: image-only override (your “final form”) */
@@ -520,18 +523,18 @@
   object-fit: contain;
 }
 
-.sealTitle { font-size: 14px; font-weight: 900; margin-bottom: 4px; }
+.sealTitle { font-size: var(--text-md, 14px); font-weight: 900; margin-bottom: var(--space-1, 4px); }
 
 .sealSub {
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
   opacity: 0.75;
   font-weight: 850;
 }
 
 .sealHint {
-  font-size: 12px;
+  font-size: var(--text-xs, 12px);
   opacity: 0.6;
-  margin-top: 6px;
+  margin-top: var(--space-2, 6px);
   font-weight: 850;
 }
 
@@ -551,7 +554,7 @@
 }
 
 .seal.crack {
-  animation: crack 520ms cubic-bezier(.2,.85,.2,1) forwards;
+  animation: crack 520ms var(--ease-out, cubic-bezier(.2,.85,.2,1)) forwards;
   transform-origin: 50% 60%;
 }
 
@@ -561,7 +564,7 @@
   100% { transform: scale(0.98) rotate(3deg) translateY(10px); opacity: 0; filter: blur(2px); }
 }
 
-.bodyReveal { animation: reveal 420ms cubic-bezier(.2,.85,.2,1) forwards; }
+.bodyReveal { animation: reveal 420ms var(--ease-out, cubic-bezier(.2,.85,.2,1)) forwards; }
 @keyframes reveal {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -574,6 +577,9 @@
   pointer-events: none;
   overflow: hidden;
   border-radius: 20px;
+
+  /* perf: keeps confetti repaints inside the card */
+  contain: paint;
 }
 
 .confetti-bit {
@@ -586,7 +592,7 @@
   background: rgba(18, 18, 18, 0.9);
   transform: translateX(-50%);
   animation: confettiFall 1100ms ease-out forwards;
-  will-change: transform, opacity;
+  /* avoid will-change spam unless you see jank */
 }
 
 .confetti-bit:nth-child(3n) {
@@ -624,11 +630,18 @@
    Reduced motion safety (timeline + confetti)
 ------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
-  .barFill { transition: none; }
-  .liveDot { animation: none !important; box-shadow: none; }
-  .livePulseDot::after { animation: none !important; opacity: 0; }
+  .barFill { transition: none !important; }
+
+  .liveDot { animation: none !important; box-shadow: none !important; }
+  .livePulseDot::after { animation: none !important; opacity: 0 !important; }
+
   .railNode.pop .railDot { animation: none !important; }
+
   .seal.crack { animation: none !important; }
   .bodyReveal { animation: none !important; }
-  .confetti-bit { animation: none !important; opacity: 0; }
+
+  .confetti-bit { animation: none !important; opacity: 0 !important; }
+
+  /* also disable rail hover lift transitions */
+  .railCard { transition: none !important; }
 }
