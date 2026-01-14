@@ -798,7 +798,7 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="muted" style={{ marginTop: 6 }}>
-                          📍 <strong>{geoText}</strong>
+                          ✔️ <strong>{geoText}</strong>
                         </div>
                       </div>
 
