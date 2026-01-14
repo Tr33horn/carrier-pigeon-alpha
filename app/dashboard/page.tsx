@@ -28,7 +28,7 @@ type DashboardLetter = {
   eta_at: string;
 
   delivered: boolean;
-  progress: number;
+  progress: number; // ✅ server truth (sleep-aware)
 
   current_lat: number | null;
   current_lon: number | null;
@@ -49,6 +49,9 @@ type DashboardLetter = {
   canceled?: boolean;
 
   direction?: "sent" | "incoming";
+
+  // ✅ optional: added by dashboard API (mirrors status API)
+  current_speed_kmh?: number;
 };
 
 type Filter = "all" | "inflight" | "delivered";
@@ -120,25 +123,10 @@ function isCanceledLetter(l: DashboardLetter | null | undefined) {
   return false;
 }
 
-function progressFromTimes(opts: {
-  nowMs: number;
-  sentISO: string;
-  etaISO: string | null | undefined;
-  delivered: boolean;
-  canceled: boolean;
-}) {
-  const { nowMs, sentISO, etaISO, delivered, canceled } = opts;
-
-  if (canceled) return 0;
-  if (delivered) return 1;
-
-  const sentMs = parseMs(sentISO);
-  const etaMs = parseMs(etaISO ?? null);
-
-  if (sentMs == null || etaMs == null) return 0;
-  if (etaMs <= sentMs) return 1;
-
-  return clamp01((nowMs - sentMs) / (etaMs - sentMs));
+function birdLabel(bird?: DashboardLetter["bird"]) {
+  if (bird === "snipe") return "Great Snipe";
+  if (bird === "goose") return "Canada Goose";
+  return "Homing Pigeon";
 }
 
 /* ---------- Mini route thumbnail (no Leaflet) ---------- */
@@ -494,7 +482,6 @@ export default function DashboardPage() {
   return (
     <main className="pageBg">
       <div className="wrap">
-        {/* ✅ Option A: desktop header pill, mobile full-width CTA */}
         <style>{`
           .dashWriteMobile { display: none; }
           .dashWriteDesktop { display: inline-flex; }
@@ -506,7 +493,6 @@ export default function DashboardPage() {
           }
         `}</style>
 
-        {/* ✅ Top-centered brand mark (separate from the header card) */}
         <div className="topBrand">
           <a href="/" aria-label="FLOK home" title="Home" className="topBrandLink">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -516,7 +502,6 @@ export default function DashboardPage() {
 
         <div className="card">
           <div className="cardHead">
-            {/* ✅ Header text only now (no logo here) */}
             <div>
               <div className="kicker">Mailbox</div>
               <h1 className="h1">Dashboard</h1>
@@ -524,7 +509,6 @@ export default function DashboardPage() {
                 Load your mailbox by entering your email. Sent + Incoming are separate tabs now (no more déjà vu).
               </p>
 
-              {/* ✅ Mobile full-width CTA */}
               <div className="dashWriteMobile">
                 <a href="/new" className="btnPrimary">
                   + Write a letter
@@ -532,7 +516,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* ✅ Desktop pill CTA */}
             <a href="/new" className="linkPill dashWriteDesktop">
               + Write a letter
             </a>
@@ -721,14 +704,21 @@ export default function DashboardPage() {
                 const isCanceled = isCanceledLetter(l); // should always be false now, but safe
                 const etaIsoResolved = l.eta_utc_iso || l.eta_at;
 
-                const derivedProgress = progressFromTimes({
-                  nowMs: now.getTime(),
-                  sentISO: l.sent_at,
-                  etaISO: etaIsoResolved,
-                  delivered: !!l.delivered,
-                  canceled: isCanceled,
-                });
+                // ✅ Progress: SERVER TRUTH (sleep-aware). Fallback only if missing/NaN.
+                const serverProgress =
+                  typeof l.progress === "number" && Number.isFinite(l.progress) ? clamp01(l.progress) : null;
 
+                const fallbackProgress = (() => {
+                  if (isCanceled) return 0;
+                  if (l.delivered) return 1;
+                  const sentMs = parseMs(l.sent_at);
+                  const etaMs = parseMs(etaIsoResolved);
+                  if (sentMs == null || etaMs == null) return 0;
+                  if (etaMs <= sentMs) return 1;
+                  return clamp01((now.getTime() - sentMs) / (etaMs - sentMs));
+                })();
+
+                const derivedProgress = serverProgress ?? fallbackProgress;
                 const pct = Math.round(derivedProgress * 100);
 
                 const etaAbsMs = parseMs(etaIsoResolved);
@@ -754,7 +744,11 @@ export default function DashboardPage() {
                   l.current_lat != null && l.current_lon != null ? { lat: l.current_lat, lon: l.current_lon } : null;
 
                 const geoText =
-                  isCanceled ? "Canceled" : l.delivered ? "Delivered" : (l.current_over_text && l.current_over_text.trim()) || "somewhere over the U.S.";
+                  isCanceled
+                    ? "Canceled"
+                    : l.delivered
+                    ? "Delivered"
+                    : (l.current_over_text && l.current_over_text.trim()) || "somewhere over the U.S.";
 
                 const sentUtc = (l.sent_utc_text && l.sent_utc_text.trim()) || formatUtcFallback(l.sent_at);
                 const etaUtc = (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(etaIsoResolved);
@@ -774,6 +768,12 @@ export default function DashboardPage() {
 
                 const dirLabel = dirTag === "incoming" ? "INCOMING" : dirTag === "both" ? "SENT + INCOMING" : "SENT";
                 const shouldPulseBadge = badgePulseKey === l.public_token;
+
+                const birdName = birdLabel(l.bird);
+                const speedShown =
+                  typeof l.current_speed_kmh === "number" && Number.isFinite(l.current_speed_kmh)
+                    ? Math.max(0, Math.round(l.current_speed_kmh))
+                    : null;
 
                 return (
                   <div key={`${l.public_token}-${l.direction ?? "x"}`} className="card">
@@ -813,6 +813,16 @@ export default function DashboardPage() {
                     </div>
 
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <div className="metaPill" title={birdName}>
+                        🐦 <strong>{birdName}</strong>
+                      </div>
+
+                      {speedShown != null && (
+                        <div className="metaPill" title="Current speed">
+                          ⚡ <strong>{speedShown}</strong> km/h
+                        </div>
+                      )}
+
                       <div className="metaPill">
                         {statusEmoji} <strong>{statusLabel}</strong>
                       </div>
@@ -884,7 +894,7 @@ export default function DashboardPage() {
                       <a href={statusPath} className="link">
                         View status
                       </a>
-                      <a href="/write" className="link">
+                      <a href="/new" className="link">
                         Write another
                       </a>
                     </div>
