@@ -265,7 +265,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     sleepLabel: "Crow",
     designNotes: "One-at-a-time bird with urgency mechanics",
     enabled: false, // not selectable yet (until birds.ts supports it)
-    visible: true, // still shows in "Coming soon"
+    visible: false, // still shows in "Coming soon"
     availabilityType: "singleton",
     minDistanceKm: 0,
     maxDistanceKm: null,
