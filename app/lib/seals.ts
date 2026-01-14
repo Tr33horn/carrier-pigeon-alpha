@@ -46,6 +46,14 @@ export const SEAL_CATALOG: SealRow[] = [
     rarity: "uncommon",
     selectable: true,
   },
+    {
+    id: "seal_sun",
+    label: "Sun",
+    imgSrc: "/seals/seal-sun.png",
+    rarity: "uncommon",
+    selectable: true,
+  },
+  
   {
     id: "seal_flokflame",
     label: "FLOK Flame",
