@@ -1157,13 +1157,21 @@
   overflow: hidden; /* clip flap + texture */
 }
 
+/* Envelope flap — point aligns behind the wax seal */
 .letterCard .sealCard::before{
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 64px;
+
+  /* was 64px */
+  height: 140px;
+
   background: linear-gradient(135deg, rgba(0,0,0,0.06), rgba(255,255,255,0.95));
-  clip-path: polygon(0 0, 50% 62%, 100% 0);
+
+  /* was: polygon(0 0, 50% 62%, 100% 0) */
+  /* push the point DOWN so it lands under the wax */
+  clip-path: polygon(0 0, 50% 86%, 100% 0);
+
   border-bottom: 1px solid rgba(0,0,0,0.08);
   z-index: 1;
   pointer-events: none;
@@ -1212,9 +1220,11 @@
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 64px;
+
+  height: 140px;
   background: linear-gradient(135deg, rgba(0,0,0,0.06), rgba(255,255,255,0.95));
-  clip-path: polygon(0 0, 50% 62%, 100% 0);
+  clip-path: polygon(0 0, 50% 86%, 100% 0);
+
   border-bottom: 1px solid rgba(0,0,0,0.08);
   z-index: 1;
   pointer-events: none;
