@@ -7,6 +7,7 @@ import TimelineRail from "./_components/TimelineRail";
 import { buildTimelineItems, pickCurrentTimelineKey } from "./_lib/letterStatusTimeline";
 import MapSection from "./_components/MapSection";
 
+import { BIRD_RULES, normalizeBird } from "@/app/lib/birds";
 
 type Letter = {
   id: string;
@@ -22,7 +23,7 @@ type Letter = {
   dest_lat: number;
   dest_lon: number;
   distance_km: number;
-  speed_kmh: number;
+  speed_kmh: number; // legacy (we no longer trust this for bird rules)
   sent_at: string;
   eta_at: string;
 
@@ -89,22 +90,6 @@ type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels" |
 type BirdType = "pigeon" | "snipe" | "goose";
 
 /* ------------------- helpers ------------------- */
-
-function inferBird(letter: Letter | null): BirdType {
-  const raw = String((letter as any)?.bird || "").toLowerCase();
-  if (raw === "pigeon" || raw === "snipe" || raw === "goose") return raw as BirdType;
-
-  const sp = Number((letter as any)?.speed_kmh);
-  if (Number.isFinite(sp) && sp >= 80) return "snipe";
-  if (Number.isFinite(sp) && sp <= 60) return "goose";
-  return "pigeon";
-}
-
-function birdLabel(b: BirdType) {
-  if (b === "snipe") return "Great Snipe";
-  if (b === "goose") return "Canada Goose";
-  return "Homing Pigeon";
-}
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
@@ -227,7 +212,13 @@ function Ico({
     case "x":
       return (
         <svg {...common}>
-          <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M18 6 6 18M6 6l12 12"
+            stroke="currentColor"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       );
     case "moon":
@@ -244,7 +235,12 @@ function Ico({
     case "pin":
       return (
         <svg {...common}>
-          <path d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round" />
+          <path
+            d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
           <path d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z" stroke="currentColor" strokeWidth="2.4" />
         </svg>
       );
@@ -331,7 +327,7 @@ function BirdStatusCard({
         </div>
 
         <div style={{ minWidth: 0 }}>
-          <div className="birdStatusTitle">{birdLabel(bird)}</div>
+          <div className="birdStatusTitle">{BIRD_RULES[bird].label}</div>
           <div className="muted" style={{ marginTop: 2 }}>
             {label}
           </div>
@@ -631,19 +627,28 @@ export default function LetterStatusPage() {
     return formatCountdown(msLeft);
   }, [letter, effectiveEtaISO, now]);
 
+  // ✅ Canonical bird: from DB field (no more speed-based guessing)
+  const bird: BirdType = useMemo(() => {
+    return normalizeBird(letter?.bird);
+  }, [letter?.bird]);
+
+  const birdName = useMemo(() => BIRD_RULES[bird].label, [bird]);
+
+  // ✅ Speed shown in UI:
+  // - if canceled/delivered/archived/sleeping => 0 (bird is not moving)
+  // - else prefer server-provided current speed
+  // - else fall back to rule speed (CODE), not DB
   const currentSpeedKmh = useMemo(() => {
     if (canceled) return 0;
+    if (!letter) return 0;
+    if (uiDelivered || archived || sleeping) return 0;
 
     if (typeof flight?.current_speed_kmh === "number" && Number.isFinite(flight.current_speed_kmh)) {
       return Math.max(0, flight.current_speed_kmh);
     }
 
-    if (!letter) return 0;
-    if (uiDelivered || archived || sleeping) return 0;
-
-    const sp = Number(letter.speed_kmh);
-    return Number.isFinite(sp) ? sp : 0;
-  }, [canceled, letter, flight?.current_speed_kmh, uiDelivered, archived, sleeping]);
+    return Number.isFinite(BIRD_RULES[bird]?.speedKmh) ? BIRD_RULES[bird].speedKmh : 0;
+  }, [canceled, letter, uiDelivered, archived, sleeping, flight?.current_speed_kmh, bird]);
 
   const milestones = useMemo(() => {
     if (!letter) return [];
@@ -802,9 +807,6 @@ export default function LetterStatusPage() {
     );
   }
 
-  const bird = inferBird(letter);
-  const birdName = birdLabel(bird);
-
   const archivedLabel = archivedAtISO ? `Archived • ${new Date(archivedAtISO).toLocaleString()}` : "Archived";
   const canceledLabel = canceledAtISO ? `Canceled • ${new Date(canceledAtISO).toLocaleString()}` : "Canceled";
 
@@ -848,7 +850,9 @@ export default function LetterStatusPage() {
                         <span className="liveText">{sleeping ? "SLEEPING" : "LIVE"}</span>
                       </div>
                       <div className="liveSub">
-                        {sleeping ? `Wakes at ${flight?.sleep_local_text || "soon"}` : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
+                        {sleeping
+                          ? `Wakes at ${flight?.sleep_local_text || "soon"}`
+                          : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
                       </div>
                     </div>
 
@@ -862,7 +866,10 @@ export default function LetterStatusPage() {
                     </div>
                   </>
                 ) : canceled ? (
-                  <div className="metaPill" style={{ borderColor: "rgba(220,38,38,0.35)", background: "rgba(220,38,38,0.06)" }}>
+                  <div
+                    className="metaPill"
+                    style={{ borderColor: "rgba(220,38,38,0.35)", background: "rgba(220,38,38,0.06)" }}
+                  >
                     <span className="ico" style={{ color: "rgb(220,38,38)" }}>
                       <Ico name="x" />
                     </span>
@@ -980,24 +987,24 @@ export default function LetterStatusPage() {
           <div className="token">Token: {letter.public_token}</div>
         </div>
 
-<div className="grid">
-  <div className="card">
-    <MapSection
-      mapStyle={mapStyle}
-      setMapStyle={setMapStyle}
-      origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-      dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-      progress={progress}
-      progressPctFloor={progressPctFloor}
-      tooltipText={mapTooltip}
-      markerMode={markerMode}
-      showLive={showLive}
-      sentAtISO={letter.sent_at}
-      etaAtISO={effectiveEtaISO}
-      currentlyOver={currentlyOver}
-      milestones={milestones}
-    />
-  </div>
+        <div className="grid">
+          <div className="card">
+            <MapSection
+              mapStyle={mapStyle}
+              setMapStyle={setMapStyle}
+              origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+              dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+              progress={progress}
+              progressPctFloor={progressPctFloor}
+              tooltipText={mapTooltip}
+              markerMode={markerMode}
+              showLive={showLive}
+              sentAtISO={letter.sent_at}
+              etaAtISO={effectiveEtaISO}
+              currentlyOver={currentlyOver}
+              milestones={milestones}
+            />
+          </div>
 
           <div className="stack">
             <div className="card">
@@ -1074,4 +1081,3 @@ export default function LetterStatusPage() {
     </main>
   );
 }
-

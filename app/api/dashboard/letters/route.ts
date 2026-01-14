@@ -2,6 +2,18 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "../../../lib/supabaseServer";
 import { checkpointGeoText } from "../../../lib/geo";
 
+// ✅ Shared sleep logic (single source of truth)
+import {
+  offsetMinutesFromLon,
+  isSleepingAt,
+  awakeMsBetween,
+  etaFromRequiredAwakeMs,
+  initialSleepSkipUntilUtcMs,
+} from "@/app/lib/flightSleep";
+
+// ✅ Single source of truth for bird rules
+import { BIRD_RULES, normalizeBird, type BirdType } from "@/app/lib/birds";
+
 /* -------------------------------------------------
    Email + formatting
 ------------------------------------------------- */
@@ -30,154 +42,13 @@ function safeParseMs(iso: unknown): number | null {
   return Number.isFinite(t) ? t : null;
 }
 
-/* -------------------------------------------------
-   Sleep / flight realism helpers (same as status API)
-------------------------------------------------- */
-
-type SleepConfig = {
-  sleepStartHour: number; // local hour 0-23
-  sleepEndHour: number; // local hour 0-23
-};
-
-const SLEEP: SleepConfig = { sleepStartHour: 22, sleepEndHour: 6 }; // 10pm -> 6am
-
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
-/**
- * Rough “local time” offset from longitude (good vibe > perfect geography)
- * ✅ do NOT clamp to US-only offsets.
- * Use world-ish bounds: UTC-12..UTC+14
- */
-function offsetMinutesFromLon(lon: number) {
-  if (!Number.isFinite(lon)) return 0;
-  const hours = Math.round(lon / 15);
-  return clamp(hours * 60, -12 * 60, 14 * 60);
-}
-
-function toLocalMs(utcMs: number, offsetMin: number) {
-  return utcMs + offsetMin * 60_000;
-}
-function toUtcMs(localMs: number, offsetMin: number) {
-  return localMs - offsetMin * 60_000;
-}
-
-function isSleepingAt(utcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
-  const localMs = toLocalMs(utcMs, offsetMin);
-  const d = new Date(localMs);
-  const h = d.getUTCHours();
-  const wraps = cfg.sleepStartHour > cfg.sleepEndHour; // 22 -> 6 wraps
-  if (!wraps) return h >= cfg.sleepStartHour && h < cfg.sleepEndHour;
-  return h >= cfg.sleepStartHour || h < cfg.sleepEndHour;
-}
-
-function nextBoundaryUtcMs(utcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
-  const localMs = toLocalMs(utcMs, offsetMin);
-  const d = new Date(localMs);
-  const y = d.getUTCFullYear();
-  const m = d.getUTCMonth();
-  const day = d.getUTCDate();
-
-  const wraps = cfg.sleepStartHour > cfg.sleepEndHour;
-
-  const mkLocal = (yy: number, mm: number, dd: number, hh: number) =>
-    Date.UTC(yy, mm, dd, hh, 0, 0, 0);
-
-  const todaySleepStartLocal = mkLocal(y, m, day, cfg.sleepStartHour);
-  const todaySleepEndLocal = mkLocal(y, m, day, cfg.sleepEndHour);
-  const tomorrowStartLocal = mkLocal(y, m, day + 1, cfg.sleepStartHour);
-  const tomorrowEndLocal = mkLocal(y, m, day + 1, cfg.sleepEndHour);
-
-  const candidatesLocal: number[] = [];
-  candidatesLocal.push(Date.UTC(y, m, day + 1, 0, 0, 0, 0));
-  candidatesLocal.push(todaySleepStartLocal);
-
-  if (wraps) candidatesLocal.push(tomorrowEndLocal);
-  else candidatesLocal.push(todaySleepEndLocal);
-
-  candidatesLocal.push(tomorrowStartLocal);
-  candidatesLocal.push(tomorrowEndLocal);
-
-  const candidatesUtc = candidatesLocal
-    .map((lm) => toUtcMs(lm, offsetMin))
-    .filter((t) => t > utcMs + 1);
-
-  if (!candidatesUtc.length) return utcMs + 3600_000;
-  return Math.min(...candidatesUtc);
-}
-
-function awakeMsBetween(startUtcMs: number, endUtcMs: number, offsetMin: number, cfg: SleepConfig = SLEEP) {
-  if (endUtcMs <= startUtcMs) return 0;
-
-  let t = startUtcMs;
-  let awake = 0;
-
-  let guard = 0;
-  while (t < endUtcMs && guard < 100000) {
-    guard++;
-    const sleeping = isSleepingAt(t, offsetMin, cfg);
-    const next = Math.min(nextBoundaryUtcMs(t, offsetMin, cfg), endUtcMs);
-    if (!sleeping) awake += next - t;
-    t = next;
-  }
-
-  return awake;
-}
-
-function etaFromRequiredAwakeMs(
-  sentUtcMs: number,
-  requiredAwakeMs: number,
-  offsetMin: number,
-  cfg: SleepConfig = SLEEP
-) {
-  let t = sentUtcMs;
-  let remaining = requiredAwakeMs;
-
-  let guard = 0;
-  while (remaining > 0 && guard < 100000) {
-    guard++;
-
-    const sleeping = isSleepingAt(t, offsetMin, cfg);
-    const next = nextBoundaryUtcMs(t, offsetMin, cfg);
-
-    if (!Number.isFinite(next) || next <= t) {
-      return sentUtcMs + requiredAwakeMs;
-    }
-
-    if (sleeping) {
-      t = next;
-      continue;
-    }
-
-    const chunk = Math.min(remaining, next - t);
-    remaining -= chunk;
-    t += chunk;
-  }
-
-  if (remaining > 0) return sentUtcMs + requiredAwakeMs;
-
-  return t;
-}
-
 /* -------------------------------------------------
-   Bird rules (match status API behavior)
+   Query helpers
 ------------------------------------------------- */
-
-type BirdType = "pigeon" | "snipe" | "goose";
-
-function normalizeBird(raw: unknown): BirdType {
-  const b = String(raw || "").toLowerCase();
-  if (b === "snipe") return "snipe";
-  if (b === "goose") return "goose";
-  return "pigeon";
-}
-
-const BIRD_RULES: Record<BirdType, { ignoresSleep: boolean }> = {
-  pigeon: { ignoresSleep: false },
-  goose: { ignoresSleep: false },
-  snipe: { ignoresSleep: true },
-};
 
 type Direction = "sent" | "incoming";
 type RawLetter = any;
@@ -198,9 +69,80 @@ function matchesQueryIncoming(l: RawLetter, q: string) {
   return hay.includes(q);
 }
 
+/* -------------------------------------------------
+   Skip-initial-sleep-window helpers (match status API)
+------------------------------------------------- */
+
+/**
+ * Treat [sent..skipUntil) as awake if the send happened during the bird's sleep window.
+ * This matches your /api/letters/[token] behavior.
+ */
+function computeInitialSleepSkip(sentMs: number, offsetMin: number, bird: BirdType) {
+  const rule = BIRD_RULES[bird];
+  if (rule.ignoresSleep) return { skipUntilMs: null as number | null };
+
+  const wake = initialSleepSkipUntilUtcMs(sentMs, offsetMin, rule.sleepCfg);
+  if (!wake || !Number.isFinite(wake) || wake <= sentMs) return { skipUntilMs: null };
+
+  return { skipUntilMs: wake };
+}
+
+function awakeMsBetweenWithSkip(
+  startMs: number,
+  endMs: number,
+  offsetMin: number,
+  bird: BirdType,
+  skipUntilMs: number | null
+) {
+  if (endMs <= startMs) return 0;
+
+  const rule = BIRD_RULES[bird];
+  if (rule.ignoresSleep) return endMs - startMs;
+
+  // If we’re in the initial skip window, count it as awake time.
+  if (skipUntilMs && startMs < skipUntilMs) {
+    const a = startMs;
+    const b = Math.min(endMs, skipUntilMs);
+    const awakeInSkip = Math.max(0, b - a);
+
+    if (endMs <= skipUntilMs) return awakeInSkip;
+
+    return awakeInSkip + awakeMsBetween(skipUntilMs, endMs, offsetMin, rule.sleepCfg);
+  }
+
+  return awakeMsBetween(startMs, endMs, offsetMin, rule.sleepCfg);
+}
+
+function etaFromRequiredAwakeMsWithSkip(
+  sentMs: number,
+  requiredAwakeMs: number,
+  offsetMin: number,
+  bird: BirdType,
+  skipUntilMs: number | null
+) {
+  const rule = BIRD_RULES[bird];
+  if (requiredAwakeMs <= 0) return sentMs;
+  if (rule.ignoresSleep) return sentMs + requiredAwakeMs;
+
+  // Spend the “initial awake budget” first (skip window), then run sleep-aware ETA from skipUntil.
+  if (skipUntilMs && sentMs < skipUntilMs) {
+    const initialAwakeBudget = skipUntilMs - sentMs;
+    if (requiredAwakeMs <= initialAwakeBudget) return sentMs + requiredAwakeMs;
+
+    const remaining = requiredAwakeMs - initialAwakeBudget;
+    return etaFromRequiredAwakeMs(skipUntilMs, remaining, offsetMin, rule.sleepCfg);
+  }
+
+  return etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin, rule.sleepCfg);
+}
+
+/* -------------------------------------------------
+   View model computation (dashboard rows)
+------------------------------------------------- */
+
 function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction: Direction) {
-  const bird = normalizeBird(l.bird);
-  const ignoresSleep = BIRD_RULES[bird].ignoresSleep;
+  const bird: BirdType = normalizeBird(l.bird);
+  const rule = BIRD_RULES[bird];
 
   const sentMs = safeParseMs(l.sent_at);
   const etaStoredMs = safeParseMs(l.eta_at);
@@ -211,27 +153,34 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
   // ✅ If canceled, freeze calculations at cancel time (not "now")
   const calcNowMs = canceled ? Math.min(realNowMs, canceledAtMs!) : realNowMs;
 
-  const originLon = Number(l.origin_lon);
-  const offsetMin = offsetMinutesFromLon(originLon);
+  // ✅ Use MIDPOINT lon like status/send do (consistency > “perfection”)
+  const oLon = Number(l.origin_lon);
+  const dLon = Number(l.dest_lon);
+  const hasOLon = Number.isFinite(oLon);
+  const hasDLon = Number.isFinite(dLon);
+  const midLon = hasOLon && hasDLon ? (oLon + dLon) / 2 : hasOLon ? oLon : hasDLon ? dLon : 0;
+  const offsetMin = offsetMinutesFromLon(midLon);
 
   const distanceKm = Number(l.distance_km);
-  const speedKmh = Number(l.speed_kmh);
+  const hasDistance = Number.isFinite(distanceKm) && distanceKm > 0;
 
-  const hasFlightInputs =
-    sentMs != null &&
-    Number.isFinite(distanceKm) &&
-    distanceKm > 0 &&
-    Number.isFinite(speedKmh) &&
-    speedKmh > 0;
+  // ✅ Speed and inefficiency come from birds.ts (NOT DB)
+  const speedKmhEffective = Number(rule.speedKmh);
+  const ineff = Number(rule.inefficiency);
 
-  const requiredAwakeMs = hasFlightInputs ? (distanceKm / speedKmh) * 3600_000 : 0;
+  const hasFlightInputs = sentMs != null && hasDistance && Number.isFinite(speedKmhEffective) && speedKmhEffective > 0;
+
+  const requiredAwakeMs = hasFlightInputs ? (distanceKm / speedKmhEffective) * ineff * 3600_000 : 0;
+
+  // ✅ Skip-initial-sleep-window policy (same as status API)
+  const { skipUntilMs } =
+    sentMs != null && Number.isFinite(sentMs) ? computeInitialSleepSkip(sentMs, offsetMin, bird) : { skipUntilMs: null as number | null };
 
   // ✅ Compute adjusted ETA if we safely can; otherwise fall back to stored eta_at.
   let etaAdjustedMs: number | null = null;
+
   if (sentMs != null && requiredAwakeMs > 0) {
-    etaAdjustedMs = ignoresSleep
-      ? sentMs + requiredAwakeMs
-      : etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin);
+    etaAdjustedMs = etaFromRequiredAwakeMsWithSkip(sentMs, requiredAwakeMs, offsetMin, bird, skipUntilMs);
   } else if (etaStoredMs != null) {
     etaAdjustedMs = etaStoredMs;
   }
@@ -242,17 +191,31 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
   // ✅ Delivered is false if canceled (even if time would have passed)
   const delivered = canceled ? false : calcNowMs >= etaAdjustedMs;
 
-  // ✅ sleeping flag for dashboard (never sleeping if canceled)
-  const sleeping = canceled ? false : !delivered && !ignoresSleep ? isSleepingAt(calcNowMs, offsetMin) : false;
+  // ✅ sleeping flag for dashboard (never sleeping if canceled/delivered)
+  // ✅ if we’re inside the initial skip window, force sleeping=false
+  const inSkip = !!(skipUntilMs && calcNowMs < skipUntilMs);
+  const sleeping =
+    canceled || delivered
+      ? false
+      : rule.ignoresSleep
+      ? false
+      : inSkip
+      ? false
+      : isSleepingAt(calcNowMs, offsetMin, rule.sleepCfg);
 
-  // ✅ progress (sleep-aware)
-  let traveledMs = 0;
+  // ✅ progress (sleep-aware + skip window)
+  let traveledAwakeMs = 0;
   if (sentMs != null && calcNowMs > sentMs && requiredAwakeMs > 0) {
-    traveledMs = ignoresSleep
-      ? Math.min(calcNowMs, etaAdjustedMs) - sentMs
-      : awakeMsBetween(sentMs, Math.min(calcNowMs, etaAdjustedMs), offsetMin);
+    traveledAwakeMs = awakeMsBetweenWithSkip(
+      sentMs,
+      Math.min(calcNowMs, etaAdjustedMs),
+      offsetMin,
+      bird,
+      skipUntilMs
+    );
   }
-  const progress = requiredAwakeMs > 0 ? clamp(traveledMs / requiredAwakeMs, 0, 1) : delivered ? 1 : 0;
+
+  const progress = requiredAwakeMs > 0 ? clamp(traveledAwakeMs / requiredAwakeMs, 0, 1) : delivered ? 1 : 0;
 
   // Current label: last checkpoint whose time has passed
   let current_over_text = delivered ? "Delivered" : "somewhere over the U.S.";
@@ -302,8 +265,9 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
 
   return {
     ...l,
-    direction, // ✅ NEW
+    direction,
 
+    // ✅ ensure bird is normalized for UI
     bird,
 
     canceled,
@@ -325,6 +289,10 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
     badges_count: 0,
   };
 }
+
+/* -------------------------------------------------
+   Route handler
+------------------------------------------------- */
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -374,8 +342,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: sentErr.message }, { status: 500 });
   }
 
-  // --- Incoming letters (NEW) ---
-  // ✅ recipient_archived_at hides only from the recipient’s dashboard
+  // --- Incoming letters ---
   const { data: incomingData, error: incomingErr } = await supabaseServer
     .from("letters")
     .select(
@@ -417,7 +384,7 @@ export async function GET(req: Request) {
   let sentLetters = (sentData ?? []) as RawLetter[];
   let incomingLetters = (incomingData ?? []) as RawLetter[];
 
-  // Server-side search filter (kept fast + consistent)
+  // Server-side search filter
   if (qRaw) {
     sentLetters = sentLetters.filter((l) => matchesQuerySent(l, qRaw));
     incomingLetters = incomingLetters.filter((l) => matchesQueryIncoming(l, qRaw));
@@ -448,9 +415,7 @@ export async function GET(req: Request) {
   }
 
   // Compute view models
-  let sentOut = sentLetters.map((l: any) =>
-    computeViewModel(l, checkpointsByLetter.get(l.id) ?? [], realNowMs, "sent")
-  );
+  let sentOut = sentLetters.map((l: any) => computeViewModel(l, checkpointsByLetter.get(l.id) ?? [], realNowMs, "sent"));
   let incomingOut = incomingLetters.map((l: any) =>
     computeViewModel(l, checkpointsByLetter.get(l.id) ?? [], realNowMs, "incoming")
   );
@@ -473,9 +438,7 @@ export async function GET(req: Request) {
     }
   }
 
-  // ✅ Backward compatible:
-  // - `letters` remains the original Sent list so older UI doesn’t explode
-  // - new fields are for your Incoming tab UI
+  // Backward compatible response
   return NextResponse.json({
     letters: sentOut,
     sentLetters: sentOut,

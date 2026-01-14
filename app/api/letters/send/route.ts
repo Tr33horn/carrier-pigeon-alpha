@@ -255,12 +255,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid route distance." }, { status: 400 });
   }
 
-  const speedKmh = birdCfg.speedKmh;
-  if (!Number.isFinite(speedKmh) || speedKmh <= 0) {
+  // ✅ SPEED IS DEFINED IN CODE (birds.ts)
+  // We still store it in DB as a snapshot for debugging/back-compat,
+  // but it is NOT authoritative.
+  const speedKmhEffective = Number(birdCfg.speedKmh);
+  if (!Number.isFinite(speedKmhEffective) || speedKmhEffective <= 0) {
     return NextResponse.json({ error: "Invalid bird speed." }, { status: 400 });
   }
 
-  const reqAwakeMs = Math.max(0, Math.round(((km / speedKmh) * birdCfg.inefficiency) * 3600_000));
+  const reqAwakeMs = Math.max(0, Math.round(((km / speedKmhEffective) * birdCfg.inefficiency) * 3600_000));
 
   // ✅ Pick a single timezone offset for the flight (MIDPOINT lon)
   const midLon = lerp(origin.lon, destination.lon, 0.5);
@@ -285,7 +288,7 @@ export async function POST(req: Request) {
     token: publicToken.slice(0, 8),
     bird,
     km: Number(km.toFixed(2)),
-    speedKmh,
+    speedKmh: speedKmhEffective,
     ineff: birdCfg.inefficiency,
     reqAwakeMs,
     offsetMin,
@@ -313,7 +316,10 @@ export async function POST(req: Request) {
       dest_lat: destination.lat,
       dest_lon: destination.lon,
       distance_km: km,
-      speed_kmh: speedKmh,
+
+      // ✅ snapshot only (NOT authoritative)
+      speed_kmh: speedKmhEffective,
+
       sent_at: sentAt.toISOString(),
       eta_at: etaAtSafe.toISOString(),
     })
@@ -365,24 +371,24 @@ export async function POST(req: Request) {
     const absoluteStatusUrl = joinUrl(baseUrl, statusPath);
     const etaTextUtc = formatUtc(letter.eta_at);
 
-const result = await sendEmail({
-  to: normalizedToEmail,
-  subject: "A letter is on the way",
-  react: createElement(LetterOnTheWayEmail as any, {
-    toName: letter.to_name,
-    fromName: letter.from_name,
-    originName: letter.origin_name || origin.name || "Origin",
-    destName: letter.dest_name || destination.name || "Destination",
-    etaTextUtc,
-    statusUrl: absoluteStatusUrl,
-    bird: (letter.bird as BirdType) || bird,
-    debugToken: publicToken,
-  }),
-  tags: [
-    { name: "kind", value: "letter_on_the_way" },
-    { name: "token", value: publicToken },
-  ],
-});
+    const result = await sendEmail({
+      to: normalizedToEmail,
+      subject: "A letter is on the way",
+      react: createElement(LetterOnTheWayEmail as any, {
+        toName: letter.to_name,
+        fromName: letter.from_name,
+        originName: letter.origin_name || origin.name || "Origin",
+        destName: letter.dest_name || destination.name || "Destination",
+        etaTextUtc,
+        statusUrl: absoluteStatusUrl,
+        bird: (letter.bird as BirdType) || bird,
+        debugToken: publicToken,
+      }),
+      tags: [
+        { name: "kind", value: "letter_on_the_way" },
+        { name: "token", value: publicToken },
+      ],
+    });
 
     if (result && "error" in (result as any) && (result as any).error) {
       console.error("RESEND SEND FAILED", {

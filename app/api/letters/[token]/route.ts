@@ -367,7 +367,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   }
 
   // Normalize numerics (Supabase can return strings)
-  const speedKmhRaw = Number((meta as any).speed_kmh);
   const distanceKm = Number((meta as any).distance_km);
 
   const originLon = Number((meta as any).origin_lon);
@@ -380,6 +379,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const birdRule = BIRD_RULES[bird];
   const ignoresSleep = birdRule.ignoresSleep;
   const sleepCfg = birdRule.sleepCfg;
+
+  // ✅ SPEED NOW COMES FROM CODE, NOT DB
+  const speedKmh = Number.isFinite(birdRule.speedKmh) && birdRule.speedKmh > 0 ? birdRule.speedKmh : 0;
 
   // ✅ archived handling (freeze time)
   const archived_at = (meta as any).archived_at ?? null;
@@ -420,7 +422,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const offsetMin = offsetMinutesFromLon(midLon);
 
   // ✅ Required awake ms MUST match send route: km/speed * inefficiency
-  const speedKmh = Number.isFinite(speedKmhRaw) && speedKmhRaw > 0 ? speedKmhRaw : 0;
   const requiredAwakeMs =
     speedKmh > 0 && Number.isFinite(distanceKm) && distanceKm > 0
       ? (distanceKm / speedKmh) * birdRule.inefficiency * 3600_000
@@ -471,6 +472,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const sleep_until_iso = wakeMs ? new Date(wakeMs).toISOString() : null;
   const sleep_local_text = wakeMs ? sleepUntilLocalText(wakeMs, offsetMin) : "";
 
+  // ✅ CURRENT SPEED (UI) — driven by code rules
   const current_speed_kmh = canceled || delivered ? 0 : sleeping ? 0 : speedKmh;
 
   // ✅ Only fetch body AFTER delivery (and never for canceled)
@@ -600,9 +602,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
       meta: b.meta ?? {},
     }));
 
-    const { error: upsertErr } = await supabaseServer
-      .from("letter_items")
-      .upsert(rows, { onConflict: "letter_id,kind,code" });
+    const { error: upsertErr } = await supabaseServer.from("letter_items").upsert(rows, { onConflict: "letter_id,kind,code" });
 
     if (upsertErr) console.error("BADGE UPSERT ERROR:", upsertErr);
   }
@@ -627,11 +627,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const canceledISO = canceled ? new Date(canceledAtMs).toISOString() : null;
 
   const eta_at_adjusted = canceled ? canceledISO : etaAdjustedISO;
-  const eta_utc_text = canceled
-    ? canceledISO
-      ? `Canceled at ${formatUtc(canceledISO)}`
-      : "Canceled"
-    : formatUtc(etaAdjustedISO);
+  const eta_utc_text = canceled ? (canceledISO ? `Canceled at ${formatUtc(canceledISO)}` : "Canceled") : formatUtc(etaAdjustedISO);
 
   return NextResponse.json(
     {
@@ -649,6 +645,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
         bird,
         body,
 
+        // ✅ expose the EFFECTIVE speed used by the sim (from code)
         speed_kmh: speedKmh,
 
         eta_at_adjusted,
