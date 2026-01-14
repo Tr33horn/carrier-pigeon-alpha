@@ -145,7 +145,7 @@ export default function NewPage() {
     <main className="pageBg">
       <div className="wrap" style={{ paddingTop: 12, position: "relative" }}>
         <Link href="/" className="linkPill">
-          ← Home
+          ← Back
         </Link>
 
         <div style={{ marginTop: 12 }}>
