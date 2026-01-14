@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-type BirdType = "pigeon" | "snipe" | "goose";
+// ✅ Single source of truth (picker reads from catalog)
+import {
+  BIRD_CATALOG,
+  getEnabledBirdCatalog,
+  getEnabledBirdTypes,
+  type BirdType,
+} from "@/app/lib/birds";
 
 type BirdOption = {
   id: BirdType;
@@ -24,8 +30,12 @@ type FutureBirdOption = {
 export default function NewPage() {
   const router = useRouter();
 
+  // ✅ enabled birds for the picker (flight-safe)
+  const enabledBirdTypes = useMemo(() => getEnabledBirdTypes(), []);
+  const defaultBird: BirdType = (enabledBirdTypes[0] ?? "pigeon") as BirdType;
+
   // ✅ selected bird (toggle-able)
-  const [bird, setBird] = useState<BirdType>("pigeon");
+  const [bird, setBird] = useState<BirdType>(defaultBird);
   const [showWriteOn, setShowWriteOn] = useState(false);
 
   // ✅ intermittent shake state
@@ -51,9 +61,10 @@ export default function NewPage() {
     };
   }, []);
 
+  // ✅ flight engine still accepts ONLY BirdType
   const go = (b: BirdType) => router.push(`/write?bird=${encodeURIComponent(b)}`);
 
-  // ✅ Per-bird CTA text (you can tweak these anytime)
+  // ✅ Per-bird CTA text (tweak anytime)
   const ctaTextFor = (b: BirdType) => {
     switch (b) {
       case "goose":
@@ -66,72 +77,53 @@ export default function NewPage() {
     }
   };
 
-  const options = useMemo<BirdOption[]>(
-    () => [
-      {
-        id: "snipe",
-        title: "Great Snipe",
-        subtitle: "Fast long-haul. No roosting.",
-        imgSrc: "/birds/great-snipe.gif",
-      },
-      {
-        id: "pigeon",
-        title: "Homing Pigeon",
-        subtitle: "Classic delivery.",
-        imgSrc: "/birds/homing-pigeon.gif",
-        recommended: true,
-      },
-      {
-        id: "goose",
-        title: "Canada Goose",
-        subtitle: "Carries more. Slower.",
-        imgSrc: "/birds/canada-goose.gif",
-      },
-    ],
-    []
-  );
+  // ✅ Current birds come from enabled catalog entries
+  const options = useMemo<BirdOption[]>(() => {
+    const enabled = getEnabledBirdCatalog();
 
-  const futureFowls = useMemo<FutureBirdOption[]>(
-    () => [
-      {
-        id: "peregrine-falcon",
-        title: "Peregrine Falcon",
-        subtitle: "The airborne missile (politely).",
-        imgSrc: "/birds/Peregrine-Falcon.gif",
-      },
-      {
-        id: "annas-hummingbird",
-        title: "Anna’s Hummingbird",
-        subtitle: "Tiny bird. Unhinged acceleration.",
-        imgSrc: "/birds/AnnasHummingbird.gif",
-      },
-      {
-        id: "white-throated-needletail",
-        title: "White-throated Needletail",
-        subtitle: "Blink-and-it’s-delivered speed.",
-        imgSrc: "/birds/white-throated-needletail.gif",
-      },
-      {
-        id: "american-osprey",
-        title: "American Osprey",
-        subtitle: "Precision strikes. Fish not included.",
-        imgSrc: "/birds/American-Osprey.gif",
-      },
-      {
-        id: "northern-hawk-owl",
-        title: "Northern Hawk Owl",
-        subtitle: "Daylight hunter. Night-owl energy.",
-        imgSrc: "/birds/NorthernHawkOwl.gif",
-      },
-      {
-        id: "common-tern",
-        title: "Arctic Tern",
-        subtitle: "Coastal courier with stamina.",
-        imgSrc: "/birds/CommonTern.gif",
-      },
-    ],
-    []
-  );
+    // Only keep entries whose id is a BirdType (safety belt)
+    const safeEnabled = enabled.filter((x) => enabledBirdTypes.includes(x.id as BirdType));
+
+    // fallback: if catalog is weird, don’t brick the UI
+    if (!safeEnabled.length) {
+      return [
+        {
+          id: "pigeon",
+          title: "Homing Pigeon",
+          subtitle: "Classic delivery.",
+          imgSrc: "/birds/homing-pigeon.gif",
+          recommended: true,
+        },
+      ];
+    }
+
+    return safeEnabled.map((b) => ({
+      id: b.id as BirdType,
+      title: b.displayLabel,
+      subtitle: b.subtitle,
+      imgSrc: b.imgSrc,
+      recommended: !!(b as any).recommended, // optional field, won’t break if missing
+    }));
+  }, [enabledBirdTypes]);
+
+  // ✅ Future fowls come from disabled catalog entries
+  const futureFowls = useMemo<FutureBirdOption[]>(() => {
+    return BIRD_CATALOG.filter((b) => !b.enabled).map((b) => ({
+      id: b.id,
+      title: b.displayLabel,
+      subtitle: b.subtitle,
+      imgSrc: b.imgSrc,
+    }));
+  }, []);
+
+  // ✅ If the selected bird becomes disabled later, snap to a safe default
+  useEffect(() => {
+    if (!enabledBirdTypes.includes(bird)) {
+      setBird(defaultBird);
+      setShowWriteOn(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabledBirdTypes.join(","), bird]);
 
   // ✅ start/stop the "shake every 5s" loop when the button is visible
   useEffect(() => {
@@ -205,7 +197,6 @@ export default function NewPage() {
                     </div>
                   )}
 
-                  {/* ✅ Recommended pill always stays above image (z-index handled in CSS below) */}
                   {opt.recommended && <div className="birdRec">Recommended</div>}
 
                   <div className="birdRow">
@@ -260,7 +251,6 @@ export default function NewPage() {
                   showToast("Coming soon — Future Fowls aren’t selectable yet.");
                 }}
               >
-                {/* ✅ EXACT same colors as Recommended by reusing birdRec */}
                 <div className="birdRec futurePill" aria-hidden="true">
                   Coming soon
                 </div>
@@ -394,32 +384,27 @@ export default function NewPage() {
             }
           }
 
-          /* =========================================
-             ✅ Layering fix: pills/check always above image
-             ========================================= */
+          /* ✅ Layering fix: pills/check always above image */
           .birdCard {
             position: relative;
           }
 
           .birdCard .birdThumb {
             position: relative;
-            z-index: 1; /* image layer */
+            z-index: 1;
           }
 
           .birdCard .birdRec,
           .birdCard .birdBadge {
-            z-index: 5; /* overlay layer */
+            z-index: 5;
           }
 
-          /* =========================================
-             Future Fowls
-             ========================================= */
+          /* Future Fowls */
           .futureCard {
             position: relative;
             cursor: pointer;
           }
 
-          /* positioning only — colors come from .birdRec */
           .futurePill {
             position: absolute;
             top: 10px;
@@ -428,23 +413,18 @@ export default function NewPage() {
             pointer-events: none;
           }
 
-          /* muted color by default (NOT full grayscale) */
           .futureCard .birdThumb img {
             filter: saturate(0.3) contrast(1.02) brightness(0.98);
             transition: filter 180ms ease, transform 180ms ease;
             transform: translateZ(0);
           }
 
-          /* hover/focus -> full color */
           .futureCard:hover .birdThumb img,
           .futureCard:focus-visible .birdThumb img {
             filter: saturate(1) contrast(1) brightness(1);
           }
 
-          /* =========================================
-             ✅ Current birds: muted color + scale + text dim
-             (single block — no duplicates)
-             ========================================= */
+          /* Current birds: muted when not selected */
           .birdCard:not(.on) .birdThumb img {
             filter: saturate(0.35) contrast(1.02) brightness(0.98);
             transition: filter 180ms ease, transform 180ms ease;
