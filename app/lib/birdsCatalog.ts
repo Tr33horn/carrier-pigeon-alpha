@@ -44,7 +44,18 @@ export type BirdCatalogRow = {
 
   designNotes?: string;
 
+  /**
+   * ✅ enabled = selectable/usable (subject to birds.ts SUPPORTED_BIRD_TYPES)
+   * Think: "ship it"
+   */
   enabled: boolean;
+
+  /**
+   * ✅ visible = shows up anywhere in UI
+   * Think: "show it"
+   */
+  visible: boolean;
+
   availabilityType: AvailabilityType;
 
   minDistanceKm?: number | null;
@@ -105,6 +116,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     sleepLabel: "Pigeon",
     designNotes: "Baseline bird; sets player expectations",
     enabled: true,
+    visible: true,
     availabilityType: "always",
     minDistanceKm: 0,
     maxDistanceKm: null,
@@ -141,6 +153,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     sleepLabel: "Snipe",
     designNotes: "Night-flying endurance bird",
     enabled: true,
+    visible: true,
     availabilityType: "occasional",
     minDistanceKm: 800,
     maxDistanceKm: null,
@@ -177,6 +190,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     sleepLabel: "Goose",
     designNotes: "Communal, stubborn, slightly inefficient",
     enabled: true,
+    visible: true,
     availabilityType: "seasonal",
     minDistanceKm: 150,
     maxDistanceKm: null,
@@ -200,7 +214,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     promiseFailureCopy: "sayNothing",
   },
 
-  // --- Future birds (still fine to include; set enabled true/false as you like) ---
+  // --- Future birds ---
   {
     id: "falcon",
     displayLabel: "Peregrine Falcon",
@@ -213,7 +227,8 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     sleepCfg: DEFAULT_SLEEP,
     sleepLabel: "Falcon",
     designNotes: "Fastest bird; dangerous to overuse",
-    enabled: false,
+    enabled: false, // not selectable yet
+    visible: true, // still shows in "Coming soon"
     availabilityType: "occasional",
     minDistanceKm: 0,
     maxDistanceKm: null,
@@ -249,7 +264,8 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     sleepCfg: sleepCfg(23, 5),
     sleepLabel: "Crow",
     designNotes: "One-at-a-time bird with urgency mechanics",
-    enabled: false,
+    enabled: false, // not selectable yet (until birds.ts supports it)
+    visible: true, // still shows in "Coming soon"
     availabilityType: "singleton",
     minDistanceKm: 0,
     maxDistanceKm: null,
@@ -274,8 +290,27 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
   },
 ];
 
+/* -----------------------------
+   Helpers
+----------------------------- */
+
+// Existing helper (kept)
 export function enabledBirdCatalog() {
   return BIRD_CATALOG.filter((b) => b.enabled);
+}
+
+// ✅ Alias for your earlier import name
+export function getEnabledBirdCatalog() {
+  return enabledBirdCatalog();
+}
+
+// ✅ Visible lists
+export function getVisibleBirdCatalog() {
+  return BIRD_CATALOG.filter((b) => b.visible);
+}
+
+export function getFutureBirdCatalog() {
+  return BIRD_CATALOG.filter((b) => b.visible && !b.enabled);
 }
 
 export function getBirdCatalog(id: string) {

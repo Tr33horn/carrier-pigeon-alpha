@@ -25,83 +25,41 @@ type FutureBirdOption = {
   imgSrc: string;
 };
 
-/**
- * ✅ Centralized image mapping so you can keep old filenames
- * (and not be forced into `/birds/${id}.gif` naming right now)
- */
-function birdImgSrc(id: string) {
-  const key = String(id || "").toLowerCase();
-
-  const map: Record<string, string> = {
-    // current birds
-    pigeon: "/birds/homing-pigeon.gif",
-    snipe: "/birds/great-snipe.gif",
-    goose: "/birds/canada-goose.gif",
-
-    // future birds (match your existing assets)
-    falcon: "/birds/Peregrine-Falcon.gif",
-    "peregrine-falcon": "/birds/Peregrine-Falcon.gif",
-
-    hummingbird: "/birds/AnnasHummingbird.gif",
-    "annas-hummingbird": "/birds/AnnasHummingbird.gif",
-
-    needletail: "/birds/white-throated-needletail.gif",
-    "white-throated-needletail": "/birds/white-throated-needletail.gif",
-
-    osprey: "/birds/American-Osprey.gif",
-    "american-osprey": "/birds/American-Osprey.gif",
-
-    owl: "/birds/NorthernHawkOwl.gif",
-    "northern-hawk-owl": "/birds/NorthernHawkOwl.gif",
-
-    tern: "/birds/CommonTern.gif",
-    "arctic-tern": "/birds/CommonTern.gif",
-    "common-tern": "/birds/CommonTern.gif",
-
-    crow: "/birds/crow.gif",
-    raven: "/birds/raven.gif",
-    crane: "/birds/crane.gif",
-    moth: "/birds/moth.gif",
-    albatross: "/birds/albatross.gif",
-    nightjar: "/birds/nightjar.gif",
-  };
-
-  return map[key] ?? `/birds/${key}.gif`; // fallback convention
-}
-
 export default function NewPage() {
   const router = useRouter();
 
-  // ✅ BirdType list that the engine currently accepts AND is enabled in catalog
+  // ✅ BirdType list that the engine currently accepts AND is enabled in catalog (birds.ts enforces this)
   const enabledTypes = useMemo(() => getEnabledBirdTypes(), []);
 
-  // ✅ Catalog rows that are enabled (UI source)
+  // ✅ Catalog rows that are enabled (catalog-side)
   const enabledCatalog = useMemo(() => enabledBirdCatalog(), []);
 
-  // ✅ Convert catalog → picker options (AND keep only ones the engine supports)
+  // ✅ Convert catalog → picker options (ONLY ones the engine supports)
   const options = useMemo<BirdOption[]>(() => {
-    const supported = new Set(enabledTypes);
+    const supported = new Set<BirdType>(enabledTypes);
 
     return (enabledCatalog as BirdCatalogRow[])
-      .filter((row) => supported.has(row.id as BirdType))
+      .filter((row) => row.visible) // ✅ visible gate
+      .filter((row) => supported.has(row.id as BirdType)) // ✅ engine-safe gate
       .map((row) => ({
         id: row.id as BirdType,
         title: row.displayLabel,
         subtitle: row.availabilityNotes ?? "",
-        imgSrc: birdImgSrc(row.id),
+        imgSrc: row.imgSrc || "/birds/homing-pigeon.gif",
         recommended: row.id === "pigeon",
       }));
   }, [enabledCatalog, enabledTypes]);
 
-  // ✅ Coming soon = catalog enabled:false (no engine constraint needed)
+  // ✅ Coming soon = visible:true + enabled:false (NOT engine constrained)
   const futureFowls = useMemo<FutureBirdOption[]>(() => {
     return (BIRD_CATALOG as BirdCatalogRow[])
-      .filter((row) => !row.enabled)
+      .filter((row) => row.visible) // ✅ visible gate
+      .filter((row) => !row.enabled) // ✅ NOT enabled => coming soon
       .map((row) => ({
         id: row.id,
         title: row.displayLabel,
         subtitle: row.availabilityNotes ?? "Coming soon",
-        imgSrc: birdImgSrc(row.id),
+        imgSrc: row.imgSrc || "/birds/homing-pigeon.gif",
       }));
   }, []);
 
@@ -201,7 +159,7 @@ export default function NewPage() {
           </p>
         </div>
 
-        {/* Current birds (enabled + supported by engine) */}
+        {/* Current birds (enabled + visible + supported by engine) */}
         <div className="birdGrid">
           {options.map((opt) => {
             const isSelected = bird === opt.id;
@@ -260,7 +218,7 @@ export default function NewPage() {
           })}
         </div>
 
-        {/* Future Fowls (disabled) */}
+        {/* Future Fowls (visible + enabled:false) */}
         <div style={{ marginTop: 14 }}>
           <div className="kicker">Coming soon</div>
           <h2 className="h2" style={{ marginTop: 6 }}>
