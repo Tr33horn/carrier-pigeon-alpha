@@ -66,8 +66,9 @@ export function normalizeBird(raw: unknown): BirdType {
    Catalog helpers (picker-facing)
 ------------------------------------------------- */
 
+/** True only if the id is currently supported by the flight engine */
 function isBirdType(id: string): id is BirdType {
-  return (SUPPORTED_BIRD_TYPES as readonly string[]).includes(id);
+  return (SUPPORTED_BIRD_TYPES as readonly BirdType[]).includes(id as BirdType);
 }
 
 // ✅ Narrowed view of catalog rows that are actually supported by the engine
@@ -75,10 +76,11 @@ export type SupportedBirdCatalogRow = Omit<BirdCatalogRow, "id"> & { id: BirdTyp
 
 /**
  * ✅ Picker list:
- * enabled birds that are ALSO supported by the flight engine (BirdType)
+ * enabled + visible birds that are ALSO supported by the flight engine (BirdType)
  */
 export function getEnabledBirdCatalogForPicker(): SupportedBirdCatalogRow[] {
   return enabledBirdCatalog()
+    .filter((b) => (b as any).visible !== false) // ✅ treat missing visible as true
     .filter((b) => isBirdType(b.id))
     .map((b) => ({ ...b, id: b.id as BirdType }));
 }
@@ -95,7 +97,12 @@ export function getEnabledBirdTypes(): BirdType[] {
  */
 export function getCatalogForBirdType(bird: BirdType): SupportedBirdCatalogRow | null {
   const row = BIRD_CATALOG.find((b) => b.id === bird);
-  return row ? ({ ...row, id: bird } as SupportedBirdCatalogRow) : null;
+  if (!row) return null;
+
+  // ✅ also honor visible here so UI helpers don't “resurrect” hidden birds
+  if ((row as any).visible === false) return null;
+
+  return { ...row, id: bird } as SupportedBirdCatalogRow;
 }
 
 /**
