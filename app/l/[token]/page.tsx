@@ -194,13 +194,62 @@ function formatOpensShort(etaIso: string) {
   return `${dateLocal}, ${timeLocal} (${dateUtc}, ${timeUtc} UTC)`;
 }
 
-/** ✅ Seal image resolver (fallback-safe)
- *  Adjust this path if your seal assets live elsewhere.
+/**
+ * ✅ FIXED: Robust seal resolver
+ * Your API may return: seal_flokheart
+ * Your actual file is:  seal-flokheart.png
+ *
+ * So we generate candidate URLs and let the <img> fall through onError.
  */
-function sealImageSrc(sealId: string | null | undefined) {
-  const id = typeof sealId === "string" ? sealId.trim() : "";
-  if (!id) return "/waxseal.png";
-  return `/seals/${encodeURIComponent(id)}.png`;
+function sealImageSrcs(sealId: string | null | undefined): string[] {
+  const raw = typeof sealId === "string" ? sealId.trim() : "";
+  const urls: string[] = [];
+
+  const push = (u: string) => {
+    if (!u) return;
+    if (!urls.includes(u)) urls.push(u);
+  };
+
+  if (!raw) {
+    push("/waxseal.png");
+    return urls;
+  }
+
+  // allow API to send full filename too
+  if (raw.toLowerCase().endsWith(".png")) {
+    push(`/seals/${encodeURIComponent(raw)}`);
+    push("/waxseal.png");
+    return urls;
+  }
+
+  // try as-is
+  push(`/seals/${encodeURIComponent(raw)}.png`);
+
+  // underscores <-> hyphens (your problem)
+  push(`/seals/${encodeURIComponent(raw.replace(/_/g, "-"))}.png`);
+  push(`/seals/${encodeURIComponent(raw.replace(/-/g, "_"))}.png`);
+
+  // prefix normalization (just in case)
+  if (raw.startsWith("seal_")) push(`/seals/${encodeURIComponent(raw.replace(/^seal_/, "seal-"))}.png`);
+  if (raw.startsWith("seal-")) push(`/seals/${encodeURIComponent(raw.replace(/^seal-/, "seal_"))}.png`);
+
+  // if ID is ever just "flokheart"
+  if (!raw.startsWith("seal-") && !raw.startsWith("seal_")) {
+    push(`/seals/${encodeURIComponent(`seal-${raw}`)}.png`);
+    push(`/seals/${encodeURIComponent(`seal_${raw}`)}.png`);
+  }
+
+  // last-resort: remove separators
+  const squashed = raw.replace(/[-_]/g, "");
+  if (squashed !== raw) {
+    push(`/seals/${encodeURIComponent(squashed)}.png`);
+    push(`/seals/${encodeURIComponent(`seal-${squashed}`)}.png`);
+    push(`/seals/${encodeURIComponent(`seal_${squashed}`)}.png`);
+  }
+
+  // guaranteed fallback
+  push("/waxseal.png");
+  return urls;
 }
 
 /* ---------- tiny icon system (inline SVG) ---------- */
@@ -351,15 +400,23 @@ function WaxSealOverlay({
   canceled,
   canOpen,
   onOpen,
-  sealSrc,
+  sealSrcs,
 }: {
   opensShort: string;
   cracking?: boolean;
   canceled?: boolean;
   canOpen?: boolean;
   onOpen?: () => void;
-  sealSrc: string;
+  sealSrcs: string[];
 }) {
+  const [idx, setIdx] = useState(0);
+  const sealSrc = sealSrcs[idx] || "/waxseal.png";
+
+  // reset to first candidate when seal changes
+  useEffect(() => {
+    setIdx(0);
+  }, [sealSrcs.join("|")]);
+
   return (
     <div className={cracking ? "seal crack" : "seal"} style={{ position: "relative" }}>
       <div className="sealCard">
@@ -378,7 +435,12 @@ function WaxSealOverlay({
             title={canOpen ? "Open letter" : "Sealed until delivery"}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={sealSrc} alt="Wax seal" className="waxImg" />
+            <img
+              src={sealSrc}
+              alt="Wax seal"
+              className="waxImg"
+              onError={() => setIdx((n) => Math.min(n + 1, sealSrcs.length - 1))}
+            />
 
             {canOpen ? <div className="waxHint">Click to open</div> : null}
           </button>
@@ -388,7 +450,9 @@ function WaxSealOverlay({
             <div className="sealSub">
               {canceled ? "This letter will not be delivered." : canOpen ? "Tap the wax seal to read it." : `Opens at ${opensShort}`}
             </div>
-            <div className="sealHint">{canceled ? "The bird was recalled to HQ." : canOpen ? "Go on. Break the seal." : "No peeking. The bird is watching."}</div>
+            <div className="sealHint">
+              {canceled ? "The bird was recalled to HQ." : canOpen ? "Go on. Break the seal." : "No peeking. The bird is watching."}
+            </div>
           </div>
         </div>
 
@@ -414,7 +478,6 @@ function LetterModal({
   body: string;
   confetti: boolean;
 }) {
-  // escape + body scroll lock handled in parent; modal stays dumb
   if (!open) return null;
 
   return (
@@ -445,7 +508,6 @@ function LetterModal({
           </button>
         </div>
 
-        {/* paper sheet that “unfolds” */}
         <div className="paperWrap">
           <div className="paperSheet" role="document" aria-label="Letter contents">
             <div className="paperSubject">{subject || "(No subject)"}</div>
@@ -480,7 +542,6 @@ export default function LetterStatusPage() {
   const [canceled, setCanceled] = useState(false);
   const canceledRef = useRef(false);
 
-  // ✅ delivered ref so polling can stop immediately when delivered flips true
   const deliveredRef = useRef(false);
 
   const [archivedAtISO, setArchivedAtISO] = useState<string | null>(null);
@@ -496,7 +557,6 @@ export default function LetterStatusPage() {
 
   const [currentOverText, setCurrentOverText] = useState<string | null>(null);
 
-  // ✅ modal + crack + confetti
   const [letterOpen, setLetterOpen] = useState(false);
   const [sealCracking, setSealCracking] = useState(false);
   const [confetti, setConfetti] = useState(false);
@@ -521,12 +581,7 @@ export default function LetterStatusPage() {
       return;
     }
 
-    if (
-      saved === "carto-positron" ||
-      saved === "carto-voyager" ||
-      saved === "carto-positron-nolabels" ||
-      saved === "ink-sketch"
-    ) {
+    if (saved === "carto-positron" || saved === "carto-voyager" || saved === "carto-positron-nolabels" || saved === "ink-sketch") {
       setMapStyle(saved);
     }
   }, []);
@@ -535,7 +590,6 @@ export default function LetterStatusPage() {
     window.localStorage.setItem("pigeon_map_style", mapStyle);
   }, [mapStyle]);
 
-  // ✅ clock: if archived or canceled, freeze at server snapshot
   useEffect(() => {
     if ((archived || canceled) && serverNowISO) {
       setNow(new Date(serverNowISO));
@@ -545,7 +599,6 @@ export default function LetterStatusPage() {
     return () => clearInterval(t);
   }, [archived, canceled, serverNowISO]);
 
-  // ✅ escape key + scroll lock for modal
   useEffect(() => {
     if (!letterOpen) return;
 
@@ -665,12 +718,10 @@ export default function LetterStatusPage() {
     return !!delivered;
   }, [canceled, delivered]);
 
-  // ✅ keep deliveredRef updated for polling guard
   useEffect(() => {
     deliveredRef.current = uiDelivered;
   }, [uiDelivered]);
 
-  // ✅ polling stops after delivery too
   useEffect(() => {
     if (!token) return;
     if (archived) return;
@@ -711,12 +762,9 @@ export default function LetterStatusPage() {
     return formatCountdown(msLeft);
   }, [letter, effectiveEtaISO, now]);
 
-  // ✅ Canonical bird: from DB field (no more speed-based guessing)
   const bird: BirdType = useMemo(() => normalizeBird(letter?.bird), [letter?.bird]);
-
   const birdName = useMemo(() => BIRD_RULES[bird].label, [bird]);
 
-  // ✅ Speed shown in UI:
   const currentSpeedKmh = useMemo(() => {
     if (canceled) return 0;
     if (!letter) return 0;
@@ -839,8 +887,8 @@ export default function LetterStatusPage() {
     return uiDelivered ? "delivered" : sleeping ? "sleeping" : "flying";
   }, [canceled, flight?.marker_mode, uiDelivered, sleeping]);
 
-  // ✅ NEW: seal src derived from letter.seal_id (fallback-safe)
-  const sealSrc = useMemo(() => sealImageSrc(letter?.seal_id ?? null), [letter?.seal_id]);
+  // ✅ FIX: use candidates + fallthrough
+  const sealSrcs = useMemo(() => sealImageSrcs(letter?.seal_id ?? null), [letter?.seal_id]);
 
   function openLetter() {
     if (!uiDelivered || canceled) return;
@@ -848,10 +896,7 @@ export default function LetterStatusPage() {
     setSealCracking(true);
     setConfetti(true);
 
-    // open modal shortly after crack begins
     window.setTimeout(() => setLetterOpen(true), 220);
-
-    // stop crack + confetti
     window.setTimeout(() => setSealCracking(false), 650);
     window.setTimeout(() => setConfetti(false), 1400);
   }
@@ -882,7 +927,6 @@ export default function LetterStatusPage() {
   const canceledLabel = canceledAtISO ? `Canceled • ${new Date(canceledAtISO).toLocaleString()}` : "Canceled";
 
   const timelineModeLabel = uiDelivered ? "Delivered" : canceled ? "Canceled" : archived ? "Archived" : "Auto";
-
   const modalTitle = `From ${letter.from_name || "Sender"} to ${letter.to_name || "Recipient"}`;
 
   return (
@@ -1045,7 +1089,7 @@ export default function LetterStatusPage() {
                 canceled={canceled}
                 canOpen={uiDelivered && !canceled}
                 onOpen={openLetter}
-                sealSrc={sealSrc}
+                sealSrcs={sealSrcs}
               />
             </div>
           </div>
@@ -1054,14 +1098,7 @@ export default function LetterStatusPage() {
         </div>
 
         {/* Modal */}
-        <LetterModal
-          open={letterOpen}
-          onClose={() => setLetterOpen(false)}
-          title={modalTitle}
-          subject={letter.subject || ""}
-          body={letter.body || ""}
-          confetti={confetti}
-        />
+        <LetterModal open={letterOpen} onClose={() => setLetterOpen(false)} title={modalTitle} subject={letter.subject || ""} body={letter.body || ""} confetti={confetti} />
 
         <div className="grid">
           <div className="card">
