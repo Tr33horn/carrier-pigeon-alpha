@@ -174,7 +174,9 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
 
   // ✅ Skip-initial-sleep-window policy (same as status API)
   const { skipUntilMs } =
-    sentMs != null && Number.isFinite(sentMs) ? computeInitialSleepSkip(sentMs, offsetMin, bird) : { skipUntilMs: null as number | null };
+    sentMs != null && Number.isFinite(sentMs)
+      ? computeInitialSleepSkip(sentMs, offsetMin, bird)
+      : { skipUntilMs: null as number | null };
 
   // ✅ Compute adjusted ETA if we safely can; otherwise fall back to stored eta_at.
   let etaAdjustedMs: number | null = null;
@@ -206,13 +208,7 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
   // ✅ progress (sleep-aware + skip window)
   let traveledAwakeMs = 0;
   if (sentMs != null && calcNowMs > sentMs && requiredAwakeMs > 0) {
-    traveledAwakeMs = awakeMsBetweenWithSkip(
-      sentMs,
-      Math.min(calcNowMs, etaAdjustedMs),
-      offsetMin,
-      bird,
-      skipUntilMs
-    );
+    traveledAwakeMs = awakeMsBetweenWithSkip(sentMs, Math.min(calcNowMs, etaAdjustedMs), offsetMin, bird, skipUntilMs);
   }
 
   const progress = requiredAwakeMs > 0 ? clamp(traveledAwakeMs / requiredAwakeMs, 0, 1) : delivered ? 1 : 0;
@@ -259,9 +255,10 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
     ? canceledISO
       ? `Canceled at ${formatUTC(canceledISO)} UTC`
       : "Canceled"
-    : etaAdjustedISO
-    ? `${formatUTC(etaAdjustedISO)} UTC`
-    : "";
+    : `${formatUTC(etaAdjustedISO)} UTC`;
+
+  // ✅ Optional, but handy for UI consistency
+  const current_speed_kmh = canceled || delivered || sleeping ? 0 : speedKmhEffective;
 
   return {
     ...l,
@@ -285,6 +282,9 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
     sent_utc_text: l.sent_at ? `${formatUTC(l.sent_at)} UTC` : "",
     eta_utc_text,
     eta_utc_iso: eta_utc_iso || null,
+
+    // ✅ same key used by status API (optional)
+    current_speed_kmh,
 
     badges_count: 0,
   };
@@ -326,7 +326,6 @@ export async function GET(req: Request) {
       delivered_notified_at,
       sender_receipt_sent_at,
       distance_km,
-      speed_kmh,
       archived_at,
       canceled_at,
       bird,
@@ -365,7 +364,6 @@ export async function GET(req: Request) {
       delivered_notified_at,
       sender_receipt_sent_at,
       distance_km,
-      speed_kmh,
       archived_at,
       canceled_at,
       bird,
