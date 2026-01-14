@@ -1170,7 +1170,7 @@
 
   /* was: polygon(0 0, 50% 62%, 100% 0) */
   /* push the point DOWN so it lands under the wax */
-  clip-path: polygon(0 0, 50% 86%, 100% 0);
+  clip-path: polygon(0 0, 50% 82%, 100% 0);
 
   border-bottom: 1px solid rgba(0,0,0,0.08);
   z-index: 1;
@@ -1223,7 +1223,7 @@
 
   height: 140px;
   background: linear-gradient(135deg, rgba(0,0,0,0.06), rgba(255,255,255,0.95));
-  clip-path: polygon(0 0, 50% 86%, 100% 0);
+  clip-path: polygon(0 0, 50% 82%, 100% 0);
 
   border-bottom: 1px solid rgba(0,0,0,0.08);
   z-index: 1;
