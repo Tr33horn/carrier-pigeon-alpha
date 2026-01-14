@@ -499,7 +499,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
   sleepLabel: "Crane",
   designNotes: "Graceful, intentional delivery",
   enabled: false,
-  visible: true,
+  visible: false,
   availabilityType: "event",
   monetizationAllowed: "sendFeeOnly",
   deliveryVisibility: "full",
