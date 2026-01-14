@@ -47,25 +47,33 @@ export const SEAL_CATALOG: SealRow[] = [
     selectable: true,
   },
   {
-    id: "seal_sun",
-    label: "Sun",
-    imgSrc: "/seals/seal-sun.png",
+    id: "seal_flokflame",
+    label: "FLOK Flame",
+    imgSrc: "/seals/seal-flokflame.png",
     rarity: "uncommon",
     selectable: true,
   },
 
     {
-    id: "seal_sunsmile",
-    label: "Sun Smile",
-    imgSrc: "/seals/seal-sunsmile.png",
+    id: "seal_floksun",
+    label: "FLOK Sun",
+    imgSrc: "/seals/seal-floksun.png",
     rarity: "uncommon",
     selectable: true,
   },
 
     {
-    id: "seal_heart",
-    label: "Heart",
-    imgSrc: "/seals/seal-heart.png",
+    id: "seal_flokheart",
+    label: "FLOK Heart",
+    imgSrc: "/seals/seal-flokheart.png",
+    rarity: "uncommon",
+    selectable: true,
+  },
+
+      {
+    id: "seal_loveheart",
+    label: "Love Heart",
+    imgSrc: "/seals/seal-loveheart.png",
     rarity: "uncommon",
     selectable: true,
   },
