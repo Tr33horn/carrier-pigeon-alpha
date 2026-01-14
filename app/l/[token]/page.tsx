@@ -1018,7 +1018,7 @@ export default function LetterStatusPage() {
         </section>
 
         {/* Letter card (always sealed view; modal is the reading experience) */}
-        <div className="card" style={{ marginTop: 14, position: "relative" }}>
+        <div className="card letterCard" style={{ marginTop: 14, position: "relative" }}>
           <div className="cardHead" style={{ marginBottom: 8 }}>
             <div>
               <div className="kicker">Letter</div>

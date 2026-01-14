@@ -1337,3 +1337,127 @@
 .sealCard {
   overflow: visible;
 }
+
+/* -------------------------------------------------
+   Letter Status: Envelope ONLY when .soft.envelope
+------------------------------------------------- */
+
+.soft.envelope{
+  position: relative;
+  padding-top: 18px;     /* normal padding */
+  padding-bottom: 14px;
+  overflow: visible;     /* IMPORTANT: don't clip the seal */
+}
+
+/* Envelope lives INSIDE the seal card (safe) */
+.soft.envelope .sealCard{
+  position: relative;
+  padding: 48px 24px 36px;
+  border-radius: 20px;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.98), rgba(250,250,250,0.95));
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 18px 36px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.8);
+  overflow: hidden; /* clip the flap + texture, NOT the whole .soft */
+}
+
+.soft.envelope .sealCard::before{
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 64px;
+  background: linear-gradient(135deg, rgba(0,0,0,0.06), rgba(255,255,255,0.95));
+  clip-path: polygon(0 0, 50% 62%, 100% 0);
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.soft.envelope .sealCard::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(0,0,0,0.035), transparent 55%),
+    radial-gradient(circle at 70% 80%, rgba(0,0,0,0.03), transparent 55%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* make sure content sits above flap/texture */
+.soft.envelope .sealRow{
+  position: relative;
+  z-index: 2;
+}
+
+/* z-index only works if positioned */
+.soft.envelope .seal,
+.soft.envelope .seal.crack{
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+/* ensure wax is always on top and clickable */
+.soft.envelope .waxBtn{
+  position: relative;
+  z-index: 3;
+}
+
+/* Only affect the letter + wax seal card */
+.letterCard .soft{
+  position: relative;
+  padding-top: 18px;
+  padding-bottom: 14px;
+  overflow: visible; /* IMPORTANT: don't clip the seal */
+}
+
+/* Envelope visuals live inside the seal card */
+.letterCard .sealCard{
+  position: relative;
+  padding: 48px 24px 36px;
+  border-radius: 20px;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.98), rgba(250,250,250,0.95));
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 18px 36px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.8);
+  overflow: hidden;
+}
+
+.letterCard .sealCard::before{
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 64px;
+  background: linear-gradient(135deg, rgba(0,0,0,0.06), rgba(255,255,255,0.95));
+  clip-path: polygon(0 0, 50% 62%, 100% 0);
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.letterCard .sealCard::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(0,0,0,0.035), transparent 55%),
+    radial-gradient(circle at 70% 80%, rgba(0,0,0,0.03), transparent 55%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.letterCard .sealRow{
+  position: relative;
+  z-index: 2;
+}
+
+.letterCard .seal,
+.letterCard .seal.crack{
+  position: relative; /* makes z-index work */
+  display: grid;
+  place-items: center;
+}
+
+.letterCard .waxBtn{
+  position: relative;
+  z-index: 3; /* always clickable */
+}
