@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CITIES } from "../lib/cities";
 import { CityTypeahead } from "../components/CityTypeahead";
@@ -8,6 +8,9 @@ import { CityTypeahead } from "../components/CityTypeahead";
 // ✅ Pull bird identity + display from one place
 import { BIRD_CATALOG } from "@/app/lib/birdsCatalog";
 import { normalizeBird, type BirdType } from "@/app/lib/birds";
+
+// ✅ Seals catalog + helpers
+import { getSeal, getSealImgSrc, getSelectableSeals } from "@/app/lib/seals";
 
 /* ---------- helpers ---------- */
 function nearestCity(lat: number, lon: number, cities: { name: string; lat: number; lon: number }[]) {
@@ -28,6 +31,15 @@ function nearestCity(lat: number, lon: number, cities: { name: string; lat: numb
 
 function isEmailValid(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+/** Normalize unknown-ish catalog rows safely */
+function getBirdSealConfig(row: any) {
+  const sealPolicy = (row?.sealPolicy as "selectable" | "fixed" | "none" | undefined) ?? "selectable";
+  const defaultSealId = (row?.defaultSealId as string | null | undefined) ?? null;
+  const fixedSealId = (row?.fixedSealId as string | null | undefined) ?? null;
+  const allowedSealIds = (Array.isArray(row?.allowedSealIds) ? (row.allowedSealIds as string[]) : []) ?? [];
+  return { sealPolicy, defaultSealId, fixedSealId, allowedSealIds };
 }
 
 /**
@@ -70,13 +82,11 @@ function WritePageInner() {
 
   const birdName = birdEntry?.displayLabel ?? "Homing Pigeon";
 
-  // TEMP fallback until imgSrc is added to BirdCatalogRow
   const birdGif = useMemo(() => {
-    if (birdEntry && "imgSrc" in birdEntry && birdEntry.imgSrc) {
-      return birdEntry.imgSrc;
+    if (birdEntry && "imgSrc" in (birdEntry as any) && (birdEntry as any).imgSrc) {
+      return (birdEntry as any).imgSrc as string;
     }
 
-    // fallback mapping (can delete later)
     switch (bird) {
       case "snipe":
         return "/birds/great-snipe.gif";
@@ -87,11 +97,55 @@ function WritePageInner() {
     }
   }, [bird, birdEntry]);
 
+  // ✅ Seal configuration from catalog row
+  const sealCfg = useMemo(() => getBirdSealConfig(birdEntry), [birdEntry]);
+  const { sealPolicy, defaultSealId, fixedSealId, allowedSealIds } = sealCfg;
+
+  // ✅ Build picker list (IDs -> seal objects)
+  const sealOptions = useMemo(() => {
+    if (sealPolicy === "selectable" && allowedSealIds.length > 0) {
+      return allowedSealIds
+        .map((id) => getSeal(id))
+        .filter(Boolean)
+        .map((s) => s!);
+    }
+    return getSelectableSeals();
+  }, [sealPolicy, allowedSealIds]);
+
+  // ✅ Selected seal state (varies by policy)
+  const [sealId, setSealId] = useState<string | null>(null);
+
+  // Keep seal selection in sync when bird changes
+  useEffect(() => {
+    if (sealPolicy === "none") {
+      setSealId(null);
+      return;
+    }
+
+    if (sealPolicy === "fixed") {
+      setSealId(fixedSealId ?? null);
+      return;
+    }
+
+    // selectable:
+    const preferred = defaultSealId || sealOptions[0]?.id || null;
+    setSealId(preferred);
+  }, [sealPolicy, fixedSealId, defaultSealId, sealOptions]);
+
+  const selectedSealImg = useMemo(() => {
+    if (!sealId) return null;
+    return getSealImgSrc(sealId) || null;
+  }, [sealId]);
+
+  const selectedSealLabel = useMemo(() => {
+    if (!sealId) return "";
+    return getSeal(sealId)?.label ?? sealId;
+  }, [sealId]);
+
   // Step 1: who
   const [fromName, setFromName] = useState("You");
   const [toName, setToName] = useState("");
 
-  // Emails now live directly under names (no separate Step 4)
   const [fromEmail, setFromEmail] = useState("");
   const [toEmail, setToEmail] = useState("");
 
@@ -120,6 +174,9 @@ function WritePageInner() {
   const messageOk = message.trim().length > 0;
 
   const routeOk = origin.name !== destination.name;
+
+  // ✅ seal ok: only required if selectable/fixed and we have a seal concept
+  const sealOk = sealPolicy === "none" ? true : !!sealId;
 
   /* ---------- geolocation ---------- */
   function useMyLocationForOrigin() {
@@ -189,6 +246,11 @@ function WritePageInner() {
       setSending(false);
       return;
     }
+    if (!sealOk) {
+      setError("Pick a wax seal first.");
+      setSending(false);
+      return;
+    }
 
     try {
       const res = await fetch("/api/letters/send", {
@@ -204,6 +266,8 @@ function WritePageInner() {
           origin,
           destination,
           bird,
+          // ✅ NEW
+          seal_id: sealId,
         }),
       });
 
@@ -222,7 +286,14 @@ function WritePageInner() {
   }
 
   const disableSend =
-    sending || !routeOk || !fromNameOk || !toNameOk || !messageOk || !senderEmailOk || !recipientEmailOk;
+    sending ||
+    !routeOk ||
+    !fromNameOk ||
+    !toNameOk ||
+    !messageOk ||
+    !senderEmailOk ||
+    !recipientEmailOk ||
+    !sealOk;
 
   const routeLabel = useMemo(() => `${origin.name} → ${destination.name}`, [origin.name, destination.name]);
 
@@ -233,7 +304,7 @@ function WritePageInner() {
           ← Dashboard
         </a>
 
-        {/* ✅ Header + clickable bird preview */}
+        {/* Header + clickable bird preview */}
         <div className="writeHead" style={{ marginTop: 12 }}>
           <div style={{ minWidth: 0 }}>
             <div className="kicker">Compose</div>
@@ -244,7 +315,6 @@ function WritePageInner() {
             </p>
           </div>
 
-          {/* ✅ Bird name inside the same white box, above the GIF */}
           <a href="/new" className="birdPreview" aria-label="Change bird" title="Change bird">
             <div className="birdPreviewName">{birdName}</div>
 
@@ -272,7 +342,6 @@ function WritePageInner() {
             </div>
 
             <div className="twoCol">
-              {/* FROM column */}
               <div className="stack" style={{ gap: 10 }}>
                 <label className="field">
                   <span className="fieldLabel">From</span>
@@ -301,7 +370,6 @@ function WritePageInner() {
                 </label>
               </div>
 
-              {/* TO column */}
               <div className="stack" style={{ gap: 10 }}>
                 <label className="field">
                   <span className="fieldLabel">To</span>
@@ -367,6 +435,77 @@ function WritePageInner() {
             </div>
           </section>
 
+          {/* Wax seal */}
+          {sealPolicy !== "none" && (
+            <section className="card">
+              <div className="cardHead" style={{ marginBottom: 10 }}>
+                <div>
+                  <div className="kicker">Wax seal</div>
+                  <div className="h2">Choose a seal</div>
+                  <div className="muted" style={{ marginTop: 4 }}>
+                    {sealPolicy === "fixed" ? "This bird insists." : "This will appear on the sealed letter."}
+                  </div>
+                </div>
+
+                {sealPolicy === "fixed" ? (
+                  <div className="metaPill faint" title="This seal is locked for this bird">
+                    Locked
+                  </div>
+                ) : (
+                  <div className="metaPill faint">{selectedSealLabel || "Pick one"}</div>
+                )}
+              </div>
+
+              {sealPolicy === "fixed" ? (
+                <div className="sealFixedRow">
+                  <div className="sealThumbLarge">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={selectedSealImg || "/waxseal.png"} alt={selectedSealLabel || "Wax seal"} />
+                  </div>
+
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 900, letterSpacing: "-0.01em" }}>{selectedSealLabel || "Wax seal"}</div>
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      You can’t change this one. The bird filed the paperwork already.
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="sealGrid">
+                    {sealOptions.map((s) => {
+                      const on = s.id === sealId;
+                      const img = getSealImgSrc(s.id) || (s as any).imgSrc || "/waxseal.png";
+
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className={`sealPick ${on ? "on" : ""}`}
+                          onClick={() => setSealId(s.id)}
+                          aria-pressed={on}
+                          title={`Choose ${s.label}`}
+                        >
+                          <span className="sealThumb">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={img} alt="" />
+                          </span>
+                          <span className="sealLabel">{s.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {!sealOk && (
+                    <div className="errorText" style={{ marginTop: 10 }}>
+                      Pick a seal to continue.
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          )}
+
           {/* Step 3 */}
           <section className="card">
             <div className="cardHead" style={{ marginBottom: 10 }}>
@@ -390,7 +529,6 @@ function WritePageInner() {
             )}
 
             <div className="twoCol">
-              {/* Origin */}
               <div className="stack">
                 <div className="fieldLabel">Origin</div>
 
@@ -424,7 +562,6 @@ function WritePageInner() {
                 {locError && <div className="errorText">{locError}</div>}
               </div>
 
-              {/* Destination */}
               <div>
                 <CityTypeahead
                   label="Destination"
@@ -471,133 +608,6 @@ function WritePageInner() {
             )}
           </div>
         </div>
-
-        {/* ✅ Styles for the clickable bird preview */}
-        <style jsx global>{`
-          .writeHead {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 14px;
-            flex-wrap: wrap;
-          }
-
-          .h1Bold {
-            font-weight: 900;
-            letter-spacing: -0.02em;
-          }
-
-          .birdPreview {
-            flex: 0 0 auto;
-            width: 150px;
-            height: 120px;
-            border-radius: 18px;
-            padding: 10px;
-            background: #ffffff;
-            border: 1px solid rgba(0, 0, 0, 0.1);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
-            text-decoration: none;
-            color: inherit;
-            cursor: pointer;
-            transform: translateZ(0);
-          }
-
-          .birdPreviewName {
-            font-size: 13px;
-            line-height: 14px;
-            font-weight: 950;
-            letter-spacing: -0.01em;
-            text-align: center;
-            padding: 2px 6px;
-            opacity: 0.92;
-          }
-
-          .birdPreviewImg {
-            width: 86px;
-            height: 62px;
-            object-fit: contain;
-            filter: saturate(0.85) contrast(1.02);
-            transition: filter 180ms ease, transform 180ms ease;
-            transform: translateZ(0);
-          }
-
-          .birdPreviewHint {
-            font-size: 12px;
-            line-height: 14px;
-            font-weight: 800;
-            letter-spacing: -0.01em;
-            opacity: 0.7;
-            transition: opacity 180ms ease, transform 180ms ease;
-            transform: translateY(0px);
-            white-space: nowrap;
-          }
-
-          .birdPreview:hover .birdPreviewImg,
-          .birdPreview:focus-visible .birdPreviewImg {
-            filter: saturate(1) contrast(1);
-            transform: scale(1.02);
-            animation: tinyWiggle 680ms ease-in-out;
-          }
-
-          .birdPreview:hover .birdPreviewHint,
-          .birdPreview:focus-visible .birdPreviewHint {
-            opacity: 1;
-            transform: translateY(-1px);
-          }
-
-          .birdPreview:hover .birdPreviewName,
-          .birdPreview:focus-visible .birdPreviewName {
-            opacity: 1;
-          }
-
-          @keyframes tinyWiggle {
-            0% {
-              transform: scale(1.02) rotate(0deg);
-            }
-            20% {
-              transform: scale(1.02) rotate(-0.6deg) translateY(-0.5px);
-            }
-            45% {
-              transform: scale(1.02) rotate(0.7deg) translateY(0px);
-            }
-            70% {
-              transform: scale(1.02) rotate(-0.4deg) translateY(-0.3px);
-            }
-            100% {
-              transform: scale(1.02) rotate(0deg);
-            }
-          }
-
-          .birdPreview:focus-visible {
-            outline: 3px solid rgba(56, 132, 255, 0.35);
-            outline-offset: 3px;
-          }
-
-          @media (prefers-reduced-motion: reduce) {
-            .birdPreview:hover .birdPreviewImg,
-            .birdPreview:focus-visible .birdPreviewImg {
-              animation: none !important;
-            }
-          }
-
-          @media (max-width: 520px) {
-            .birdPreview {
-              width: 140px;
-              height: 114px;
-              border-radius: 16px;
-              padding: 8px;
-            }
-            .birdPreviewImg {
-              width: 82px;
-              height: 60px;
-            }
-          }
-        `}</style>
       </div>
     </main>
   );

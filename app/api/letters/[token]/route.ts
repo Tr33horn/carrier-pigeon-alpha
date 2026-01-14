@@ -354,7 +354,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
       eta_at,
       archived_at,
       canceled_at,
-      bird
+      bird,
+      seal_id
     `
     )
     .eq("public_token", token)
@@ -629,6 +630,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const eta_at_adjusted = canceled ? canceledISO : etaAdjustedISO;
   const eta_utc_text = canceled ? (canceledISO ? `Canceled at ${formatUtc(canceledISO)}` : "Canceled") : formatUtc(etaAdjustedISO);
 
+  // ✅ Normalize seal_id so client always gets string | null
+  const seal_id =
+    typeof (meta as any).seal_id === "string" ? ((meta as any).seal_id as string).trim() || null : null;
+
   return NextResponse.json(
     {
       archived,
@@ -647,6 +652,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
 
         // ✅ expose the EFFECTIVE speed used by the sim (from code)
         speed_kmh: speedKmh,
+
+        // ✅ NEW: expose seal_id for UI (safe even before delivery)
+        seal_id,
 
         eta_at_adjusted,
         eta_utc_text,

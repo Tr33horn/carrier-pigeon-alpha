@@ -34,6 +34,9 @@ type Letter = {
 
   archived_at?: string | null;
   canceled_at?: string | null;
+
+  // ✅ NEW: seal id returned by API
+  seal_id?: string | null;
 };
 
 type Checkpoint = {
@@ -191,6 +194,15 @@ function formatOpensShort(etaIso: string) {
   return `${dateLocal}, ${timeLocal} (${dateUtc}, ${timeUtc} UTC)`;
 }
 
+/** ✅ Seal image resolver (fallback-safe)
+ *  Adjust this path if your seal assets live elsewhere.
+ */
+function sealImageSrc(sealId: string | null | undefined) {
+  const id = typeof sealId === "string" ? sealId.trim() : "";
+  if (!id) return "/waxseal.png";
+  return `/seals/${encodeURIComponent(id)}.png`;
+}
+
 /* ---------- tiny icon system (inline SVG) ---------- */
 function Ico({
   name,
@@ -339,12 +351,14 @@ function WaxSealOverlay({
   canceled,
   canOpen,
   onOpen,
+  sealSrc,
 }: {
   opensShort: string;
   cracking?: boolean;
   canceled?: boolean;
   canOpen?: boolean;
   onOpen?: () => void;
+  sealSrc: string;
 }) {
   return (
     <div className={cracking ? "seal crack" : "seal"} style={{ position: "relative" }}>
@@ -364,7 +378,7 @@ function WaxSealOverlay({
             title={canOpen ? "Open letter" : "Sealed until delivery"}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/waxseal.png" alt="Wax seal" className="waxImg" />
+            <img src={sealSrc} alt="Wax seal" className="waxImg" />
 
             {canOpen ? <div className="waxHint">Click to open</div> : null}
           </button>
@@ -825,6 +839,9 @@ export default function LetterStatusPage() {
     return uiDelivered ? "delivered" : sleeping ? "sleeping" : "flying";
   }, [canceled, flight?.marker_mode, uiDelivered, sleeping]);
 
+  // ✅ NEW: seal src derived from letter.seal_id (fallback-safe)
+  const sealSrc = useMemo(() => sealImageSrc(letter?.seal_id ?? null), [letter?.seal_id]);
+
   function openLetter() {
     if (!uiDelivered || canceled) return;
 
@@ -1028,6 +1045,7 @@ export default function LetterStatusPage() {
                 canceled={canceled}
                 canOpen={uiDelivered && !canceled}
                 onOpen={openLetter}
+                sealSrc={sealSrc}
               />
             </div>
           </div>

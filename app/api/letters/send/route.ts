@@ -14,6 +14,12 @@ import { offsetMinutesFromLon } from "@/app/lib/flightSleep";
 // ✅ Single source of truth for bird rules
 import { BIRD_RULES, normalizeBird, type BirdType } from "@/app/lib/birds";
 
+// ✅ Bird catalog: seal policy + allowed/default/fixed seal ids live here
+import { getBirdCatalog } from "@/app/lib/birdsCatalog";
+
+// ✅ Seals registry: validates the seal id exists
+import { getSeal } from "@/app/lib/seals";
+
 // ✅ Email template
 import { LetterOnTheWayEmail } from "@/emails/LetterOnTheWay";
 
@@ -146,10 +152,6 @@ function stickyGeoLabel(opts: {
  * ✅ Stable checkpoints:
  * - Position is linear (vibe)
  * - Time is baseline wall-time between sent_at and eta_at (no sleep baked in)
- *
- * IMPORTANT:
- * Your /api/letters/[token] route RETIMES checkpoints to match sleep-aware progress anyway.
- * So storing baseline times here keeps DB sane + avoids double-applying sleep.
  */
 function generateCheckpointsBaseline(opts: {
   sentUtcMs: number;
@@ -213,13 +215,64 @@ function generateCheckpointsBaseline(opts: {
   });
 }
 
+/* ---------------------------------
+   ✅ Seal resolution + validation
+--------------------------------- */
+function resolveSealId(opts: { bird: BirdType; requestedSealId: unknown }) {
+  const { bird, requestedSealId } = opts;
+
+  const row = getBirdCatalog(bird) ?? getBirdCatalog("pigeon");
+  const sealPolicy = (row as any)?.sealPolicy ?? "selectable";
+
+  const req = typeof requestedSealId === "string" ? requestedSealId.trim() : "";
+  const reqId = req || null;
+
+  // Birds with no seal concept
+  if (sealPolicy === "none") {
+    return { ok: true as const, sealId: null as string | null };
+  }
+
+  // Fixed seal: ignore user choice, force the bird’s seal
+  if (sealPolicy === "fixed") {
+    const fixed = ((row as any)?.fixedSealId as string | null | undefined) ?? null;
+    if (!fixed) return { ok: false as const, error: "This bird requires a fixed seal, but none is configured." };
+    if (!getSeal(fixed)) return { ok: false as const, error: `Fixed seal "${fixed}" is not registered.` };
+    return { ok: true as const, sealId: fixed };
+  }
+
+  // Selectable seals
+  const allowed = Array.isArray((row as any)?.allowedSealIds) ? ((row as any).allowedSealIds as string[]) : [];
+  const def = ((row as any)?.defaultSealId as string | null | undefined) ?? null;
+
+  // If client didn't send anything, pick default (or first allowed)
+  const chosen = reqId || def || allowed[0] || null;
+  if (!chosen) return { ok: false as const, error: "No seal is available for this bird." };
+
+  // Ensure the seal exists
+  if (!getSeal(chosen)) return { ok: false as const, error: `Seal "${chosen}" is not registered.` };
+
+  // If allowed list is present, enforce it
+  if (allowed.length > 0 && !allowed.includes(chosen)) {
+    return { ok: false as const, error: "That seal isn’t allowed for this bird." };
+  }
+
+  return { ok: true as const, sealId: chosen };
+}
+
 export async function POST(req: Request) {
   const body = await req.json();
 
-  const { from_name, from_email, to_name, to_email, subject, message, origin, destination, bird: birdRaw } = body;
+  // ✅ NEW: accept seal_id from client
+  const { from_name, from_email, to_name, to_email, subject, message, origin, destination, bird: birdRaw, seal_id } = body;
 
   const bird: BirdType = normalizeBird(birdRaw);
   const birdCfg = BIRD_RULES[bird];
+
+  // ✅ Resolve/validate seal before insert
+  const sealResolved = resolveSealId({ bird, requestedSealId: seal_id });
+  if (!sealResolved.ok) {
+    return NextResponse.json({ error: sealResolved.error }, { status: 400 });
+  }
 
   const normalizedFromEmail = typeof from_email === "string" ? from_email.trim().toLowerCase() : "";
   const normalizedToEmail = typeof to_email === "string" ? to_email.trim().toLowerCase() : "";
@@ -256,8 +309,6 @@ export async function POST(req: Request) {
   }
 
   // ✅ SPEED IS DEFINED IN CODE (birds.ts)
-  // We still store it in DB as a snapshot for debugging/back-compat,
-  // but it is NOT authoritative.
   const speedKmhEffective = Number(birdCfg.speedKmh);
   if (!Number.isFinite(speedKmhEffective) || speedKmhEffective <= 0) {
     return NextResponse.json({ error: "Invalid bird speed." }, { status: 400 });
@@ -269,15 +320,14 @@ export async function POST(req: Request) {
   const midLon = lerp(origin.lon, destination.lon, 0.5);
   const offsetMin = offsetMinutesFromLon(midLon);
 
-  // ✅ IMPORTANT:
-  // Do NOT delay sent_at for sleep. Status route handles skip-initial-sleep-window.
+  // ✅ IMPORTANT: Do NOT delay sent_at for sleep.
   const sentUtcMs = Date.now();
   const sentAt = new Date(sentUtcMs);
 
   // ✅ Baseline ETA stored in DB (always sane)
   const etaUtcMs = sentUtcMs + reqAwakeMs;
 
-  // ✅ Safety belt: don’t allow ETAs beyond 365 days (should never hit in real use)
+  // ✅ Safety belt: don’t allow ETAs beyond 365 days
   const maxAllowedUtcMs = sentUtcMs + 365 * 24 * 3600_000;
   const etaUtcMsSafe = Number.isFinite(etaUtcMs) ? Math.min(etaUtcMs, maxAllowedUtcMs) : maxAllowedUtcMs;
   const etaAtSafe = new Date(etaUtcMsSafe);
@@ -287,6 +337,7 @@ export async function POST(req: Request) {
   console.log("SEND DEBUG:", {
     token: publicToken.slice(0, 8),
     bird,
+    sealId: sealResolved.sealId,
     km: Number(km.toFixed(2)),
     speedKmh: speedKmhEffective,
     ineff: birdCfg.inefficiency,
@@ -301,6 +352,10 @@ export async function POST(req: Request) {
     .insert({
       public_token: publicToken,
       bird,
+
+      // ✅ NEW: store seal_id on the letter (requires DB column letters.seal_id)
+      seal_id: sealResolved.sealId,
+
       from_name,
       from_email: normalizedFromEmail,
       sender_receipt_sent_at: null,
@@ -323,7 +378,7 @@ export async function POST(req: Request) {
       sent_at: sentAt.toISOString(),
       eta_at: etaAtSafe.toISOString(),
     })
-    .select("id, public_token, eta_at, origin_name, dest_name, from_name, to_name, bird")
+    .select("id, public_token, eta_at, origin_name, dest_name, from_name, to_name, bird, seal_id")
     .single();
 
   if (letterErr || !letter) {
@@ -364,7 +419,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: cpErr.message }, { status: 500 });
   }
 
-  // ✅ Send “On the way” email (ABSOLUTE status URL + debugToken)
+  // ✅ Send “On the way” email
   try {
     const baseUrl = getBaseUrl(req);
     const statusPath = `/l/${publicToken}`;
@@ -383,6 +438,8 @@ export async function POST(req: Request) {
         statusUrl: absoluteStatusUrl,
         bird: (letter.bird as BirdType) || bird,
         debugToken: publicToken,
+        // optional to use later in template:
+        sealId: (letter as any).seal_id ?? sealResolved.sealId,
       }),
       tags: [
         { name: "kind", value: "letter_on_the_way" },
