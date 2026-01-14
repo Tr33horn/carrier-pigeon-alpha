@@ -64,14 +64,19 @@ function WritePageInner() {
 
   // ✅ catalog entry for display (safe fallback to pigeon)
   const birdEntry = useMemo(() => {
-    const all = (BIRD_CATALOG as any[]) ?? [];
+    const all = BIRD_CATALOG ?? [];
     return all.find((b) => b.id === bird) ?? all.find((b) => b.id === "pigeon") ?? null;
   }, [bird]);
 
   const birdName = birdEntry?.displayLabel ?? "Homing Pigeon";
 
-  // ✅ GIF is still mapped here until we add imgSrc to BirdCatalogRow
+  // TEMP fallback until imgSrc is added to BirdCatalogRow
   const birdGif = useMemo(() => {
+    if (birdEntry && "imgSrc" in birdEntry && birdEntry.imgSrc) {
+      return birdEntry.imgSrc;
+    }
+
+    // fallback mapping (can delete later)
     switch (bird) {
       case "snipe":
         return "/birds/great-snipe.gif";
@@ -80,7 +85,7 @@ function WritePageInner() {
       default:
         return "/birds/homing-pigeon.gif";
     }
-  }, [bird]);
+  }, [bird, birdEntry]);
 
   // Step 1: who
   const [fromName, setFromName] = useState("You");

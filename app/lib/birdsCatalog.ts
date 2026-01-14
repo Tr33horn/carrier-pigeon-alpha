@@ -21,14 +21,15 @@ export type MonetizationAllowed = "sendFeeOnly" | "cosmeticOnly" | "no";
 
 export type PromiseDateBias = "neutral" | "complicate" | "resist" | "embrace" | "reject";
 
-export type SenderReceiptPolicy = "normal" | "deliveredOnly" | "seenOnly" | "none";
-export type RecipientOpenChoice = "none" | "openNowOrLater";
-
 export type BirdCatalogRow = {
   /** Stable code/id (use in DB when you actually enable it) */
   id: string;
 
   displayLabel: string;
+
+  /** ✅ For picker + write preview (single source of truth) */
+  imgSrc: string;
+
   rarity: BirdRarity;
   availabilityNotes?: string;
 
@@ -70,8 +71,8 @@ export type BirdCatalogRow = {
   postSendAftermathText?: string | null;
   arrivalText?: string | null;
 
-  senderReceiptPolicy?: SenderReceiptPolicy;
-  recipientOpenChoice?: RecipientOpenChoice;
+  senderReceiptPolicy?: "normal" | "deliveredOnly" | "none";
+  recipientOpenChoice?: "none" | "openNowOrLater";
 
   supportsPromiseDate: boolean;
   promiseDateBias: PromiseDateBias;
@@ -94,6 +95,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
   {
     id: "pigeon",
     displayLabel: "Homing Pigeon",
+    imgSrc: "/birds/homing-pigeon.gif",
     rarity: "common",
     availabilityNotes: "Always available",
     speedKmh: 72,
@@ -129,6 +131,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
   {
     id: "snipe",
     displayLabel: "Great Snipe",
+    imgSrc: "/birds/great-snipe.gif",
     rarity: "rare",
     availabilityNotes: "Occasional, distance-based",
     speedKmh: 88,
@@ -164,6 +167,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
   {
     id: "goose",
     displayLabel: "Canada Goose",
+    imgSrc: "/birds/canada-goose.gif",
     rarity: "uncommon",
     availabilityNotes: "Seasonal (migration periods)",
     speedKmh: 56,
@@ -196,10 +200,11 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     promiseFailureCopy: "sayNothing",
   },
 
-  // --- Future birds ---
+  // --- Future birds (still fine to include; set enabled true/false as you like) ---
   {
     id: "falcon",
     displayLabel: "Peregrine Falcon",
+    imgSrc: "/birds/Peregrine-Falcon.gif",
     rarity: "legendary",
     availabilityNotes: "Extremely rare",
     speedKmh: 120,
@@ -208,7 +213,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     sleepCfg: DEFAULT_SLEEP,
     sleepLabel: "Falcon",
     designNotes: "Fastest bird; dangerous to overuse",
-    enabled: true,
+    enabled: false,
     availabilityType: "occasional",
     minDistanceKm: 0,
     maxDistanceKm: null,
@@ -235,6 +240,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
   {
     id: "crow",
     displayLabel: "Crow",
+    imgSrc: "/birds/crow.gif",
     rarity: "mythic",
     availabilityNotes: "Singleton system-wide",
     speedKmh: 78,
@@ -243,7 +249,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     sleepCfg: sleepCfg(23, 5),
     sleepLabel: "Crow",
     designNotes: "One-at-a-time bird with urgency mechanics",
-    enabled: true,
+    enabled: false,
     availabilityType: "singleton",
     minDistanceKm: 0,
     maxDistanceKm: null,
@@ -268,13 +274,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
   },
 ];
 
-/** Old name kept for backwards compat (optional). */
 export function enabledBirdCatalog() {
-  return BIRD_CATALOG.filter((b) => b.enabled);
-}
-
-/** ✅ Preferred name (matches your picker imports) */
-export function getEnabledBirdCatalog() {
   return BIRD_CATALOG.filter((b) => b.enabled);
 }
 

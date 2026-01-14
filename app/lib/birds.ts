@@ -1,7 +1,9 @@
 // app/lib/birds.ts
 import type { SleepConfig } from "@/app/lib/flightSleep";
 import { DEFAULT_SLEEP } from "@/app/lib/flightSleep";
-import { BIRD_CATALOG, getEnabledBirdCatalog, type BirdCatalogRow } from "@/app/lib/birdsCatalog";
+
+// ✅ Catalog lives in birdsCatalog.ts
+import { BIRD_CATALOG, enabledBirdCatalog, type BirdCatalogRow } from "@/app/lib/birdsCatalog";
 
 /**
  * ✅ Flight engine bird set (DB-safe + API-safe)
@@ -68,33 +70,36 @@ function isBirdType(id: string): id is BirdType {
   return (SUPPORTED_BIRD_TYPES as readonly string[]).includes(id);
 }
 
+// ✅ Narrowed view of catalog rows that are actually supported by the engine
+export type SupportedBirdCatalogRow = Omit<BirdCatalogRow, "id"> & { id: BirdType };
+
 /**
  * ✅ Picker list:
- * returns enabled birds that are ALSO supported by the flight engine (BirdType)
- *
- * This keeps "falcon" / "crow" from crashing the app until you add them to BirdType + BIRD_RULES.
+ * enabled birds that are ALSO supported by the flight engine (BirdType)
  */
-export function getEnabledBirdCatalogForPicker(): BirdCatalogRow[] {
-  return getEnabledBirdCatalog().filter((b) => isBirdType(b.id));
+export function getEnabledBirdCatalogForPicker(): SupportedBirdCatalogRow[] {
+  return enabledBirdCatalog()
+    .filter((b) => isBirdType(b.id))
+    .map((b) => ({ ...b, id: b.id as BirdType }));
 }
 
 /**
  * ✅ What the picker can actually select right now.
  */
 export function getEnabledBirdTypes(): BirdType[] {
-  return getEnabledBirdCatalogForPicker().map((b) => b.id as BirdType);
+  return getEnabledBirdCatalogForPicker().map((b) => b.id);
 }
 
 /**
  * Handy: look up catalog row for a supported bird type.
  */
-export function getCatalogForBirdType(bird: BirdType): BirdCatalogRow | null {
-  return BIRD_CATALOG.find((b) => b.id === bird) ?? null;
+export function getCatalogForBirdType(bird: BirdType): SupportedBirdCatalogRow | null {
+  const row = BIRD_CATALOG.find((b) => b.id === bird);
+  return row ? ({ ...row, id: bird } as SupportedBirdCatalogRow) : null;
 }
 
 /**
  * Optional convenience for UI labels/images.
- * If you want your UI to be 100% catalog-driven, use these.
  */
 export function birdDisplayLabel(bird: BirdType): string {
   return getCatalogForBirdType(bird)?.displayLabel ?? BIRD_RULES[bird].label;
