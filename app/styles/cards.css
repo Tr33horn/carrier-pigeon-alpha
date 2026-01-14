@@ -1320,3 +1320,20 @@
     radial-gradient(circle at 70% 80%, rgba(0,0,0,0.03), transparent 55%);
   pointer-events: none;
 }
+
+/* Fix wax seal layering */
+.waxBtn {
+  position: relative;
+  z-index: 3;
+}
+
+/* Envelope layers should never block interaction */
+.sealCard::before,
+.sealCard::after {
+  pointer-events: none;
+}
+
+/* Allow seal animation to escape envelope bounds */
+.sealCard {
+  overflow: visible;
+}
