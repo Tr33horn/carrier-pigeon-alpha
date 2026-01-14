@@ -74,7 +74,9 @@
 }
 .metaPill.faint { opacity: 0.75; }
 
+/* NOTE: kept for backwards-compat; prefer .inlineLink going forward */
 .link { text-decoration: underline; font-weight: 900; }
+.inlineLink { text-decoration: underline; font-weight: 900; }
 
 .linkPill {
   display: inline-flex;
@@ -198,7 +200,9 @@
 .tabBtn:focus-visible,
 .dashSelect:focus-visible,
 .topBrandLink:focus-visible,
-.flokMarkLink:focus-visible {
+.flokMarkLink:focus-visible,
+.birdPreview:focus-visible,
+.sealPick:focus-visible {
   outline: none;
   box-shadow: 0 0 0 4px var(--alp-blue-18);
   border-color: rgba(0,0,0,0.22);
@@ -269,8 +273,19 @@
   .birdStatusCard,
   .badgeTile,
   .topBrandLink,
-  .flokMarkLink {
+  .flokMarkLink,
+  .birdPreview,
+  .sealPick {
     transition: none !important;
+  }
+
+  .thumbPulse { animation: none !important; }
+  .dashToast { animation: none !important; }
+  .tabStage { animation: none !important; }
+  .badgePop { animation: none !important; }
+  .birdPreview:hover .birdPreviewImg,
+  .birdPreview:focus-visible .birdPreviewImg {
+    animation: none !important;
   }
 }
 
@@ -940,13 +955,6 @@
   outline-offset: 3px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .birdPreview:hover .birdPreviewImg,
-  .birdPreview:focus-visible .birdPreviewImg {
-    animation: none !important;
-  }
-}
-
 @media (max-width: 520px) {
   .birdPreview {
     width: 140px;
@@ -960,112 +968,19 @@
   }
 }
 
-/* -----------------------------
-   Write page: seals
------------------------------ */
-
+/* -------------------------------------------------
+   Seals (Write page) — DEDUPED (single source of truth)
+------------------------------------------------- */
 .sealGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
-
-@media (max-width: 720px) {
-  .sealGrid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-@media (max-width: 520px) {
-  .sealGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-.sealPick {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 10px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(0, 0, 0, 0.10);
-  cursor: pointer;
-  text-align: center;
-  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
-}
-
-.sealPick:hover {
-  transform: translateY(-1px);
-  border-color: rgba(0, 0, 0, 0.18);
-}
-
-.sealPick.on {
-  background: rgba(255, 255, 255, 1);
-  border-color: rgba(0, 0, 0, 0.28);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
-}
-
-.sealThumb {
-  width: 64px;
-  height: 64px;
-  display: grid;
-  place-items: center;
-}
-
-.sealThumb img {
-  width: 64px;
-  height: 64px;
-  object-fit: contain;
-  display: block;
-}
-
-.sealLabel {
-  font-size: 12px;
-  line-height: 14px;
-  font-weight: 900;
-  letter-spacing: -0.01em;
-  opacity: 0.9;
-}
-
-.sealFixedRow {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-}
-
-.sealThumbLarge {
-  width: 86px;
-  height: 86px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-}
-
-.sealThumbLarge img {
-  width: 86px;
-  height: 86px;
-  object-fit: contain;
-  display: block;
-}
-
-/* ---------- Seal picker (Write page) ---------- */
-.sealGrid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
 @media (max-width: 820px) {
-  .sealGrid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+  .sealGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 520px) {
-  .sealGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  .sealGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .sealPick {
@@ -1082,13 +997,11 @@
   text-align: center;
   transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
-
 .sealPick:hover {
   transform: translateY(-1px);
   border-color: rgba(0, 0, 0, 0.18);
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.06);
 }
-
 .sealPick.on {
   border-color: rgba(56, 132, 255, 0.55);
   box-shadow: 0 10px 24px rgba(56, 132, 255, 0.10);
@@ -1103,7 +1016,6 @@
   background: rgba(0, 0, 0, 0.03);
   border: 1px solid rgba(0, 0, 0, 0.06);
 }
-
 .sealThumb img {
   width: 44px;
   height: 44px;
@@ -1119,13 +1031,12 @@
   opacity: 0.92;
 }
 
-/* Fixed seal row */
+/* Fixed seal row (Write page) */
 .sealFixedRow {
   display: flex;
   gap: 12px;
   align-items: center;
 }
-
 .sealThumbLarge {
   width: 72px;
   height: 72px;
@@ -1136,7 +1047,6 @@
   border: 1px solid rgba(0, 0, 0, 0.08);
   flex: 0 0 auto;
 }
-
 .sealThumbLarge img {
   width: 56px;
   height: 56px;
@@ -1145,65 +1055,17 @@
 }
 
 /* -------------------------------------------------
-   Letter Status: Envelope + centered wax seal
-   (visual-only, safe, image-ready)
+   Letter Status: centered wax seal + envelope (SCOPED)
+   IMPORTANT: no global .soft overrides
 ------------------------------------------------- */
-
-/* The soft letter container becomes the envelope */
-.soft {
-  position: relative;
-  padding-top: 56px; /* room for flap */
-  padding-bottom: 48px;
-  overflow: hidden;
-}
-
-/* Envelope flap (top triangle illusion) */
-.soft::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 72px;
-
-  background:
-    linear-gradient(
-      135deg,
-      rgba(0,0,0,0.06),
-      rgba(255,255,255,0.85)
-    );
-
-  clip-path: polygon(0 0, 50% 60%, 100% 0);
-  border-bottom: 1px solid rgba(0,0,0,0.08);
-  z-index: 1;
-}
-
-/* Subtle paper grain / depth */
-.soft::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 30% 20%, rgba(0,0,0,0.04), transparent 55%),
-    radial-gradient(circle at 70% 80%, rgba(0,0,0,0.035), transparent 55%);
-  pointer-events: none;
-}
 
 /* Center the seal area */
 .seal,
 .seal.crack {
+  position: relative;
   display: grid;
   place-items: center;
   margin-top: 10px;
-  z-index: 2;
-}
-
-/* Card that holds seal text + button */
-.sealCard {
-  width: 100%;
-  max-width: 420px;
-  margin: 0 auto;
-  text-align: center;
 }
 
 /* Row becomes vertical + centered */
@@ -1216,6 +1078,14 @@
   gap: 14px;
 }
 
+/* Card that holds seal text + button (layout only) */
+.sealCard {
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  text-align: center;
+}
+
 /* Wax button becomes the hero */
 .waxBtn {
   position: relative;
@@ -1223,6 +1093,10 @@
   background: transparent;
   padding: 0;
   cursor: pointer;
+}
+.waxBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.95;
 }
 
 /* Bigger, centered seal */
@@ -1233,12 +1107,10 @@
   filter: drop-shadow(0 10px 18px rgba(0,0,0,0.18));
   transition: transform 180ms ease, filter 180ms ease;
 }
-
 .waxBtn.canOpen:hover .waxImg {
   transform: scale(1.05) rotate(-1deg);
   filter: drop-shadow(0 14px 26px rgba(0,0,0,0.22));
 }
-
 .waxBtn:active .waxImg {
   transform: scale(0.98);
 }
@@ -1256,152 +1128,15 @@
   font-weight: 900;
   letter-spacing: -0.01em;
 }
-
 .sealSub,
 .sealHint {
   font-size: 13px;
   opacity: 0.75;
 }
 
-/* Reset envelope visuals from soft container */
-.soft::before,
-.soft::after {
-  content: none;
-}
-
 /* -------------------------------------------------
-   Envelope lives INSIDE the seal card
+   Envelope visuals ONLY inside the Letter card
 ------------------------------------------------- */
-
-.sealCard {
-  position: relative;
-  padding: 48px 24px 36px;
-  border-radius: 20px;
-  background: linear-gradient(
-    to bottom,
-    rgba(255,255,255,0.98),
-    rgba(250,250,250,0.95)
-  );
-  border: 1px solid rgba(0,0,0,0.08);
-  box-shadow:
-    0 18px 36px rgba(0,0,0,0.10),
-    inset 0 1px 0 rgba(255,255,255,0.8);
-  overflow: hidden;
-}
-
-/* Envelope flap */
-.sealCard::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 64px;
-
-  background:
-    linear-gradient(
-      135deg,
-      rgba(0,0,0,0.06),
-      rgba(255,255,255,0.95)
-    );
-
-  clip-path: polygon(0 0, 50% 62%, 100% 0);
-  border-bottom: 1px solid rgba(0,0,0,0.08);
-  z-index: 1;
-}
-
-/* Subtle paper texture */
-.sealCard::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 30% 20%, rgba(0,0,0,0.035), transparent 55%),
-    radial-gradient(circle at 70% 80%, rgba(0,0,0,0.03), transparent 55%);
-  pointer-events: none;
-}
-
-/* Fix wax seal layering */
-.waxBtn {
-  position: relative;
-  z-index: 3;
-}
-
-/* Envelope layers should never block interaction */
-.sealCard::before,
-.sealCard::after {
-  pointer-events: none;
-}
-
-/* Allow seal animation to escape envelope bounds */
-.sealCard {
-  overflow: visible;
-}
-
-/* -------------------------------------------------
-   Letter Status: Envelope ONLY when .soft.envelope
-------------------------------------------------- */
-
-.soft.envelope{
-  position: relative;
-  padding-top: 18px;     /* normal padding */
-  padding-bottom: 14px;
-  overflow: visible;     /* IMPORTANT: don't clip the seal */
-}
-
-/* Envelope lives INSIDE the seal card (safe) */
-.soft.envelope .sealCard{
-  position: relative;
-  padding: 48px 24px 36px;
-  border-radius: 20px;
-  background: linear-gradient(to bottom, rgba(255,255,255,0.98), rgba(250,250,250,0.95));
-  border: 1px solid rgba(0,0,0,0.08);
-  box-shadow: 0 18px 36px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.8);
-  overflow: hidden; /* clip the flap + texture, NOT the whole .soft */
-}
-
-.soft.envelope .sealCard::before{
-  content: "";
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 64px;
-  background: linear-gradient(135deg, rgba(0,0,0,0.06), rgba(255,255,255,0.95));
-  clip-path: polygon(0 0, 50% 62%, 100% 0);
-  border-bottom: 1px solid rgba(0,0,0,0.08);
-  z-index: 1;
-  pointer-events: none;
-}
-
-.soft.envelope .sealCard::after{
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 30% 20%, rgba(0,0,0,0.035), transparent 55%),
-    radial-gradient(circle at 70% 80%, rgba(0,0,0,0.03), transparent 55%);
-  z-index: 1;
-  pointer-events: none;
-}
-
-/* make sure content sits above flap/texture */
-.soft.envelope .sealRow{
-  position: relative;
-  z-index: 2;
-}
-
-/* z-index only works if positioned */
-.soft.envelope .seal,
-.soft.envelope .seal.crack{
-  position: relative;
-  display: grid;
-  place-items: center;
-}
-
-/* ensure wax is always on top and clickable */
-.soft.envelope .waxBtn{
-  position: relative;
-  z-index: 3;
-}
 
 /* Only affect the letter + wax seal card */
 .letterCard .soft{
@@ -1419,7 +1154,7 @@
   background: linear-gradient(to bottom, rgba(255,255,255,0.98), rgba(250,250,250,0.95));
   border: 1px solid rgba(0,0,0,0.08);
   box-shadow: 0 18px 36px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.8);
-  overflow: hidden;
+  overflow: hidden; /* clip flap + texture */
 }
 
 .letterCard .sealCard::before{
@@ -1445,19 +1180,60 @@
   pointer-events: none;
 }
 
+/* make sure content sits above flap/texture */
 .letterCard .sealRow{
   position: relative;
   z-index: 2;
 }
 
-.letterCard .seal,
-.letterCard .seal.crack{
-  position: relative; /* makes z-index work */
-  display: grid;
-  place-items: center;
-}
-
+/* ensure wax is always on top and clickable */
 .letterCard .waxBtn{
   position: relative;
-  z-index: 3; /* always clickable */
+  z-index: 3;
+}
+
+/* Optional reusable variant: if you ever want envelope style elsewhere */
+.soft.envelope{
+  position: relative;
+  padding-top: 18px;
+  padding-bottom: 14px;
+  overflow: visible;
+}
+.soft.envelope .sealCard{
+  position: relative;
+  padding: 48px 24px 36px;
+  border-radius: 20px;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.98), rgba(250,250,250,0.95));
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 18px 36px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.8);
+  overflow: hidden;
+}
+.soft.envelope .sealCard::before{
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 64px;
+  background: linear-gradient(135deg, rgba(0,0,0,0.06), rgba(255,255,255,0.95));
+  clip-path: polygon(0 0, 50% 62%, 100% 0);
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  z-index: 1;
+  pointer-events: none;
+}
+.soft.envelope .sealCard::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(0,0,0,0.035), transparent 55%),
+    radial-gradient(circle at 70% 80%, rgba(0,0,0,0.03), transparent 55%);
+  z-index: 1;
+  pointer-events: none;
+}
+.soft.envelope .sealRow{
+  position: relative;
+  z-index: 2;
+}
+.soft.envelope .waxBtn{
+  position: relative;
+  z-index: 3;
 }
