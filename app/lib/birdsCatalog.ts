@@ -19,12 +19,10 @@ export type TrackingPolicy = "normal" | "noUpdates" | "checkpointless";
 
 export type MonetizationAllowed = "sendFeeOnly" | "cosmeticOnly" | "no";
 
-export type PromiseDateBias =
-  | "neutral"
-  | "complicate"
-  | "resist"
-  | "embrace"
-  | "reject";
+export type PromiseDateBias = "neutral" | "complicate" | "resist" | "embrace" | "reject";
+
+export type SenderReceiptPolicy = "normal" | "deliveredOnly" | "seenOnly" | "none";
+export type RecipientOpenChoice = "none" | "openNowOrLater";
 
 export type BirdCatalogRow = {
   /** Stable code/id (use in DB when you actually enable it) */
@@ -72,8 +70,8 @@ export type BirdCatalogRow = {
   postSendAftermathText?: string | null;
   arrivalText?: string | null;
 
-  senderReceiptPolicy?: "normal" | "deliveredOnly" | "none";
-  recipientOpenChoice?: "none" | "openNowOrLater";
+  senderReceiptPolicy?: SenderReceiptPolicy;
+  recipientOpenChoice?: RecipientOpenChoice;
 
   supportsPromiseDate: boolean;
   promiseDateBias: PromiseDateBias;
@@ -198,7 +196,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     promiseFailureCopy: "sayNothing",
   },
 
-  // --- Future birds (kept enabled:true/false based on your sheet) ---
+  // --- Future birds ---
   {
     id: "falcon",
     displayLabel: "Peregrine Falcon",
@@ -252,12 +250,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     timeOfDayWindows: "20-05",
     badgeId: "badge_crow_used",
     monetizationAllowed: "no",
-    letterAffects: [
-      "shorterEncouraged",
-      "erasuresVisible",
-      "doNotSoftenToggle",
-      "oneWayOnly",
-    ],
+    letterAffects: ["shorterEncouraged", "erasuresVisible", "doNotSoftenToggle", "oneWayOnly"],
     deliveryVisibility: "deliveredOnly",
     trackingPolicy: "normal",
     canRefuse: true,
@@ -273,11 +266,15 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     lateArrivalPolicy: "acknowledgeQuietly",
     promiseFailureCopy: "Truth does not move on deadlines.",
   },
-
-  // Add the rest as you like — same pattern.
 ];
 
+/** Old name kept for backwards compat (optional). */
 export function enabledBirdCatalog() {
+  return BIRD_CATALOG.filter((b) => b.enabled);
+}
+
+/** ✅ Preferred name (matches your picker imports) */
+export function getEnabledBirdCatalog() {
   return BIRD_CATALOG.filter((b) => b.enabled);
 }
 

@@ -4,13 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-// ✅ Single source of truth (picker reads from catalog)
-import {
-  BIRD_CATALOG,
-  getEnabledBirdCatalog,
-  getEnabledBirdTypes,
-  type BirdType,
-} from "@/app/lib/birds";
+// ✅ Flight-engine truth (types + enabled BirdType list)
+import { getEnabledBirdTypes, type BirdType } from "@/app/lib/birds";
+
+// ✅ Catalog truth (rows + enabled filter)
+import { BIRD_CATALOG, enabledBirdCatalog, type BirdCatalogRow } from "@/app/lib/birdsCatalog";
 
 type BirdOption = {
   id: BirdType;
@@ -27,15 +25,91 @@ type FutureBirdOption = {
   imgSrc: string;
 };
 
+/**
+ * ✅ Centralized image mapping so you can keep old filenames
+ * (and not be forced into `/birds/${id}.gif` naming right now)
+ */
+function birdImgSrc(id: string) {
+  const key = String(id || "").toLowerCase();
+
+  const map: Record<string, string> = {
+    // current birds
+    pigeon: "/birds/homing-pigeon.gif",
+    snipe: "/birds/great-snipe.gif",
+    goose: "/birds/canada-goose.gif",
+
+    // future birds (match your existing assets)
+    falcon: "/birds/Peregrine-Falcon.gif",
+    "peregrine-falcon": "/birds/Peregrine-Falcon.gif",
+
+    hummingbird: "/birds/AnnasHummingbird.gif",
+    "annas-hummingbird": "/birds/AnnasHummingbird.gif",
+
+    needletail: "/birds/white-throated-needletail.gif",
+    "white-throated-needletail": "/birds/white-throated-needletail.gif",
+
+    osprey: "/birds/American-Osprey.gif",
+    "american-osprey": "/birds/American-Osprey.gif",
+
+    owl: "/birds/NorthernHawkOwl.gif",
+    "northern-hawk-owl": "/birds/NorthernHawkOwl.gif",
+
+    tern: "/birds/CommonTern.gif",
+    "arctic-tern": "/birds/CommonTern.gif",
+    "common-tern": "/birds/CommonTern.gif",
+
+    crow: "/birds/crow.gif",
+    raven: "/birds/raven.gif",
+    crane: "/birds/crane.gif",
+    moth: "/birds/moth.gif",
+    albatross: "/birds/albatross.gif",
+    nightjar: "/birds/nightjar.gif",
+  };
+
+  return map[key] ?? `/birds/${key}.gif`; // fallback convention
+}
+
 export default function NewPage() {
   const router = useRouter();
 
-  // ✅ enabled birds for the picker (flight-safe)
-  const enabledBirdTypes = useMemo(() => getEnabledBirdTypes(), []);
-  const defaultBird: BirdType = (enabledBirdTypes[0] ?? "pigeon") as BirdType;
+  // ✅ BirdType list that the engine currently accepts AND is enabled in catalog
+  const enabledTypes = useMemo(() => getEnabledBirdTypes(), []);
 
-  // ✅ selected bird (toggle-able)
-  const [bird, setBird] = useState<BirdType>(defaultBird);
+  // ✅ Catalog rows that are enabled (UI source)
+  const enabledCatalog = useMemo(() => enabledBirdCatalog(), []);
+
+  // ✅ Convert catalog → picker options (AND keep only ones the engine supports)
+  const options = useMemo<BirdOption[]>(() => {
+    const supported = new Set(enabledTypes);
+
+    return (enabledCatalog as BirdCatalogRow[])
+      .filter((row) => supported.has(row.id as BirdType))
+      .map((row) => ({
+        id: row.id as BirdType,
+        title: row.displayLabel,
+        subtitle: row.availabilityNotes ?? "",
+        imgSrc: birdImgSrc(row.id),
+        recommended: row.id === "pigeon",
+      }));
+  }, [enabledCatalog, enabledTypes]);
+
+  // ✅ Coming soon = catalog enabled:false (no engine constraint needed)
+  const futureFowls = useMemo<FutureBirdOption[]>(() => {
+    return (BIRD_CATALOG as BirdCatalogRow[])
+      .filter((row) => !row.enabled)
+      .map((row) => ({
+        id: row.id,
+        title: row.displayLabel,
+        subtitle: row.availabilityNotes ?? "Coming soon",
+        imgSrc: birdImgSrc(row.id),
+      }));
+  }, []);
+
+  // ✅ selected bird (default: pigeon if available, else first enabled)
+  const [bird, setBird] = useState<BirdType>(() => {
+    if (enabledTypes.includes("pigeon")) return "pigeon";
+    return (enabledTypes[0] ?? "pigeon") as BirdType;
+  });
   const [showWriteOn, setShowWriteOn] = useState(false);
 
   // ✅ intermittent shake state
@@ -61,10 +135,16 @@ export default function NewPage() {
     };
   }, []);
 
-  // ✅ flight engine still accepts ONLY BirdType
-  const go = (b: BirdType) => router.push(`/write?bird=${encodeURIComponent(b)}`);
+  const go = (b: BirdType) => {
+    // ✅ safety: only allow enabled BirdTypes
+    if (!enabledTypes.includes(b)) {
+      showToast("That bird isn’t enabled yet.");
+      return;
+    }
+    router.push(`/write?bird=${encodeURIComponent(b)}`);
+  };
 
-  // ✅ Per-bird CTA text (tweak anytime)
+  // ✅ Per-bird CTA text (easy to tweak later)
   const ctaTextFor = (b: BirdType) => {
     switch (b) {
       case "goose":
@@ -76,54 +156,6 @@ export default function NewPage() {
         return "Let it Fly";
     }
   };
-
-  // ✅ Current birds come from enabled catalog entries
-  const options = useMemo<BirdOption[]>(() => {
-    const enabled = getEnabledBirdCatalog();
-
-    // Only keep entries whose id is a BirdType (safety belt)
-    const safeEnabled = enabled.filter((x) => enabledBirdTypes.includes(x.id as BirdType));
-
-    // fallback: if catalog is weird, don’t brick the UI
-    if (!safeEnabled.length) {
-      return [
-        {
-          id: "pigeon",
-          title: "Homing Pigeon",
-          subtitle: "Classic delivery.",
-          imgSrc: "/birds/homing-pigeon.gif",
-          recommended: true,
-        },
-      ];
-    }
-
-    return safeEnabled.map((b) => ({
-      id: b.id as BirdType,
-      title: b.displayLabel,
-      subtitle: b.subtitle,
-      imgSrc: b.imgSrc,
-      recommended: !!(b as any).recommended, // optional field, won’t break if missing
-    }));
-  }, [enabledBirdTypes]);
-
-  // ✅ Future fowls come from disabled catalog entries
-  const futureFowls = useMemo<FutureBirdOption[]>(() => {
-    return BIRD_CATALOG.filter((b) => !b.enabled).map((b) => ({
-      id: b.id,
-      title: b.displayLabel,
-      subtitle: b.subtitle,
-      imgSrc: b.imgSrc,
-    }));
-  }, []);
-
-  // ✅ If the selected bird becomes disabled later, snap to a safe default
-  useEffect(() => {
-    if (!enabledBirdTypes.includes(bird)) {
-      setBird(defaultBird);
-      setShowWriteOn(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabledBirdTypes.join(","), bird]);
 
   // ✅ start/stop the "shake every 5s" loop when the button is visible
   useEffect(() => {
@@ -169,7 +201,7 @@ export default function NewPage() {
           </p>
         </div>
 
-        {/* Current birds */}
+        {/* Current birds (enabled + supported by engine) */}
         <div className="birdGrid">
           {options.map((opt) => {
             const isSelected = bird === opt.id;
@@ -180,9 +212,8 @@ export default function NewPage() {
                   type="button"
                   className={`card birdCard ${isSelected ? "on" : ""}`}
                   onClick={() => {
-                    if (isSelected) {
-                      setShowWriteOn((v) => !v);
-                    } else {
+                    if (isSelected) setShowWriteOn((v) => !v);
+                    else {
                       setBird(opt.id);
                       setShowWriteOn(true);
                     }
@@ -197,6 +228,7 @@ export default function NewPage() {
                     </div>
                   )}
 
+                  {/* Recommended pill */}
                   {opt.recommended && <div className="birdRec">Recommended</div>}
 
                   <div className="birdRow">
@@ -228,7 +260,7 @@ export default function NewPage() {
           })}
         </div>
 
-        {/* Future Fowls */}
+        {/* Future Fowls (disabled) */}
         <div style={{ marginTop: 14 }}>
           <div className="kicker">Coming soon</div>
           <h2 className="h2" style={{ marginTop: 6 }}>
@@ -282,7 +314,12 @@ export default function NewPage() {
               Continue to write
             </button>
 
-            <button onClick={() => go("pigeon")} className="btnGhost">
+            <button
+              onClick={() => go("pigeon")}
+              className="btnGhost"
+              disabled={!enabledTypes.includes("pigeon")}
+              title={!enabledTypes.includes("pigeon") ? "Pigeon isn’t enabled" : "Use pigeon"}
+            >
               Skip — use pigeon
             </button>
           </div>
@@ -320,7 +357,6 @@ export default function NewPage() {
         )}
 
         <style jsx global>{`
-          /* wrapper so the CTA can live beneath the chosen card */
           .birdPick {
             display: flex;
             flex-direction: column;
@@ -348,7 +384,6 @@ export default function NewPage() {
             }
           }
 
-          /* intermittent shake: only when .shakeNow is applied */
           .shakeNow {
             animation: popIn 160ms ease-out, shake 520ms ease-in-out;
           }
@@ -384,7 +419,6 @@ export default function NewPage() {
             }
           }
 
-          /* ✅ Layering fix: pills/check always above image */
           .birdCard {
             position: relative;
           }
@@ -399,7 +433,6 @@ export default function NewPage() {
             z-index: 5;
           }
 
-          /* Future Fowls */
           .futureCard {
             position: relative;
             cursor: pointer;
@@ -424,7 +457,6 @@ export default function NewPage() {
             filter: saturate(1) contrast(1) brightness(1);
           }
 
-          /* Current birds: muted when not selected */
           .birdCard:not(.on) .birdThumb img {
             filter: saturate(0.35) contrast(1.02) brightness(0.98);
             transition: filter 180ms ease, transform 180ms ease;

@@ -5,6 +5,10 @@ import { useSearchParams } from "next/navigation";
 import { CITIES } from "../lib/cities";
 import { CityTypeahead } from "../components/CityTypeahead";
 
+// ✅ Pull bird identity + display from one place
+import { BIRD_CATALOG } from "@/app/lib/birdsCatalog";
+import { normalizeBird, type BirdType } from "@/app/lib/birds";
+
 /* ---------- helpers ---------- */
 function nearestCity(lat: number, lon: number, cities: { name: string; lat: number; lon: number }[]) {
   let best = cities[0];
@@ -24,37 +28,6 @@ function nearestCity(lat: number, lon: number, cities: { name: string; lat: numb
 
 function isEmailValid(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-}
-
-type BirdType = "pigeon" | "snipe" | "goose";
-
-function normalizeBird(raw: string | null): BirdType {
-  const b = (raw || "").toLowerCase();
-  if (b === "snipe") return "snipe";
-  if (b === "goose") return "goose";
-  return "pigeon";
-}
-
-function birdLabel(bird: BirdType) {
-  switch (bird) {
-    case "snipe":
-      return "Great Snipe";
-    case "goose":
-      return "Canada Goose";
-    default:
-      return "Homing Pigeon";
-  }
-}
-
-function birdGifSrc(bird: BirdType) {
-  switch (bird) {
-    case "snipe":
-      return "/birds/great-snipe.gif";
-    case "goose":
-      return "/birds/canada-goose.gif";
-    default:
-      return "/birds/homing-pigeon.gif";
-  }
 }
 
 /**
@@ -88,6 +61,26 @@ export default function WritePage() {
 function WritePageInner() {
   const searchParams = useSearchParams();
   const bird: BirdType = normalizeBird(searchParams.get("bird"));
+
+  // ✅ catalog entry for display (safe fallback to pigeon)
+  const birdEntry = useMemo(() => {
+    const all = (BIRD_CATALOG as any[]) ?? [];
+    return all.find((b) => b.id === bird) ?? all.find((b) => b.id === "pigeon") ?? null;
+  }, [bird]);
+
+  const birdName = birdEntry?.displayLabel ?? "Homing Pigeon";
+
+  // ✅ GIF is still mapped here until we add imgSrc to BirdCatalogRow
+  const birdGif = useMemo(() => {
+    switch (bird) {
+      case "snipe":
+        return "/birds/great-snipe.gif";
+      case "goose":
+        return "/birds/canada-goose.gif";
+      default:
+        return "/birds/homing-pigeon.gif";
+    }
+  }, [bird]);
 
   // Step 1: who
   const [fromName, setFromName] = useState("You");
@@ -227,9 +220,6 @@ function WritePageInner() {
     sending || !routeOk || !fromNameOk || !toNameOk || !messageOk || !senderEmailOk || !recipientEmailOk;
 
   const routeLabel = useMemo(() => `${origin.name} → ${destination.name}`, [origin.name, destination.name]);
-
-  const birdGif = birdGifSrc(bird);
-  const birdName = birdLabel(bird);
 
   return (
     <main className="pageBg">
@@ -498,7 +488,7 @@ function WritePageInner() {
             height: 120px;
             border-radius: 18px;
             padding: 10px;
-            background: #ffffff; /* ✅ white background for non-transparent GIFs */
+            background: #ffffff;
             border: 1px solid rgba(0, 0, 0, 0.1);
             display: flex;
             flex-direction: column;
@@ -536,13 +526,12 @@ function WritePageInner() {
             line-height: 14px;
             font-weight: 800;
             letter-spacing: -0.01em;
-            opacity: 0.70;
+            opacity: 0.7;
             transition: opacity 180ms ease, transform 180ms ease;
             transform: translateY(0px);
             white-space: nowrap;
           }
 
-          /* ✅ tiny "alive" wiggle ONLY on hover/focus */
           .birdPreview:hover .birdPreviewImg,
           .birdPreview:focus-visible .birdPreviewImg {
             filter: saturate(1) contrast(1);
