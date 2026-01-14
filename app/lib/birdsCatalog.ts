@@ -249,7 +249,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     sleepCfg: sleepCfg(23, 5),
     sleepLabel: "Crow",
     designNotes: "One-at-a-time bird with urgency mechanics",
-    enabled: true,
+    enabled: false,
     availabilityType: "singleton",
     minDistanceKm: 0,
     maxDistanceKm: null,
