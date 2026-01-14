@@ -228,7 +228,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     sleepLabel: "Falcon",
     designNotes: "Fastest bird; dangerous to overuse",
     enabled: false, // not selectable yet
-    visible: true, // still shows in "Coming soon"
+    visible: true, // shows in "Coming soon"
     availabilityType: "occasional",
     minDistanceKm: 0,
     maxDistanceKm: null,
@@ -265,7 +265,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     sleepLabel: "Crow",
     designNotes: "One-at-a-time bird with urgency mechanics",
     enabled: false, // not selectable yet (until birds.ts supports it)
-    visible: false, // still shows in "Coming soon"
+    visible: true, // ✅ shows in "Coming soon"
     availabilityType: "singleton",
     minDistanceKm: 0,
     maxDistanceKm: null,
@@ -294,7 +294,10 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
    Helpers
 ----------------------------- */
 
-// Existing helper (kept)
+/**
+ * ✅ enabled = selectable/usable (but not necessarily visible)
+ * NOTE: your picker should probably use enabled AND visible.
+ */
 export function enabledBirdCatalog() {
   return BIRD_CATALOG.filter((b) => b.enabled);
 }
@@ -304,11 +307,24 @@ export function getEnabledBirdCatalog() {
   return enabledBirdCatalog();
 }
 
-// ✅ Visible lists
+/**
+ * ✅ enabled + visible = selectable and shown in UI.
+ * This is usually what you want for the picker.
+ */
+export function getEnabledVisibleBirdCatalog() {
+  return BIRD_CATALOG.filter((b) => b.enabled && b.visible);
+}
+
+/**
+ * ✅ Visible lists
+ */
 export function getVisibleBirdCatalog() {
   return BIRD_CATALOG.filter((b) => b.visible);
 }
 
+/**
+ * ✅ Coming soon = visible but not enabled
+ */
 export function getFutureBirdCatalog() {
   return BIRD_CATALOG.filter((b) => b.visible && !b.enabled);
 }
