@@ -212,35 +212,19 @@ function Ico({
     case "x":
       return (
         <svg {...common}>
-          <path
-            d="M18 6 6 18M6 6l12 12"
-            stroke="currentColor"
-            strokeWidth="2.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     case "moon":
       return (
         <svg {...common}>
-          <path
-            d="M21 14.2A7.5 7.5 0 0 1 9.8 3a6.6 6.6 0 1 0 11.2 11.2Z"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinejoin="round"
-          />
+          <path d="M21 14.2A7.5 7.5 0 0 1 9.8 3a6.6 6.6 0 1 0 11.2 11.2Z" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round" />
         </svg>
       );
     case "pin":
       return (
         <svg {...common}>
-          <path
-            d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinejoin="round"
-          />
+          <path d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round" />
           <path d="M12 10.3a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z" stroke="currentColor" strokeWidth="2.4" />
         </svg>
       );
@@ -337,15 +321,30 @@ function BirdStatusCard({
   );
 }
 
-/* ---------- wax seal overlay ---------- */
+function ConfettiBurst({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <div className="confetti" aria-hidden>
+      {Array.from({ length: 18 }).map((_, i) => (
+        <span key={i} className="confetti-bit" />
+      ))}
+    </div>
+  );
+}
+
+/* ---------- wax seal overlay (click-to-open) ---------- */
 function WaxSealOverlay({
   opensShort,
   cracking,
   canceled,
+  canOpen,
+  onOpen,
 }: {
   opensShort: string;
   cracking?: boolean;
   canceled?: boolean;
+  canOpen?: boolean;
+  onOpen?: () => void;
 }) {
   return (
     <div className={cracking ? "seal crack" : "seal"} style={{ position: "relative" }}>
@@ -353,25 +352,29 @@ function WaxSealOverlay({
         <div className="sealVeil" />
 
         <div className="sealRow">
-          <div className="wax" aria-label="Wax seal" title="Sealed until delivery">
+          <button
+            type="button"
+            className={`waxBtn ${canOpen ? "canOpen" : ""}`}
+            onClick={() => {
+              if (!canOpen) return;
+              onOpen?.();
+            }}
+            disabled={!canOpen}
+            aria-label={canOpen ? "Open letter" : "Sealed until delivery"}
+            title={canOpen ? "Open letter" : "Sealed until delivery"}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/waxseal.png"
-              alt="Wax seal"
-              className="waxImg"
-              style={{
-                width: 86,
-                height: 86,
-                display: "block",
-                objectFit: "contain",
-              }}
-            />
-          </div>
+            <img src="/waxseal.png" alt="Wax seal" className="waxImg" />
+
+            {canOpen ? <div className="waxHint">Click to open</div> : null}
+          </button>
 
           <div>
-            <div className="sealTitle">{canceled ? "Canceled" : "Sealed until delivery"}</div>
-            <div className="sealSub">{canceled ? "This letter will not be delivered." : `Opens at ${opensShort}`}</div>
-            <div className="sealHint">{canceled ? "The bird was recalled to HQ." : "No peeking. The bird is watching."}</div>
+            <div className="sealTitle">{canceled ? "Canceled" : canOpen ? "Delivered" : "Sealed until delivery"}</div>
+            <div className="sealSub">
+              {canceled ? "This letter will not be delivered." : canOpen ? "Tap the wax seal to read it." : `Opens at ${opensShort}`}
+            </div>
+            <div className="sealHint">{canceled ? "The bird was recalled to HQ." : canOpen ? "Go on. Break the seal." : "No peeking. The bird is watching."}</div>
           </div>
         </div>
 
@@ -381,13 +384,61 @@ function WaxSealOverlay({
   );
 }
 
-function ConfettiBurst({ show }: { show: boolean }) {
-  if (!show) return null;
+/* ---------- modal (paper-unfold) ---------- */
+function LetterModal({
+  open,
+  onClose,
+  title,
+  subject,
+  body,
+  confetti,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  subject: string;
+  body: string;
+  confetti: boolean;
+}) {
+  // escape + body scroll lock handled in parent; modal stays dumb
+  if (!open) return null;
+
   return (
-    <div className="confetti" aria-hidden>
-      {Array.from({ length: 18 }).map((_, i) => (
-        <span key={i} className="confetti-bit" />
-      ))}
+    <div
+      className="letterModalOverlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Letter"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="letterModalCard">
+        <ConfettiBurst show={confetti} />
+
+        <div className="letterModalTop">
+          <div style={{ minWidth: 0 }}>
+            <div className="kicker" style={{ margin: 0 }}>
+              Letter
+            </div>
+            <div className="h2" style={{ marginTop: 4 }}>
+              {title}
+            </div>
+          </div>
+
+          <button className="letterModalClose" onClick={onClose} aria-label="Close">
+            <Ico name="x" size={18} />
+          </button>
+        </div>
+
+        {/* paper sheet that “unfolds” */}
+        <div className="paperWrap">
+          <div className="paperSheet" role="document" aria-label="Letter contents">
+            <div className="paperSubject">{subject || "(No subject)"}</div>
+            <div className="paperBody">{body || ""}</div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -431,8 +482,9 @@ export default function LetterStatusPage() {
 
   const [currentOverText, setCurrentOverText] = useState<string | null>(null);
 
-  const prevDelivered = useRef(false);
-  const [revealStage, setRevealStage] = useState<"idle" | "crack" | "open">("idle");
+  // ✅ modal + crack + confetti
+  const [letterOpen, setLetterOpen] = useState(false);
+  const [sealCracking, setSealCracking] = useState(false);
   const [confetti, setConfetti] = useState(false);
 
   const [mapStyle, setMapStyle] = useState<MapStyle>("carto-positron");
@@ -478,6 +530,24 @@ export default function LetterStatusPage() {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, [archived, canceled, serverNowISO]);
+
+  // ✅ escape key + scroll lock for modal
+  useEffect(() => {
+    if (!letterOpen) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLetterOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [letterOpen]);
 
   const loadRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -628,16 +698,11 @@ export default function LetterStatusPage() {
   }, [letter, effectiveEtaISO, now]);
 
   // ✅ Canonical bird: from DB field (no more speed-based guessing)
-  const bird: BirdType = useMemo(() => {
-    return normalizeBird(letter?.bird);
-  }, [letter?.bird]);
+  const bird: BirdType = useMemo(() => normalizeBird(letter?.bird), [letter?.bird]);
 
   const birdName = useMemo(() => BIRD_RULES[bird].label, [bird]);
 
   // ✅ Speed shown in UI:
-  // - if canceled/delivered/archived/sleeping => 0 (bird is not moving)
-  // - else prefer server-provided current speed
-  // - else fall back to rule speed (CODE), not DB
   const currentSpeedKmh = useMemo(() => {
     if (canceled) return 0;
     if (!letter) return 0;
@@ -760,30 +825,19 @@ export default function LetterStatusPage() {
     return uiDelivered ? "delivered" : sleeping ? "sleeping" : "flying";
   }, [canceled, flight?.marker_mode, uiDelivered, sleeping]);
 
-  // ✅ prevent delivery animation from re-triggering forever
-  useEffect(() => {
-    if (canceled) {
-      prevDelivered.current = false;
-      return;
-    }
+  function openLetter() {
+    if (!uiDelivered || canceled) return;
 
-    if (!prevDelivered.current && uiDelivered) {
-      prevDelivered.current = true;
+    setSealCracking(true);
+    setConfetti(true);
 
-      setRevealStage("crack");
-      setConfetti(true);
+    // open modal shortly after crack begins
+    window.setTimeout(() => setLetterOpen(true), 220);
 
-      const t1 = setTimeout(() => setRevealStage("open"), 520);
-      const t2 = setTimeout(() => setConfetti(false), 1400);
-
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-      };
-    }
-
-    prevDelivered.current = uiDelivered;
-  }, [uiDelivered, canceled]);
+    // stop crack + confetti
+    window.setTimeout(() => setSealCracking(false), 650);
+    window.setTimeout(() => setConfetti(false), 1400);
+  }
 
   if (error) {
     return (
@@ -811,6 +865,8 @@ export default function LetterStatusPage() {
   const canceledLabel = canceledAtISO ? `Canceled • ${new Date(canceledAtISO).toLocaleString()}` : "Canceled";
 
   const timelineModeLabel = uiDelivered ? "Delivered" : canceled ? "Canceled" : archived ? "Archived" : "Auto";
+
+  const modalTitle = `From ${letter.from_name || "Sender"} to ${letter.to_name || "Recipient"}`;
 
   return (
     <main className="pageBg">
@@ -850,9 +906,7 @@ export default function LetterStatusPage() {
                         <span className="liveText">{sleeping ? "SLEEPING" : "LIVE"}</span>
                       </div>
                       <div className="liveSub">
-                        {sleeping
-                          ? `Wakes at ${flight?.sleep_local_text || "soon"}`
-                          : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
+                        {sleeping ? `Wakes at ${flight?.sleep_local_text || "soon"}` : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
                       </div>
                     </div>
 
@@ -866,10 +920,7 @@ export default function LetterStatusPage() {
                     </div>
                   </>
                 ) : canceled ? (
-                  <div
-                    className="metaPill"
-                    style={{ borderColor: "rgba(220,38,38,0.35)", background: "rgba(220,38,38,0.06)" }}
-                  >
+                  <div className="metaPill" style={{ borderColor: "rgba(220,38,38,0.35)", background: "rgba(220,38,38,0.06)" }}>
                     <span className="ico" style={{ color: "rgb(220,38,38)" }}>
                       <Ico name="x" />
                     </span>
@@ -949,9 +1000,8 @@ export default function LetterStatusPage() {
           </div>
         </section>
 
+        {/* Letter card (always sealed view; modal is the reading experience) */}
         <div className="card" style={{ marginTop: 14, position: "relative" }}>
-          <ConfettiBurst show={confetti} />
-
           <div className="cardHead" style={{ marginBottom: 8 }}>
             <div>
               <div className="kicker">Letter</div>
@@ -964,7 +1014,7 @@ export default function LetterStatusPage() {
               <span className="ico">
                 <Ico name="mail" />
               </span>
-              <span>{canceled ? "Canceled" : "Sealed until delivery"}</span>
+              <span>{canceled ? "Canceled" : uiDelivered ? "Delivered" : "Sealed until delivery"}</span>
             </div>
           </div>
 
@@ -972,20 +1022,28 @@ export default function LetterStatusPage() {
             <div className="subject">{letter.subject || "(No subject)"}</div>
 
             <div style={{ position: "relative" }}>
-              <div className={uiDelivered && revealStage === "open" ? "bodyReveal" : ""} style={{ opacity: uiDelivered && !canceled ? 1 : 0 }}>
-                <div className="body">{uiDelivered && !canceled ? (letter.body ?? "") : ""}</div>
-              </div>
-
-              {uiDelivered && !canceled && revealStage === "open" ? null : (
-                <div style={{ position: uiDelivered && !canceled ? "absolute" : "relative", inset: 0 }}>
-                  <WaxSealOverlay opensShort={opensShort} cracking={uiDelivered && revealStage === "crack"} canceled={canceled} />
-                </div>
-              )}
+              <WaxSealOverlay
+                opensShort={opensShort}
+                cracking={sealCracking}
+                canceled={canceled}
+                canOpen={uiDelivered && !canceled}
+                onOpen={openLetter}
+              />
             </div>
           </div>
 
           <div className="token">Token: {letter.public_token}</div>
         </div>
+
+        {/* Modal */}
+        <LetterModal
+          open={letterOpen}
+          onClose={() => setLetterOpen(false)}
+          title={modalTitle}
+          subject={letter.subject || ""}
+          body={letter.body || ""}
+          confetti={confetti}
+        />
 
         <div className="grid">
           <div className="card">

@@ -330,3 +330,144 @@ a {
   opacity: 0.55;
   font-weight: 750;
 }
+
+/* -------- Letter Modal (wax + paper unfold) -------- */
+
+.letterModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.52);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  z-index: 9999;
+}
+
+.letterModalCard {
+  width: 100%;
+  max-width: 760px;
+  max-height: 84vh;
+  overflow: auto;
+  border-radius: 18px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+  position: relative;
+}
+
+.letterModalTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.letterModalClose {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  background: rgba(0, 0, 0, 0.03);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.letterModalClose:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* paper unfold */
+.paperWrap {
+  padding: 14px;
+}
+
+.paperSheet {
+  border-radius: 16px;
+  border: 1px solid rgba(0,0,0,0.10);
+  background: rgba(255,255,255,0.96);
+  box-shadow: 0 14px 40px rgba(0,0,0,0.14);
+  padding: 16px 16px 18px;
+  transform-origin: top center;
+  animation: paperUnfold 520ms ease-out;
+  will-change: transform, opacity;
+}
+
+@keyframes paperUnfold {
+  0% {
+    transform: perspective(900px) rotateX(-72deg) scale(0.98);
+    opacity: 0;
+  }
+  55% {
+    transform: perspective(900px) rotateX(-10deg) scale(1.0);
+    opacity: 1;
+  }
+  100% {
+    transform: perspective(900px) rotateX(0deg) scale(1.0);
+    opacity: 1;
+  }
+}
+
+.paperSubject {
+  font-weight: 950;
+  letter-spacing: -0.01em;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  margin-bottom: 12px;
+}
+
+.paperBody {
+  white-space: pre-wrap;
+  line-height: 1.55;
+  font-size: 15px;
+}
+
+/* clickable wax */
+.waxBtn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  cursor: default;
+}
+
+.waxBtn.canOpen {
+  cursor: pointer;
+}
+
+.waxBtn:disabled {
+  opacity: 1;
+}
+
+.waxImg {
+  width: 86px;
+  height: 86px;
+  display: block;
+  object-fit: contain;
+  transition: transform 160ms ease;
+  transform: translateZ(0);
+}
+
+.waxBtn.canOpen:hover .waxImg {
+  transform: scale(1.04);
+}
+
+.waxHint {
+  font-size: 12px;
+  font-weight: 900;
+  opacity: 0.75;
+}
+
+/* optional: respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .paperSheet {
+    animation: none !important;
+  }
+  .waxImg {
+    transition: none !important;
+  }
+}
