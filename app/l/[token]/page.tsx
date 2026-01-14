@@ -1061,65 +1061,77 @@ export default function LetterStatusPage() {
           </div>
         </section>
 
-        {/* Letter card (always sealed view; modal is the reading experience) */}
-        <div className="card letterCard" style={{ marginTop: 14, position: "relative" }}>
-          <div className="cardHead" style={{ marginBottom: 8 }}>
-            <div>
-              <div className="kicker">Letter</div>
-              <div className="h2">
-                From {letter.from_name || "Sender"} to {letter.to_name || "Recipient"}
+        {/* ✅ NEW: side-by-side layout */}
+        <div className="statusGrid">
+          {/* Left: Letter */}
+          <div className="statusLeft">
+            <div className="card letterCard" style={{ marginTop: 14, position: "relative" }}>
+              <div className="cardHead" style={{ marginBottom: 8 }}>
+                <div>
+                  <div className="kicker">Letter</div>
+                  <div className="h2">
+                    From {letter.from_name || "Sender"} to {letter.to_name || "Recipient"}
+                  </div>
+                </div>
+
+                <div className="metaPill faint">
+                  <span className="ico">
+                    <Ico name="mail" />
+                  </span>
+                  <span>{canceled ? "Canceled" : uiDelivered ? "Delivered" : "Sealed until delivery"}</span>
+                </div>
               </div>
+
+              {/* ✅ add envelope class so scoped envelope styles can apply cleanly */}
+              <div className="soft envelope">
+                <div className="subject">{letter.subject || "(No subject)"}</div>
+
+                <div style={{ position: "relative" }}>
+                  <WaxSealOverlay
+                    opensShort={opensShort}
+                    cracking={sealCracking}
+                    canceled={canceled}
+                    canOpen={uiDelivered && !canceled}
+                    onOpen={openLetter}
+                    sealSrcs={sealSrcs}
+                  />
+                </div>
+              </div>
+
+              <div className="token">Token: {letter.public_token}</div>
             </div>
 
-            <div className="metaPill faint">
-              <span className="ico">
-                <Ico name="mail" />
-              </span>
-              <span>{canceled ? "Canceled" : uiDelivered ? "Delivered" : "Sealed until delivery"}</span>
-            </div>
-          </div>
-
-          <div className="soft">
-            <div className="subject">{letter.subject || "(No subject)"}</div>
-
-            <div style={{ position: "relative" }}>
-              <WaxSealOverlay
-                opensShort={opensShort}
-                cracking={sealCracking}
-                canceled={canceled}
-                canOpen={uiDelivered && !canceled}
-                onOpen={openLetter}
-                sealSrcs={sealSrcs}
-              />
-            </div>
-          </div>
-
-          <div className="token">Token: {letter.public_token}</div>
-        </div>
-
-        {/* Modal */}
-        <LetterModal open={letterOpen} onClose={() => setLetterOpen(false)} title={modalTitle} subject={letter.subject || ""} body={letter.body || ""} confetti={confetti} />
-
-        <div className="grid">
-          <div className="card">
-            <MapSection
-              mapStyle={mapStyle}
-              setMapStyle={setMapStyle}
-              origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-              dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-              progress={progress}
-              progressPctFloor={progressPctFloor}
-              tooltipText={mapTooltip}
-              markerMode={markerMode}
-              showLive={showLive}
-              sentAtISO={letter.sent_at}
-              etaAtISO={effectiveEtaISO}
-              currentlyOver={currentlyOver}
-              milestones={milestones}
+            {/* Modal */}
+            <LetterModal
+              open={letterOpen}
+              onClose={() => setLetterOpen(false)}
+              title={modalTitle}
+              subject={letter.subject || ""}
+              body={letter.body || ""}
+              confetti={confetti}
             />
           </div>
 
-          <div className="stack">
+          {/* Right: Map on top, Flight log under it, Badges under that */}
+          <div className="statusRight">
+            <div className="card" style={{ marginTop: 14 }}>
+              <MapSection
+                mapStyle={mapStyle}
+                setMapStyle={setMapStyle}
+                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+                progress={progress}
+                progressPctFloor={progressPctFloor}
+                tooltipText={mapTooltip}
+                markerMode={markerMode}
+                showLive={showLive}
+                sentAtISO={letter.sent_at}
+                etaAtISO={effectiveEtaISO}
+                currentlyOver={currentlyOver}
+                milestones={milestones}
+              />
+            </div>
+
             <div className="card">
               <div className="cardHead">
                 <div>
