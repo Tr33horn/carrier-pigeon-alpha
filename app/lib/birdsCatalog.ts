@@ -213,7 +213,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     sleepCfg: DEFAULT_SLEEP,
     sleepLabel: "Falcon",
     designNotes: "Fastest bird; dangerous to overuse",
-    enabled: false,
+    enabled: true,
     availabilityType: "occasional",
     minDistanceKm: 0,
     maxDistanceKm: null,
