@@ -265,24 +265,6 @@ export default function NewPage() {
           </div>
         </div>
 
-        {/* Continue / Skip */}
-        <div className="card" style={{ marginTop: 14 }}>
-          <div className="sendRow">
-            <button onClick={() => go(bird)} className="btnPrimary">
-              Continue to write
-            </button>
-
-            <button
-              onClick={() => go("pigeon")}
-              className="btnGhost"
-              disabled={!enabledTypes.includes("pigeon")}
-              title={!enabledTypes.includes("pigeon") ? "Pigeon isn’t enabled" : "Use pigeon"}
-            >
-              Skip — use pigeon
-            </button>
-          </div>
-        </div>
-
         {/* Toast UI */}
         {toast && (
           <div
