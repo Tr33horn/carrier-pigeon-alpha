@@ -71,7 +71,7 @@ export const SEAL_CATALOG: SealRow[] = [
   },
 
     {
-    id: "seal_flokheart",
+    id: "seal-flokheart",
     label: "FLOK Heart",
     imgSrc: "/seals/seal-flokheart.png",
     rarity: "uncommon",
