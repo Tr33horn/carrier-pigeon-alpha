@@ -35,7 +35,7 @@ type Letter = {
   archived_at?: string | null;
   canceled_at?: string | null;
 
-  // ✅ seal id returned by API
+  // ✅ NEW: seal id returned by API
   seal_id?: string | null;
 };
 
@@ -197,7 +197,7 @@ function formatOpensShort(etaIso: string) {
 /**
  * ✅ Robust seal resolver
  * API may return: seal_flokheart
- * file may be:    seal-flokheart.png
+ * file may be:     seal-flokheart.png
  */
 function sealImageSrcs(sealId: string | null | undefined): string[] {
   const raw = typeof sealId === "string" ? sealId.trim() : "";
@@ -1049,10 +1049,10 @@ export default function LetterStatusPage() {
           </div>
         </section>
 
-        {/* ✅ NEW LAYOUT: Letter + Map side-by-side; Timeline beneath BOTH */}
-        <div className="statusLayout">
-          <div className="statusTopRow">
-            {/* Letter card */}
+        {/* ✅ NEW: Letter + Map side-by-side, Timeline beneath both */}
+        <div className="statusGrid">
+          {/* LEFT: Letter (60%) */}
+          <div className="statusCol">
             <div className="card letterCard" style={{ position: "relative" }}>
               <div className="cardHead" style={{ marginBottom: 8 }}>
                 <div>
@@ -1087,8 +1087,10 @@ export default function LetterStatusPage() {
 
               <div className="token">Token: {letter.public_token}</div>
             </div>
+          </div>
 
-            {/* Map card */}
+          {/* RIGHT: Map (40%) */}
+          <div className="statusCol">
             <div className="card">
               <MapSection
                 mapStyle={mapStyle}
@@ -1108,75 +1110,79 @@ export default function LetterStatusPage() {
             </div>
           </div>
 
-          {/* Timeline full width */}
-          <div className="card statusTimelineCard">
-            <div className="cardHead">
-              <div>
-                <div className="kicker">Timeline</div>
-                <div className="h2">Flight log</div>
+          {/* FULL WIDTH: Timeline */}
+          <div className="statusFull">
+            <div className="card">
+              <div className="cardHead">
+                <div>
+                  <div className="kicker">Timeline</div>
+                  <div className="h2">Flight log</div>
+                </div>
+
+                <div className="pillBtn subtle" title="Timeline mode">
+                  <span className="ico">
+                    <Ico name="live" />
+                  </span>
+                  {timelineModeLabel}
+                </div>
               </div>
 
-              <div className="pillBtn subtle" title="Timeline mode">
-                <span className="ico">
-                  <Ico name="live" />
-                </span>
-                {timelineModeLabel}
-              </div>
+              <TimelineRail items={timelineItems} now={now} currentKey={currentTimelineKey} birdName={birdName} final={timelineFinal} />
             </div>
-
-            <TimelineRail items={timelineItems} now={now} currentKey={currentTimelineKey} birdName={birdName} final={timelineFinal} />
           </div>
 
-          {/* Badges (kept; also full width) */}
-          <div className="card">
-            <div className="cardHead" style={{ marginBottom: 10 }}>
-              <div>
-                <div className="kicker">Badges</div>
-                <div className="h2">Earned on this flight</div>
+          {/* FULL WIDTH: Badges */}
+          <div className="statusFull">
+            <div className="card">
+              <div className="cardHead" style={{ marginBottom: 10 }}>
+                <div>
+                  <div className="kicker">Badges</div>
+                  <div className="h2">Earned on this flight</div>
+                </div>
+
+                <div className="metaPill faint" title="Badges earned so far">
+                  🏅 <strong>{badgesSorted.length}</strong>
+                </div>
               </div>
 
-              <div className="metaPill faint" title="Badges earned so far">
-                🏅 <strong>{badgesSorted.length}</strong>
-              </div>
-            </div>
-
-            {badgesSorted.length === 0 ? (
-              <div className="soft">
-                <div className="muted">None yet. The bird’s still grinding XP. 🕊️</div>
-              </div>
-            ) : (
-              <div className="stack">
-                {badgesSorted.map((b) => (
-                  <div key={b.id} className="soft" style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                    <div
-                      className="metaPill"
-                      style={{
-                        padding: "8px 10px",
-                        background: "rgba(0,0,0,0.04)",
-                        border: "1px solid rgba(0,0,0,0.10)",
-                        flex: "0 0 auto",
-                      }}
-                      aria-label="Badge icon"
-                      title={rarityLabel(b.rarity)}
-                    >
-                      <span style={{ fontSize: 16, lineHeight: "16px" }}>{b.icon || "🏅"}</span>
-                    </div>
-
-                    <div style={{ minWidth: 0, flex: "1 1 auto" }}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-                        <div style={{ fontWeight: 900, letterSpacing: "-0.01em" }}>{b.title}</div>
-                        <div className="muted" style={{ fontSize: 11 }}>
-                          {rarityLabel(b.rarity)}
-                          {b.earned_at ? ` • ${new Date(b.earned_at).toLocaleString()}` : ""}
-                        </div>
+              {badgesSorted.length === 0 ? (
+                <div className="soft">
+                  <div className="muted">None yet. The bird’s still grinding XP. 🕊️</div>
+                </div>
+              ) : (
+                <div className="stack">
+                  {badgesSorted.map((b) => (
+                    <div key={b.id} className="soft" style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                      <div
+                        className="metaPill"
+                        style={{
+                          padding: "8px 10px",
+                          background: "rgba(0,0,0,0.04)",
+                          border: "1px solid rgba(0,0,0,0.10)",
+                          flex: "0 0 auto",
+                        }}
+                        aria-label="Badge icon"
+                        title={rarityLabel(b.rarity)}
+                      >
+                        <span style={{ fontSize: 16, lineHeight: "16px" }}>{b.icon || "🏅"}</span>
                       </div>
 
-                      {b.subtitle ? <div className="muted" style={{ marginTop: 4 }}>{b.subtitle}</div> : null}
+                      <div style={{ minWidth: 0, flex: "1 1 auto" }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                          <div style={{ fontWeight: 900, letterSpacing: "-0.01em" }}>{b.title}</div>
+                          <div className="muted" style={{ fontSize: 11 }}>
+                            {rarityLabel(b.rarity)}
+                            {b.earned_at ? ` • ${new Date(b.earned_at).toLocaleString()}` : ""}
+                          </div>
+                        </div>
+
+                        {b.subtitle ? <div className="muted" style={{ marginTop: 4 }}>{b.subtitle}</div> : null}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1189,40 +1195,36 @@ export default function LetterStatusPage() {
           body={letter.body || ""}
           confetti={confetti}
         />
-
-        {/* ✅ Page-scoped layout styles (NOT in cards.css) */}
-        <style jsx global>{`
-          .statusLayout {
-            margin-top: 14px;
-            display: grid;
-            gap: 14px;
-          }
-
-          /* Top row: letter + map */
-          .statusTopRow {
-            display: grid;
-            gap: 14px;
-            grid-template-columns: 1fr;
-            align-items: start;
-          }
-
-          /* Desktop split */
-          @media (min-width: 980px) {
-            .statusTopRow {
-              grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-            }
-          }
-
-          /* Give the map card a little stability when the letter is tall */
-          .statusTopRow > .card {
-            min-width: 0;
-          }
-
-          .statusTimelineCard {
-            /* nothing special; just here if you want to target it later */
-          }
-        `}</style>
       </main>
+
+      {/* ✅ Scoped layout CSS (so we don’t mess with global grid rules) */}
+      <style jsx>{`
+        .statusGrid {
+          margin-top: 14px;
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 14px;
+          align-items: start;
+        }
+
+        /* Desktop: 60/40 */
+        @media (min-width: 980px) {
+          .statusGrid {
+            grid-template-columns: 1.2fr 0.8fr; /* 60/40 */
+            gap: 14px;
+          }
+          .statusFull {
+            grid-column: 1 / -1;
+          }
+        }
+
+        /* Slightly nicer spacing on big screens */
+        @media (min-width: 1280px) {
+          .statusGrid {
+            gap: 16px;
+          }
+        }
+      `}</style>
     </main>
   );
 }
