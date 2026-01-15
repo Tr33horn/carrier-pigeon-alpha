@@ -1207,6 +1207,26 @@ export default function LetterStatusPage() {
           align-items: start;
         }
 
+/* Make the two top columns equal height */
+.statusCol {
+  height: 100%;
+}
+
+/* Make the cards inside those columns fill the column height */
+.statusCol > :global(.card) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Let the map area stretch */
+.statusCol > :global(.card) :global(.mapWrap),
+.statusCol > :global(.card) :global(.mapFrame),
+.statusCol > :global(.card) :global(.mapContainer) {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
         /* Desktop: 60/40 */
         @media (min-width: 980px) {
           .statusGrid {
