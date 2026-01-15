@@ -1089,26 +1089,24 @@ export default function LetterStatusPage() {
             </div>
           </div>
 
-          {/* RIGHT: Map (60%) */}
-          <div className="statusCol">
-            <div className="card">
-              <MapSection
-                mapStyle={mapStyle}
-                setMapStyle={setMapStyle}
-                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-                progress={progress}
-                progressPctFloor={progressPctFloor}
-                tooltipText={mapTooltip}
-                markerMode={markerMode}
-                showLive={showLive}
-                sentAtISO={letter.sent_at}
-                etaAtISO={effectiveEtaISO}
-                currentlyOver={currentlyOver}
-                milestones={milestones}
-              />
-            </div>
-          </div>
+{/* RIGHT: Map (60%) */}
+<div className="statusCol">
+  <MapSection
+    mapStyle={mapStyle}
+    setMapStyle={setMapStyle}
+    origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+    dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+    progress={progress}
+    progressPctFloor={progressPctFloor}
+    tooltipText={mapTooltip}
+    markerMode={markerMode}
+    showLive={showLive}
+    sentAtISO={letter.sent_at}
+    etaAtISO={effectiveEtaISO}
+    currentlyOver={currentlyOver}
+    milestones={milestones}
+  />
+</div>
 
           {/* FULL WIDTH: Timeline */}
           <div className="statusFull">
