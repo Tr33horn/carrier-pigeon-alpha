@@ -7,6 +7,7 @@ export type TimelineKind = "checkpoint" | "sleep" | "day" | "delivered";
 export type TimelineItem = {
   key: string;
   name: string;
+  subtitle?: string;
   at: string; // ISO
   kind: TimelineKind;
 };
@@ -126,6 +127,7 @@ export default function TimelineRail({
                   <div className="railTitle">{it.name}</div>
                   <div className="railTime">{timeLabelLocal(it.at)}</div>
                 </div>
+                {it.subtitle ? <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>{it.subtitle}</div> : null}
               </div>
             </div>
           );

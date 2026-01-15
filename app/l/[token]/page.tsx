@@ -120,7 +120,6 @@ type PageLayout = {
   letterStatusLabel: string;
   canOpenLetter: boolean;
   showSpeed: boolean;
-  showProgressPills: boolean;
   timelineTitle: string;
   timelineModeLabel: string;
   timelineFinal: boolean;
@@ -144,6 +143,29 @@ function parseMs(iso: string | null | undefined): number | null {
 
 function clampMs(t: number, a: number, b: number) {
   return Math.max(a, Math.min(b, t));
+}
+
+function isWithinSleepWindow(date: Date, startHour = 22, endHour = 6) {
+  if (!Number.isFinite(date.getTime())) return false;
+  if (startHour === endHour) return false;
+  const h = date.getHours();
+  if (startHour < endHour) return h >= startHour && h < endHour;
+  return h >= startHour || h < endHour;
+}
+
+function pickNightLine(seedString: string) {
+  const lines = [
+    "Flying under night skies",
+    "Still flying. Even now.",
+    "The long way, quietly.",
+    "Moving while the world sleeps.",
+  ];
+
+  let hash = 0;
+  for (let i = 0; i < seedString.length; i++) {
+    hash = (hash * 31 + seedString.charCodeAt(i)) >>> 0;
+  }
+  return lines[hash % lines.length];
 }
 
 function formatCountdown(ms: number) {
@@ -386,7 +408,6 @@ function getPageLayout(state: FlightState): PageLayout {
       letterStatusLabel: "Delivered",
       canOpenLetter: true,
       showSpeed: false,
-      showProgressPills: false,
       timelineTitle: "Flight story",
       timelineModeLabel: "Delivered",
       timelineFinal: true,
@@ -418,7 +439,6 @@ function getPageLayout(state: FlightState): PageLayout {
       letterStatusLabel: "Sealed until delivery",
       canOpenLetter: false,
       showSpeed: true,
-      showProgressPills: true,
       timelineTitle: "Flight log",
       timelineModeLabel: "Auto",
       timelineFinal: false,
@@ -445,7 +465,6 @@ function getPageLayout(state: FlightState): PageLayout {
     letterStatusLabel: "Sealed until delivery",
     canOpenLetter: false,
     showSpeed: true,
-    showProgressPills: true,
     timelineTitle: "Flight log",
     timelineModeLabel: "Auto",
     timelineFinal: false,
@@ -914,6 +933,23 @@ export default function LetterStatusPage() {
 
   const deliveredState = uiDelivered || progress >= 1 || markerMode === "delivered";
 
+  const sentAtDate = useMemo(() => {
+    if (!letter?.sent_at) return null;
+    const d = new Date(letter.sent_at);
+    return Number.isFinite(d.getTime()) ? d : null;
+  }, [letter?.sent_at]);
+
+  const sentAtInSleepWindow = useMemo(() => {
+    if (!sentAtDate) return false;
+    return isWithinSleepWindow(sentAtDate);
+  }, [sentAtDate]);
+
+  const nightSeed = letter?.public_token || letter?.sent_at || "";
+  const nightLine = useMemo(() => pickNightLine(nightSeed), [nightSeed]);
+  const inSleepHoursNow = useMemo(() => isWithinSleepWindow(now), [now]);
+  const nightFlightExceptionActive =
+    sentAtInSleepWindow && !sleeping && !canceled && !archived && !deliveredState;
+
   const countdown = useMemo(() => {
     if (!letter) return "";
     const msLeft = new Date(effectiveEtaISO).getTime() - now.getTime();
@@ -934,17 +970,6 @@ export default function LetterStatusPage() {
 
     return Number.isFinite(BIRD_RULES[bird]?.speedKmh) ? BIRD_RULES[bird].speedKmh : 0;
   }, [canceled, letter, uiDelivered, archived, sleeping, flight?.current_speed_kmh, bird]);
-
-  // ✅ CHANGE #1: milestones labels (no "reached" + no bullets from us)
-  const milestones = useMemo(() => {
-    if (!letter) return [];
-    const defs = [
-      { pct: 25, label: "25%" },
-      { pct: 50, label: "50%" },
-      { pct: 75, label: "75%" },
-    ];
-    return defs.map((m) => ({ ...m, isPast: progressPctFloor >= m.pct }));
-  }, [letter, progressPctFloor]);
 
   const checkpointsByTime = useMemo(() => {
     const cps = [...checkpointsAdjusted];
@@ -1041,18 +1066,33 @@ const flightState: FlightState = deliveredState
       };
     }
 
-const liveBadge: PageLayout["liveBadge"] = next.showLiveBadge
-  ? {
-      label: sleeping ? "SLEEPING" : next.liveLabel,
-      subLabel: sleeping
-        ? `Wakes at ${flight?.sleep_local_text || "soon"}`
-        : `Last updated: ${secondsSinceFetch ?? 0}s ago`,
-      indicator: sleeping ? "moon" : "dot",
-    }
-  : null;
+    const useNightLine = nightFlightExceptionActive && inSleepHoursNow;
+    const liveBadge: PageLayout["liveBadge"] = next.showLiveBadge
+      ? {
+          label: sleeping ? "SLEEPING" : next.liveLabel,
+          subLabel: sleeping
+            ? `Wakes at ${flight?.sleep_local_text || "soon"}`
+            : useNightLine
+            ? nightLine
+            : `Last updated: ${secondsSinceFetch ?? 0}s ago`,
+          indicator: sleeping ? "moon" : "dot",
+        }
+      : null;
 
-return { ...next, liveBadge };
-  }, [flightState, canceled, archived, sleeping, flight?.sleep_local_text, secondsSinceFetch, archivedLabel, canceledLabel]);
+    return { ...next, liveBadge };
+  }, [
+    flightState,
+    canceled,
+    archived,
+    sleeping,
+    flight?.sleep_local_text,
+    secondsSinceFetch,
+    archivedLabel,
+    canceledLabel,
+    nightFlightExceptionActive,
+    inSleepHoursNow,
+    nightLine,
+  ]);
 
   const layoutVars = useMemo(
     () =>
@@ -1075,8 +1115,9 @@ return { ...next, liveBadge };
       uiDelivered: layout.state === "delivered",
       canceled,
       effectiveEtaISO,
+      showNightFlightNote: nightFlightExceptionActive,
     });
-  }, [now, letter, checkpointsByTime, layout.timelineFinal, layout.state, canceled, effectiveEtaISO]);
+  }, [now, letter, checkpointsByTime, layout.timelineFinal, layout.state, canceled, effectiveEtaISO, nightFlightExceptionActive]);
 
   const timelineItems = useMemo(() => {
     return layout.collapseTimeline ? collapseTimelineItems(timelineItemsRaw) : timelineItemsRaw;
@@ -1169,8 +1210,8 @@ return { ...next, liveBadge };
   }
 
   const modalTitle = `From ${letter.from_name || "Sender"} to ${letter.to_name || "Recipient"}`;
-const liveBadge = layout.liveBadge ?? null;
-const isSleepingBadge = liveBadge?.indicator === "moon";
+  const liveBadge = layout.liveBadge ?? null;
+  const isSleepingBadge = liveBadge?.indicator === "moon";
 
   return (
     <main className="pageBg">
@@ -1344,8 +1385,6 @@ const isSleepingBadge = liveBadge?.indicator === "moon";
               sentAtISO={letter.sent_at}
               etaAtISO={effectiveEtaISO}
               currentlyOver={currentlyOver}
-              milestones={milestones}
-              showProgressPills={layout.showProgressPills}
               cardClassName={`${layout.mapPrimary ? "primary" : ""} ${layout.mapDesaturate ? "desaturate" : ""}`.trim()}
             />
           </div>

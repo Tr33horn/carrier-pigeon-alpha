@@ -35,10 +35,6 @@ export default function MapSection(props: {
   etaAtISO?: string;
 
   currentlyOver: string;
-
-  milestones: { pct: number; label: string; isPast: boolean }[];
-
-  showProgressPills?: boolean;
   cardClassName?: string;
   cardStyle?: CSSProperties;
 }) {
@@ -55,11 +51,11 @@ export default function MapSection(props: {
     sentAtISO,
     etaAtISO,
     currentlyOver,
-    milestones,
-    showProgressPills = true,
     cardClassName,
     cardStyle,
   } = props;
+
+  const showProgressBar = markerMode !== "delivered";
 
   return (
     <div className={`card mapCard ${cardClassName || ""}`.trim()} style={cardStyle}>
@@ -107,6 +103,17 @@ export default function MapSection(props: {
         ) : null}
       </div>
 
+      {showProgressBar ? (
+        <div style={{ marginTop: 12 }}>
+          <div className="bar" style={{ height: 8, background: "var(--alp-blue-18)" }}>
+            <div className="barFill" style={{ width: `${progressPctFloor}%`, background: "var(--ink)", transition: "width 0.3s ease" }} />
+            {[25, 50, 75].map((p) => (
+              <span key={p} className="barTick" style={{ left: `${p}%` }} />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="mapWrap" style={{ marginTop: 12 }}>
         <MapView
           origin={origin}
@@ -122,28 +129,10 @@ export default function MapSection(props: {
       </div>
 
       <div style={{ marginTop: 14 }}>
-        <div className="bar">
-          <div className="barFill" style={{ width: `${progressPctFloor}%` }} />
-          {[25, 50, 75].map((p) => (
-            <span key={p} className="barTick" style={{ left: `${p}%` }} />
-          ))}
-        </div>
-
         <div className="barMeta">
           <div className="mutedStrong">{progressPctFloor}%</div>
           <div className="muted">{`Current: ${currentlyOver}`}</div>
         </div>
-
-        {showProgressPills ? (
-          <div className="chips">
-            {milestones.map((m) => (
-              <div key={m.pct} className={`chip ${m.isPast ? "on" : ""}`}>
-                <span className="chipDot">{m.isPast ? "●" : "○"}</span>
-                <span className="chipLabel">{m.label}</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
       </div>
     </div>
   );

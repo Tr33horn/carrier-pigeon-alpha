@@ -23,8 +23,9 @@ export function buildTimelineItems(args: {
   canceled: boolean;
 
   effectiveEtaISO: string;
+  showNightFlightNote?: boolean;
 }): TimelineItem[] {
-  const { now, letter, checkpointsByTime, timelineFinal, uiDelivered, canceled, effectiveEtaISO } = args;
+  const { now, letter, checkpointsByTime, timelineFinal, uiDelivered, canceled, effectiveEtaISO, showNightFlightNote } = args;
   const nowT = now.getTime();
 
   const safeSentAt = letter?.sent_at && String(letter.sent_at).trim() ? String(letter.sent_at) : null;
@@ -43,6 +44,19 @@ export function buildTimelineItems(args: {
     at: departedAt,
     kind: "checkpoint",
   });
+
+  if (showNightFlightNote) {
+    const departedMs = Date.parse(departedAt);
+    const noteAt = Number.isFinite(departedMs) ? new Date(departedMs + 1).toISOString() : departedAt;
+
+    base.push({
+      key: "night-flight",
+      name: "Departed before dawn",
+      subtitle: "Some messages don't wait for morning.",
+      at: noteAt,
+      kind: "checkpoint",
+    });
+  }
 
   for (const cp of checkpointsByTime as any[]) {
     const atISO = cp._atAdj || cp.at;
