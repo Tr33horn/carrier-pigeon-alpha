@@ -252,7 +252,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
 
     // ✅ Seals
     sealPolicy: "selectable",
-    defaultSealId: "seal_sun",
+    defaultSealId: "seal_classic",
     allowedSealIds: [...DEFAULT_SELECTABLE_SEALS],
   },
 

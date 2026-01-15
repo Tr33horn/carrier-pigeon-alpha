@@ -56,7 +56,7 @@ export const SEAL_CATALOG: SealRow[] = [
   
   {
     id: "seal_flokflame",
-    label: "FLOK Flame",
+    label: "Flame",
     imgSrc: "/seals/seal-flokflame.png",
     rarity: "uncommon",
     selectable: true,
@@ -64,7 +64,7 @@ export const SEAL_CATALOG: SealRow[] = [
 
     {
     id: "seal_floksun",
-    label: "FLOK Sun",
+    label: "Sun",
     imgSrc: "/seals/seal-floksun.png",
     rarity: "uncommon",
     selectable: true,
@@ -72,7 +72,7 @@ export const SEAL_CATALOG: SealRow[] = [
 
     {
     id: "seal_flokheart",
-    label: "FLOK Heart",
+    label: "Heart",
     imgSrc: "/seals/seal-flokheart.png",
     rarity: "uncommon",
     selectable: true,
