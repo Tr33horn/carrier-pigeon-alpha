@@ -7,6 +7,9 @@ export type MarkerMode = "flying" | "sleeping" | "delivered" | "canceled";
 
 type LatLon = { lat: number; lon: number };
 
+// ✅ Toggle: keep picker code, but hide it for now
+const SHOW_MAP_STYLE_PICKER = false;
+
 export default function MapSection(props: {
   mapStyle: MapStyle;
   setMapStyle: (s: MapStyle) => void;
@@ -50,43 +53,45 @@ export default function MapSection(props: {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
         <div className="kicker">Map</div>
 
-        <div className="mapStyleRow" role="group" aria-label="Map style">
-          <button
-            type="button"
-            className={`mapStyleBtn ${mapStyle === "carto-positron" ? "on" : ""}`}
-            onClick={() => setMapStyle("carto-positron")}
-            aria-pressed={mapStyle === "carto-positron"}
-          >
-            Light
-          </button>
+        {SHOW_MAP_STYLE_PICKER ? (
+          <div className="mapStyleRow" role="group" aria-label="Map style">
+            <button
+              type="button"
+              className={`mapStyleBtn ${mapStyle === "carto-positron" ? "on" : ""}`}
+              onClick={() => setMapStyle("carto-positron")}
+              aria-pressed={mapStyle === "carto-positron"}
+            >
+              Light
+            </button>
 
-          <button
-            type="button"
-            className={`mapStyleBtn ${mapStyle === "carto-voyager" ? "on" : ""}`}
-            onClick={() => setMapStyle("carto-voyager")}
-            aria-pressed={mapStyle === "carto-voyager"}
-          >
-            Voyager
-          </button>
+            <button
+              type="button"
+              className={`mapStyleBtn ${mapStyle === "carto-voyager" ? "on" : ""}`}
+              onClick={() => setMapStyle("carto-voyager")}
+              aria-pressed={mapStyle === "carto-voyager"}
+            >
+              Voyager
+            </button>
 
-          <button
-            type="button"
-            className={`mapStyleBtn ${mapStyle === "carto-positron-nolabels" ? "on" : ""}`}
-            onClick={() => setMapStyle("carto-positron-nolabels")}
-            aria-pressed={mapStyle === "carto-positron-nolabels"}
-          >
-            No Labels
-          </button>
+            <button
+              type="button"
+              className={`mapStyleBtn ${mapStyle === "carto-positron-nolabels" ? "on" : ""}`}
+              onClick={() => setMapStyle("carto-positron-nolabels")}
+              aria-pressed={mapStyle === "carto-positron-nolabels"}
+            >
+              No Labels
+            </button>
 
-          <button
-            type="button"
-            className={`mapStyleBtn ${mapStyle === "ink-sketch" ? "on" : ""}`}
-            onClick={() => setMapStyle("ink-sketch")}
-            aria-pressed={mapStyle === "ink-sketch"}
-          >
-            Ink
-          </button>
-        </div>
+            <button
+              type="button"
+              className={`mapStyleBtn ${mapStyle === "ink-sketch" ? "on" : ""}`}
+              onClick={() => setMapStyle("ink-sketch")}
+              aria-pressed={mapStyle === "ink-sketch"}
+            >
+              Ink
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div style={{ marginTop: 12 }}>

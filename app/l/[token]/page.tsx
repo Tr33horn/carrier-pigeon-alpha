@@ -549,7 +549,7 @@ export default function LetterStatusPage() {
   const [sealCracking, setSealCracking] = useState(false);
   const [confetti, setConfetti] = useState(false);
 
-  const [mapStyle, setMapStyle] = useState<MapStyle>("carto-positron");
+  const [mapStyle, setMapStyle] = useState<MapStyle>("carto-voyager");
 
   useEffect(() => {
     archivedRef.current = archived;
