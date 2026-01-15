@@ -40,7 +40,7 @@ export const SEAL_CATALOG: SealRow[] = [
     selectable: true,
   },
   {
-    id: "seal_green",
+    id: "seal_flokgreen",
     label: "Green",
     imgSrc: "/seals/seal-flokgreen.png",
     rarity: "uncommon",
