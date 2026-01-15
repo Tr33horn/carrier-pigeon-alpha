@@ -105,6 +105,7 @@ type StatusPillConfig = {
 
 type PageLayout = {
   state: FlightState;
+  gridMode: "default" | "delivered_stack";
   columns: { letter: string; map: string };
   letterHeight: string;
   mapHeight: string;
@@ -394,6 +395,7 @@ function getPageLayout(state: FlightState): PageLayout {
   if (state === "delivered") {
     return {
       state,
+      gridMode: "delivered_stack",
       columns: { letter: "7fr", map: "5fr" },
       letterHeight: "420px",
       mapHeight: "300px",
@@ -425,6 +427,7 @@ function getPageLayout(state: FlightState): PageLayout {
   if (state === "arriving") {
     return {
       state,
+      gridMode: "default",
       columns: { letter: "5fr", map: "7fr" },
       letterHeight: "360px",
       mapHeight: "380px",
@@ -451,6 +454,7 @@ function getPageLayout(state: FlightState): PageLayout {
 
   return {
     state: "in_flight",
+    gridMode: "default",
     columns: { letter: "5fr", map: "7fr" },
     letterHeight: "360px",
     mapHeight: "380px",
@@ -1355,9 +1359,9 @@ const flightState: FlightState = deliveredState
         </section>
 
         {/* ✅ Letter (40%) + Map (60%) side-by-side, Timeline beneath both */}
-        <div className="statusGrid" style={layoutVars}>
+        <div className={`statusGrid ${layout.gridMode === "delivered_stack" ? "deliveredStack" : ""}`} style={layoutVars}>
           {/* LEFT: Letter (40%) */}
-          <div className="statusCol">
+          <div className="statusCol gridLetter">
             <div className={`card letterCard ${layout.letterPrimary ? "primary" : ""}`} style={{ position: "relative" }}>
               <div className="cardHead" style={{ marginBottom: 8 }}>
                 <div>
@@ -1395,7 +1399,7 @@ const flightState: FlightState = deliveredState
           </div>
 
           {/* RIGHT: Map (60%) */}
-          <div className="statusCol">
+          <div className="statusCol gridMap">
             <MapSection
               mapStyle={mapStyle}
               setMapStyle={setMapStyle}
@@ -1414,7 +1418,7 @@ const flightState: FlightState = deliveredState
           </div>
 
           {/* FULL WIDTH: Timeline */}
-          <div className="statusFull">
+          <div className="statusFull gridTimeline">
             <div className="card">
               <div className="cardHead">
                 <div>
@@ -1435,7 +1439,7 @@ const flightState: FlightState = deliveredState
           </div>
 
           {/* FULL WIDTH: Badges */}
-          <div className="statusFull">
+          <div className="statusFull gridBadges">
             <div className="card">
               <div className="cardHead" style={{ marginBottom: 10 }}>
                 <div>
@@ -1514,6 +1518,45 @@ const flightState: FlightState = deliveredState
           align-items: start;
         }
 
+        .statusGrid.deliveredStack {
+          grid-template-columns: 1fr;
+          grid-template-areas:
+            "letter"
+            "badges"
+            "map"
+            "timeline";
+          gap: 14px;
+        }
+
+        .statusGrid.deliveredStack .statusFull {
+          grid-column: auto;
+        }
+
+        .statusGrid.deliveredStack .gridLetter {
+          grid-area: letter;
+        }
+
+        .statusGrid.deliveredStack .gridBadges {
+          grid-area: badges;
+        }
+
+        .statusGrid.deliveredStack .gridMap {
+          grid-area: map;
+        }
+
+        .statusGrid.deliveredStack .gridTimeline {
+          grid-area: timeline;
+        }
+
+        .statusGrid.deliveredStack .gridBadges {
+          width: 100%;
+          min-width: 0;
+        }
+
+        .statusGrid.deliveredStack .gridBadges :global(.card) {
+          width: 100%;
+        }
+
         :global(.letterCard) {
           min-height: var(--letter-height);
         }
@@ -1581,8 +1624,35 @@ const flightState: FlightState = deliveredState
             grid-template-columns: var(--letter-col) var(--map-col);
             gap: 14px;
           }
-          .statusFull {
+          .statusGrid:not(.deliveredStack) .statusFull {
             grid-column: 1 / -1;
+          }
+
+          .statusGrid.deliveredStack {
+            grid-template-columns: 1fr 1fr;
+            grid-template-areas:
+              "letter letter"
+              "badges badges"
+              "map timeline";
+            gap: 14px;
+          }
+
+          .statusGrid.deliveredStack .statusFull {
+            grid-column: auto;
+          }
+
+          .statusGrid.deliveredStack .gridLetter {
+            grid-column: 1 / -1;
+          }
+
+          .statusGrid.deliveredStack .gridBadges {
+            grid-column: 1 / -1;
+            width: 100%;
+            min-width: 0;
+          }
+
+          .statusGrid.deliveredStack .gridBadges :global(.card) {
+            width: 100%;
           }
         }
 
