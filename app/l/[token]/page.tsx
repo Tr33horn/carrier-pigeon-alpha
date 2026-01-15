@@ -1,9 +1,9 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import TimelineRail from "./_components/TimelineRail";
+import TimelineRail, { type TimelineItem } from "./_components/TimelineRail";
 import { buildTimelineItems, pickCurrentTimelineKey } from "./_lib/letterStatusTimeline";
 import MapSection from "./_components/MapSection";
 
@@ -91,6 +91,44 @@ type Flight = {
 
 type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels" | "ink-sketch";
 type BirdType = "pigeon" | "snipe" | "goose";
+type IconName = "live" | "pin" | "speed" | "distance" | "check" | "mail" | "timeline" | "moon" | "x";
+type FlightState = "in_flight" | "arriving" | "delivered";
+
+type StatusPillConfig = {
+  icon: IconName;
+  label: string;
+  detail: string;
+  trailing?: string;
+  style?: CSSProperties;
+  iconStyle?: CSSProperties;
+};
+
+type PageLayout = {
+  state: FlightState;
+  columns: { letter: string; map: string };
+  letterHeight: string;
+  mapHeight: string;
+  mapPrimary: boolean;
+  letterPrimary: boolean;
+  mapDesaturate: boolean;
+  showLiveBadge: boolean;
+  liveLabel: string;
+  liveBadge?: { label: string; subLabel: string; indicator: "moon" | "dot" } | null;
+  showLocationPill: boolean;
+  showCountdown: boolean;
+  showSnapshot: boolean;
+  letterStatusLabel: string;
+  canOpenLetter: boolean;
+  showSpeed: boolean;
+  showProgressPills: boolean;
+  timelineTitle: string;
+  timelineModeLabel: string;
+  timelineFinal: boolean;
+  highlightLatestTimeline: boolean;
+  collapseTimeline: boolean;
+  waxPulse: boolean;
+  statusPill?: StatusPillConfig | null;
+};
 
 /* ------------------- helpers ------------------- */
 
@@ -247,7 +285,7 @@ function Ico({
   name,
   size = 16,
 }: {
-  name: "live" | "pin" | "speed" | "distance" | "check" | "mail" | "timeline" | "moon" | "x";
+  name: IconName;
   size?: number;
 }) {
   const common = {
@@ -324,6 +362,128 @@ function Ico({
         </svg>
       );
   }
+}
+
+const ARRIVING_PROGRESS_THRESHOLD = 0.97;
+
+
+
+function getPageLayout(state: FlightState): PageLayout {
+  if (state === "delivered") {
+    return {
+      state,
+      columns: { letter: "7fr", map: "5fr" },
+      letterHeight: "420px",
+      mapHeight: "300px",
+      mapPrimary: false,
+      letterPrimary: true,
+      mapDesaturate: true,
+      showLiveBadge: false,
+      liveLabel: "LIVE",
+      showLocationPill: false,
+      showCountdown: false,
+      showSnapshot: false,
+      letterStatusLabel: "Delivered",
+      canOpenLetter: true,
+      showSpeed: false,
+      showProgressPills: false,
+      timelineTitle: "Flight story",
+      timelineModeLabel: "Delivered",
+      timelineFinal: true,
+      highlightLatestTimeline: false,
+      collapseTimeline: true,
+      waxPulse: false,
+      statusPill: {
+        icon: "check",
+        label: "Delivered",
+        detail: "the bird has clocked out.",
+      },
+    };
+  }
+
+  if (state === "arriving") {
+    return {
+      state,
+      columns: { letter: "5fr", map: "7fr" },
+      letterHeight: "360px",
+      mapHeight: "380px",
+      mapPrimary: true,
+      letterPrimary: false,
+      mapDesaturate: false,
+      showLiveBadge: true,
+      liveLabel: "ARRIVING",
+      showLocationPill: true,
+      showCountdown: true,
+      showSnapshot: false,
+      letterStatusLabel: "Sealed until delivery",
+      canOpenLetter: false,
+      showSpeed: true,
+      showProgressPills: true,
+      timelineTitle: "Flight log",
+      timelineModeLabel: "Auto",
+      timelineFinal: false,
+      highlightLatestTimeline: true,
+      collapseTimeline: false,
+      waxPulse: true,
+      statusPill: null,
+    };
+  }
+
+  return {
+    state: "in_flight",
+    columns: { letter: "5fr", map: "7fr" },
+    letterHeight: "360px",
+    mapHeight: "380px",
+    mapPrimary: false,
+    letterPrimary: false,
+    mapDesaturate: false,
+    showLiveBadge: true,
+    liveLabel: "LIVE",
+    showLocationPill: true,
+    showCountdown: true,
+    showSnapshot: false,
+    letterStatusLabel: "Sealed until delivery",
+    canOpenLetter: false,
+    showSpeed: true,
+    showProgressPills: true,
+    timelineTitle: "Flight log",
+    timelineModeLabel: "Auto",
+    timelineFinal: false,
+    highlightLatestTimeline: false,
+    collapseTimeline: false,
+    waxPulse: false,
+    statusPill: null,
+  };
+}
+
+function collapseTimelineItems(items: TimelineItem[]) {
+  if (!items.length) return items;
+
+  const out: TimelineItem[] = [];
+  let lastNonDay: TimelineItem | null = null;
+
+  for (const it of items) {
+    if (it.kind === "day") {
+      out.push(it);
+      lastNonDay = null;
+      continue;
+    }
+    if (lastNonDay && lastNonDay.kind === it.kind && lastNonDay.name === it.name) continue;
+    out.push(it);
+    lastNonDay = it;
+  }
+
+  const trimmed: TimelineItem[] = [];
+  for (let i = 0; i < out.length; i++) {
+    const it = out[i];
+    if (it.kind === "day") {
+      const next = out[i + 1];
+      if (!next || next.kind === "day") continue;
+    }
+    trimmed.push(it);
+  }
+
+  return trimmed;
 }
 
 /** ✅ Bird image based on bird + state */
@@ -548,6 +708,7 @@ export default function LetterStatusPage() {
   const [letterOpen, setLetterOpen] = useState(false);
   const [sealCracking, setSealCracking] = useState(false);
   const [confetti, setConfetti] = useState(false);
+  const deliveredConfettiRef = useRef(false);
 
   const [mapStyle, setMapStyle] = useState<MapStyle>("carto-voyager");
 
@@ -744,6 +905,15 @@ export default function LetterStatusPage() {
     return Math.max(0, Math.min(100, Math.floor(progress * 100)));
   }, [progress]);
 
+  const markerMode: Flight["marker_mode"] = useMemo(() => {
+    if (canceled) return "canceled";
+    if (flight?.marker_mode) return flight.marker_mode;
+    if (uiDelivered || progress >= 1) return "delivered";
+    return sleeping ? "sleeping" : "flying";
+  }, [canceled, flight?.marker_mode, uiDelivered, progress, sleeping]);
+
+  const deliveredState = uiDelivered || progress >= 1 || markerMode === "delivered";
+
   const countdown = useMemo(() => {
     if (!letter) return "";
     const msLeft = new Date(effectiveEtaISO).getTime() - now.getTime();
@@ -802,7 +972,7 @@ export default function LetterStatusPage() {
 
   const currentlyOver = useMemo(() => {
     if (canceled) return "Canceled";
-    if (uiDelivered) return "Delivered";
+    if (deliveredState) return "Delivered";
     if (currentOverText && currentOverText.trim()) return currentOverText;
 
     const fallback =
@@ -811,40 +981,122 @@ export default function LetterStatusPage() {
       "somewhere over the U.S.";
 
     return fallback;
-  }, [canceled, uiDelivered, currentOverText, currentCheckpoint]);
+  }, [canceled, deliveredState, currentOverText, currentCheckpoint]);
 
   const mapTooltip = useMemo(() => {
     if (flight?.tooltip_text && flight.tooltip_text.trim()) return flight.tooltip_text;
     if (canceled) return "Location: Canceled";
-    if (uiDelivered) return "Location: Delivered";
+    if (deliveredState) return "Location: Delivered";
     return `Location: ${currentlyOver || "somewhere over the U.S."}`;
-  }, [flight?.tooltip_text, canceled, uiDelivered, currentlyOver]);
+  }, [flight?.tooltip_text, canceled, deliveredState, currentlyOver]);
 
-  const showLive = !archived && !canceled && !uiDelivered;
-  const timelineFinal = uiDelivered || archived || canceled;
+  const archivedLabel = archivedAtISO ? `Archived • ${new Date(archivedAtISO).toLocaleString()}` : "Archived";
+  const canceledLabel = canceledAtISO ? `Canceled • ${new Date(canceledAtISO).toLocaleString()}` : "Canceled";
 
-  const timelineItems = useMemo(() => {
+const flightState: FlightState = deliveredState
+  ? "delivered"
+  : progress >= ARRIVING_PROGRESS_THRESHOLD
+  ? "arriving"
+  : "in_flight";
+
+  const layout = useMemo<PageLayout>(() => {
+    const base = getPageLayout(flightState);
+    let next = base;
+
+    if (canceled) {
+      next = {
+        ...base,
+        showLiveBadge: false,
+        showLocationPill: false,
+        showCountdown: false,
+        showSnapshot: true,
+        letterStatusLabel: "Canceled",
+        canOpenLetter: false,
+        timelineModeLabel: "Canceled",
+        timelineFinal: true,
+        statusPill: {
+          icon: "x",
+          label: "CANCELED",
+          detail: "recalled.",
+          trailing: canceledLabel,
+          style: { borderColor: "rgba(220,38,38,0.35)", background: "rgba(220,38,38,0.06)" },
+          iconStyle: { color: "rgb(220,38,38)" },
+        },
+      };
+    } else if (archived) {
+      next = {
+        ...base,
+        showLiveBadge: false,
+        showLocationPill: false,
+        showCountdown: false,
+        showSnapshot: true,
+        timelineModeLabel: "Archived",
+        timelineFinal: true,
+        statusPill: {
+          icon: "timeline",
+          label: "ARCHIVED",
+          detail: "snapshot view.",
+          trailing: archivedLabel,
+        },
+      };
+    }
+
+const liveBadge: PageLayout["liveBadge"] = next.showLiveBadge
+  ? {
+      label: sleeping ? "SLEEPING" : next.liveLabel,
+      subLabel: sleeping
+        ? `Wakes at ${flight?.sleep_local_text || "soon"}`
+        : `Last updated: ${secondsSinceFetch ?? 0}s ago`,
+      indicator: sleeping ? "moon" : "dot",
+    }
+  : null;
+
+return { ...next, liveBadge };
+  }, [flightState, canceled, archived, sleeping, flight?.sleep_local_text, secondsSinceFetch, archivedLabel, canceledLabel]);
+
+  const layoutVars = useMemo(
+    () =>
+      ({
+        "--letter-col": layout.columns.letter,
+        "--map-col": layout.columns.map,
+        "--letter-height": layout.letterHeight,
+        "--map-height": layout.mapHeight,
+      } as CSSProperties),
+    [layout.columns.letter, layout.columns.map, layout.letterHeight, layout.mapHeight]
+  );
+
+  const timelineItemsRaw = useMemo(() => {
     if (!letter) return [];
     return buildTimelineItems({
       now,
       letter,
       checkpointsByTime,
-      timelineFinal,
-      uiDelivered,
+      timelineFinal: layout.timelineFinal,
+      uiDelivered: layout.state === "delivered",
       canceled,
       effectiveEtaISO,
     });
-  }, [now, letter, checkpointsByTime, timelineFinal, uiDelivered, canceled, effectiveEtaISO]);
+  }, [now, letter, checkpointsByTime, layout.timelineFinal, layout.state, canceled, effectiveEtaISO]);
+
+  const timelineItems = useMemo(() => {
+    return layout.collapseTimeline ? collapseTimelineItems(timelineItemsRaw) : timelineItemsRaw;
+  }, [layout.collapseTimeline, timelineItemsRaw]);
+
+  const latestTimelineKey = useMemo(() => {
+    const realItems = timelineItems.filter((it) => it.kind !== "day");
+    return realItems.length ? realItems[realItems.length - 1].key : null;
+  }, [timelineItems]);
 
   const currentTimelineKey = useMemo(() => {
+    if (layout.highlightLatestTimeline && latestTimelineKey) return latestTimelineKey;
     return pickCurrentTimelineKey({
       items: timelineItems,
       now,
       sleeping,
-      uiDelivered,
+      uiDelivered: layout.state === "delivered",
       canceled,
     });
-  }, [timelineItems, now, sleeping, uiDelivered, canceled]);
+  }, [layout.highlightLatestTimeline, layout.state, latestTimelineKey, timelineItems, now, sleeping, canceled]);
 
   const etaTextUTC = useMemo(() => {
     if (!letter) return "";
@@ -870,16 +1122,10 @@ export default function LetterStatusPage() {
     });
   }, [items.badges]);
 
-  const markerMode: Flight["marker_mode"] = useMemo(() => {
-    if (canceled) return "canceled";
-    if (flight?.marker_mode) return flight.marker_mode;
-    return uiDelivered ? "delivered" : sleeping ? "sleeping" : "flying";
-  }, [canceled, flight?.marker_mode, uiDelivered, sleeping]);
-
   const sealSrcs = useMemo(() => sealImageSrcs(letter?.seal_id ?? null), [letter?.seal_id]);
 
   function openLetter() {
-    if (!uiDelivered || canceled) return;
+    if (!layout.canOpenLetter) return;
 
     setSealCracking(true);
     setConfetti(true);
@@ -888,6 +1134,17 @@ export default function LetterStatusPage() {
     window.setTimeout(() => setSealCracking(false), 650);
     window.setTimeout(() => setConfetti(false), 1400);
   }
+
+  useEffect(() => {
+    if (layout.state !== "delivered") return;
+    if (deliveredConfettiRef.current) return;
+
+    deliveredConfettiRef.current = true;
+    setConfetti(true);
+
+    const t = window.setTimeout(() => setConfetti(false), 1400);
+    return () => window.clearTimeout(t);
+  }, [layout.state]);
 
   if (error) {
     return (
@@ -911,11 +1168,9 @@ export default function LetterStatusPage() {
     );
   }
 
-  const archivedLabel = archivedAtISO ? `Archived • ${new Date(archivedAtISO).toLocaleString()}` : "Archived";
-  const canceledLabel = canceledAtISO ? `Canceled • ${new Date(canceledAtISO).toLocaleString()}` : "Canceled";
-
-  const timelineModeLabel = uiDelivered ? "Delivered" : canceled ? "Canceled" : archived ? "Archived" : "Auto";
   const modalTitle = `From ${letter.from_name || "Sender"} to ${letter.to_name || "Recipient"}`;
+const liveBadge = layout.liveBadge ?? null;
+const isSleepingBadge = liveBadge?.indicator === "moon";
 
   return (
     <main className="pageBg">
@@ -941,61 +1196,44 @@ export default function LetterStatusPage() {
               <div className="subRow">
                 <BirdStatusCard bird={bird} mode={markerMode} wakeText={flight?.sleep_local_text || undefined} />
 
-                {showLive ? (
+                {layout.showLiveBadge ? (
                   <>
                     <div className="liveStack" style={{ minWidth: 230, flex: "0 0 auto" }}>
-                      <div className={`liveWrap ${sleeping ? "sleep" : ""}`}>
-                        {sleeping ? (
+                      <div className={`liveWrap ${isSleepingBadge ? "sleep" : ""}`}>
+                        {isSleepingBadge ? (
                           <span className="ico" style={{ marginRight: 8 }}>
                             <Ico name="moon" size={14} />
                           </span>
                         ) : (
-                          <span className={`liveDot ${sleeping ? "sleep" : ""}`} />
+                          <span className={`liveDot ${isSleepingBadge ? "sleep" : ""}`} />
                         )}
-                        <span className="liveText">{sleeping ? "SLEEPING" : "LIVE"}</span>
+                        <span className="liveText">{liveBadge?.label}</span>
                       </div>
-                      <div className="liveSub">
-                        {sleeping ? `Wakes at ${flight?.sleep_local_text || "soon"}` : `Last updated: ${secondsSinceFetch ?? 0}s ago`}
-                      </div>
+                      <div className="liveSub">{liveBadge?.subLabel}</div>
                     </div>
 
-                    <div className="metaPill" style={{ flex: "1 1 auto" }}>
-                      <span className="ico">
-                        <Ico name="pin" />
-                      </span>
-                      <span>
-                        Location: <strong>{currentlyOver}</strong>
-                      </span>
-                    </div>
+                    {layout.showLocationPill ? (
+                      <div className="metaPill" style={{ flex: "1 1 auto" }}>
+                        <span className="ico">
+                          <Ico name="pin" />
+                        </span>
+                        <span>
+                          Location: <strong>{currentlyOver}</strong>
+                        </span>
+                      </div>
+                    ) : null}
                   </>
-                ) : canceled ? (
-                  <div className="metaPill" style={{ borderColor: "rgba(220,38,38,0.35)", background: "rgba(220,38,38,0.06)" }}>
-                    <span className="ico" style={{ color: "rgb(220,38,38)" }}>
-                      <Ico name="x" />
+                ) : layout.statusPill ? (
+                  <div className="metaPill" style={layout.statusPill.style}>
+                    <span className="ico" style={layout.statusPill.iconStyle}>
+                      <Ico name={layout.statusPill.icon} />
                     </span>
                     <span>
-                      <strong>CANCELED</strong> — recalled. <span style={{ opacity: 0.75 }}>{canceledLabel}</span>
+                      <strong>{layout.statusPill.label}</strong> — {layout.statusPill.detail}{" "}
+                      {layout.statusPill.trailing ? <span style={{ opacity: 0.75 }}>{layout.statusPill.trailing}</span> : null}
                     </span>
                   </div>
-                ) : archived ? (
-                  <div className="metaPill">
-                    <span className="ico">
-                      <Ico name="timeline" />
-                    </span>
-                    <span>
-                      <strong>ARCHIVED</strong> — snapshot view. <span style={{ opacity: 0.75 }}>{archivedLabel}</span>
-                    </span>
-                  </div>
-                ) : (
-                  <div className="metaPill">
-                    <span className="ico">
-                      <Ico name="check" />
-                    </span>
-                    <span>
-                      <strong>Delivered</strong> — the bird has clocked out.
-                    </span>
-                  </div>
-                )}
+                ) : null}
               </div>
             </div>
 
@@ -1006,13 +1244,13 @@ export default function LetterStatusPage() {
                 (UTC: {etaTextUTC})
               </div>
 
-              {!uiDelivered && !archived && !canceled && <div className="etaSub">T-minus {countdown}</div>}
+              {layout.showCountdown ? <div className="etaSub">T-minus {countdown}</div> : null}
 
-              {(archived || canceled) && (
+              {layout.showSnapshot ? (
                 <div className="etaSub">
                   Snapshot: <span style={{ fontVariantNumeric: "tabular-nums" }}>{serverNowUtcText ?? "frozen"}</span>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -1027,15 +1265,17 @@ export default function LetterStatusPage() {
               </div>
             </div>
 
-            <div className="stat">
-              <span className="ico">
-                <Ico name="speed" />
-              </span>
-              <div>
-                <div className="statLabel">Speed</div>
-                <div className="statValue">{Number(currentSpeedKmh).toFixed(0)} km/h</div>
+            {layout.showSpeed ? (
+              <div className="stat">
+                <span className="ico">
+                  <Ico name="speed" />
+                </span>
+                <div>
+                  <div className="statLabel">Speed</div>
+                  <div className="statValue">{Number(currentSpeedKmh).toFixed(0)} km/h</div>
+                </div>
               </div>
-            </div>
+            ) : null}
 
             <div className="stat">
               <span className="ico">
@@ -1050,10 +1290,10 @@ export default function LetterStatusPage() {
         </section>
 
         {/* ✅ Letter (40%) + Map (60%) side-by-side, Timeline beneath both */}
-        <div className="statusGrid">
+        <div className="statusGrid" style={layoutVars}>
           {/* LEFT: Letter (40%) */}
           <div className="statusCol">
-            <div className="card letterCard" style={{ position: "relative" }}>
+            <div className={`card letterCard ${layout.letterPrimary ? "primary" : ""}`} style={{ position: "relative" }}>
               <div className="cardHead" style={{ marginBottom: 8 }}>
                 <div>
                   <div className="kicker">Letter</div>
@@ -1066,19 +1306,19 @@ export default function LetterStatusPage() {
                   <span className="ico">
                     <Ico name="mail" />
                   </span>
-                  <span>{canceled ? "Canceled" : uiDelivered ? "Delivered" : "Sealed until delivery"}</span>
+                  <span>{layout.letterStatusLabel}</span>
                 </div>
               </div>
 
               <div className="soft">
                 <div className="subject">{letter.subject || "(No subject)"}</div>
 
-                <div style={{ position: "relative" }}>
+                <div className={layout.waxPulse ? "waxPulse" : ""} style={{ position: "relative" }}>
                   <WaxSealOverlay
                     opensShort={opensShort}
                     cracking={sealCracking}
                     canceled={canceled}
-                    canOpen={uiDelivered && !canceled}
+                    canOpen={layout.canOpenLetter}
                     onOpen={openLetter}
                     sealSrcs={sealSrcs}
                   />
@@ -1089,24 +1329,26 @@ export default function LetterStatusPage() {
             </div>
           </div>
 
-{/* RIGHT: Map (60%) */}
-<div className="statusCol">
-  <MapSection
-    mapStyle={mapStyle}
-    setMapStyle={setMapStyle}
-    origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-    dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-    progress={progress}
-    progressPctFloor={progressPctFloor}
-    tooltipText={mapTooltip}
-    markerMode={markerMode}
-    showLive={showLive}
-    sentAtISO={letter.sent_at}
-    etaAtISO={effectiveEtaISO}
-    currentlyOver={currentlyOver}
-    milestones={milestones}
-  />
-</div>
+          {/* RIGHT: Map (60%) */}
+          <div className="statusCol">
+            <MapSection
+              mapStyle={mapStyle}
+              setMapStyle={setMapStyle}
+              origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+              dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+              progress={progress}
+              progressPctFloor={progressPctFloor}
+              tooltipText={mapTooltip}
+              markerMode={markerMode}
+              showLive={layout.showLiveBadge}
+              sentAtISO={letter.sent_at}
+              etaAtISO={effectiveEtaISO}
+              currentlyOver={currentlyOver}
+              milestones={milestones}
+              showProgressPills={layout.showProgressPills}
+              cardClassName={`${layout.mapPrimary ? "primary" : ""} ${layout.mapDesaturate ? "desaturate" : ""}`.trim()}
+            />
+          </div>
 
           {/* FULL WIDTH: Timeline */}
           <div className="statusFull">
@@ -1114,18 +1356,18 @@ export default function LetterStatusPage() {
               <div className="cardHead">
                 <div>
                   <div className="kicker">Timeline</div>
-                  <div className="h2">Flight log</div>
+                  <div className="h2">{layout.timelineTitle}</div>
                 </div>
 
                 <div className="pillBtn subtle" title="Timeline mode">
                   <span className="ico">
                     <Ico name="live" />
                   </span>
-                  {timelineModeLabel}
+                  {layout.timelineModeLabel}
                 </div>
               </div>
 
-              <TimelineRail items={timelineItems} now={now} currentKey={currentTimelineKey} birdName={birdName} final={timelineFinal} />
+              <TimelineRail items={timelineItems} now={now} currentKey={currentTimelineKey} birdName={birdName} final={layout.timelineFinal} />
             </div>
           </div>
 
@@ -1198,11 +1440,47 @@ export default function LetterStatusPage() {
       {/* ✅ Scoped layout CSS (Map 60% / Letter 40%) */}
       <style jsx>{`
         .statusGrid {
+          --letter-col: 5fr;
+          --map-col: 7fr;
+          --letter-height: 360px;
+          --map-height: 380px;
           margin-top: 14px;
           display: grid;
           grid-template-columns: 1fr;
           gap: 14px;
           align-items: start;
+        }
+
+        :global(.letterCard) {
+          min-height: var(--letter-height);
+        }
+
+        :global(.mapCard) {
+          min-height: var(--map-height);
+        }
+
+        :global(.card.primary) {
+          box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05), 0 10px 24px rgba(0, 0, 0, 0.08);
+        }
+
+        :global(.mapCard.desaturate) :global(.mapShell) {
+          filter: saturate(0.7);
+        }
+
+        .waxPulse :global(.waxBtn) {
+          animation: waxPulse 1.8s ease-in-out infinite;
+        }
+
+        @keyframes waxPulse {
+          0%,
+          100% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(180, 24, 24, 0.08);
+          }
+          50% {
+            transform: scale(1.02);
+            box-shadow: 0 0 0 14px rgba(180, 24, 24, 0.1);
+          }
         }
 
         /* Make the two top columns equal height */
@@ -1230,7 +1508,7 @@ export default function LetterStatusPage() {
         /* Desktop: Letter 40% (left) / Map 60% (right) */
         @media (min-width: 980px) {
           .statusGrid {
-            grid-template-columns: 0.8fr 1.2fr; /* 40/60 */
+            grid-template-columns: var(--letter-col) var(--map-col);
             gap: 14px;
           }
           .statusFull {
@@ -1244,6 +1522,73 @@ export default function LetterStatusPage() {
           }
         }
       `}</style>
+
+      <style jsx global>{`
+  .letterModalOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .letterModalCard {
+    width: min(860px, 100%);
+    max-height: calc(100vh - 48px);
+    overflow: auto;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 20px 70px rgba(0, 0, 0, 0.35);
+    position: relative;
+  }
+
+  .letterModalTop {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 18px 18px 8px 18px;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+  }
+
+  .letterModalClose {
+    border: 0;
+    background: rgba(0,0,0,0.06);
+    border-radius: 10px;
+    padding: 8px;
+    cursor: pointer;
+  }
+
+  .paperWrap {
+    padding: 18px;
+  }
+
+  .paperSheet {
+    background: rgba(255,255,255,1);
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 12px;
+    padding: 18px;
+  }
+
+  .paperSubject {
+    font-weight: 900;
+    margin-bottom: 10px;
+  }
+
+  .paperBody {
+    white-space: pre-wrap;
+    line-height: 1.55;
+  }
+
+  /* Optional: keep modal above Leaflet panes */
+  .leaflet-pane,
+  .leaflet-control {
+    z-index: 0;
+  }
+`}</style>
     </main>
   );
 }

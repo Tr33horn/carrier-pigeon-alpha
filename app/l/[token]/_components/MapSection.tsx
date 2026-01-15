@@ -1,6 +1,12 @@
 "use client";
 
-import MapView from "../MapView";
+import { type CSSProperties } from "react";
+
+import dynamic from "next/dynamic";
+
+const MapView = dynamic(() => import("../MapView"), {
+  ssr: false,
+});
 
 export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels" | "ink-sketch";
 export type MarkerMode = "flying" | "sleeping" | "delivered" | "canceled";
@@ -31,6 +37,10 @@ export default function MapSection(props: {
   currentlyOver: string;
 
   milestones: { pct: number; label: string; isPast: boolean }[];
+
+  showProgressPills?: boolean;
+  cardClassName?: string;
+  cardStyle?: CSSProperties;
 }) {
   const {
     mapStyle,
@@ -46,10 +56,13 @@ export default function MapSection(props: {
     etaAtISO,
     currentlyOver,
     milestones,
+    showProgressPills = true,
+    cardClassName,
+    cardStyle,
   } = props;
 
   return (
-    <div className="card">
+    <div className={`card mapCard ${cardClassName || ""}`.trim()} style={cardStyle}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
         <div className="kicker">Map</div>
 
@@ -94,7 +107,7 @@ export default function MapSection(props: {
         ) : null}
       </div>
 
-      <div style={{ marginTop: 12 }}>
+      <div className="mapWrap" style={{ marginTop: 12 }}>
         <MapView
           origin={origin}
           dest={dest}
@@ -121,14 +134,16 @@ export default function MapSection(props: {
           <div className="muted">{`Current: ${currentlyOver}`}</div>
         </div>
 
-        <div className="chips">
-          {milestones.map((m) => (
-            <div key={m.pct} className={`chip ${m.isPast ? "on" : ""}`}>
-              <span className="chipDot">{m.isPast ? "●" : "○"}</span>
-              <span className="chipLabel">{m.label}</span>
-            </div>
-          ))}
-        </div>
+        {showProgressPills ? (
+          <div className="chips">
+            {milestones.map((m) => (
+              <div key={m.pct} className={`chip ${m.isPast ? "on" : ""}`}>
+                <span className="chipDot">{m.isPast ? "●" : "○"}</span>
+                <span className="chipLabel">{m.label}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );
