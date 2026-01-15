@@ -578,11 +578,36 @@ function WaxSealOverlay({
   onOpen?: () => void;
   sealSrcs: string[];
 }) {
-  const [idx, setIdx] = useState(0);
-  const sealSrc = sealSrcs[idx] || "/waxseal.png";
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
 
   useEffect(() => {
-    setIdx(0);
+    let alive = true;
+    setResolvedSrc(null);
+
+    const candidates = [...sealSrcs, "/waxseal.png"];
+
+    const resolve = async () => {
+      for (const candidate of candidates) {
+        const loaded = await new Promise<boolean>((done) => {
+          const img = new Image();
+          img.onload = () => done(true);
+          img.onerror = () => done(false);
+          img.src = candidate;
+        });
+        if (!alive) return;
+        if (loaded) {
+          setResolvedSrc(candidate);
+          return;
+        }
+      }
+      if (!alive) return;
+      setResolvedSrc("/waxseal.png");
+    };
+
+    void resolve();
+    return () => {
+      alive = false;
+    };
   }, [sealSrcs.join("|")]);
 
   return (
@@ -602,13 +627,12 @@ function WaxSealOverlay({
             aria-label={canOpen ? "Open letter" : "Sealed until delivery"}
             title={canOpen ? "Open letter" : "Sealed until delivery"}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={sealSrc}
-              alt="Wax seal"
-              className="waxImg"
-              onError={() => setIdx((n) => Math.min(n + 1, sealSrcs.length - 1))}
-            />
+            {resolvedSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={resolvedSrc} alt="Wax seal" className="waxImg" />
+            ) : (
+              <div className="waxImgLoading" aria-hidden />
+            )}
             {canOpen ? <div className="waxHint">Click to open</div> : null}
           </button>
 
@@ -1508,6 +1532,13 @@ const flightState: FlightState = deliveredState
 
         .waxPulse :global(.waxBtn) {
           animation: waxPulse 1.8s ease-in-out infinite;
+        }
+
+        :global(.waxImgLoading) {
+          width: 86px;
+          height: 86px;
+          border-radius: 999px;
+          background: rgba(0, 0, 0, 0.06);
         }
 
         @keyframes waxPulse {
