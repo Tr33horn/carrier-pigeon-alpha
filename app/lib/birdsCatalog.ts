@@ -127,7 +127,7 @@ function sleepCfg(startHour?: number | null, endHour?: number | null): SleepConf
  * You will create these as images later in /public/seals/...
  * (These are just IDs for now.)
  */
-const DEFAULT_SELECTABLE_SEALS = ["seal_classic", "seal_midnight", "seal_ivy", "seal_sun"] as const;
+const DEFAULT_SELECTABLE_SEALS = ["seal_classic","seal_flokgreen", "seal_flokblue", "seal_flokorange"] as const;
 
 export const BIRD_CATALOG: BirdCatalogRow[] = [
   {
@@ -211,7 +211,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
     // ✅ Seals
     sealPolicy: "selectable",
     defaultSealId: "seal_classic",
-    allowedSealIds: ["seal_classic","seal_flokheart", "seal_floksun", "seal_flokflame"],
+    allowedSealIds: ["seal_classic","seal_loveheart", "seal_floksun", "seal_flokmoon"],
   },
 
   {
@@ -563,7 +563,7 @@ export const BIRD_CATALOG: BirdCatalogRow[] = [
 
     // ✅ Seals (unchangeable raven seal)
     sealPolicy: "fixed",
-    fixedSealId: "seal_raven",
+    fixedSealId: "seal_flokraven",
   },
 
   {

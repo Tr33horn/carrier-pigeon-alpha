@@ -33,23 +33,23 @@ export const SEAL_CATALOG: SealRow[] = [
     selectable: true,
   },
   {
-    id: "seal_midnight",
-    label: "Midnight",
-    imgSrc: "/seals/seal-midnight.png",
+    id: "seal_flokblue",
+    label: "Blue",
+    imgSrc: "/seals/seal-flokblue.png",
     rarity: "uncommon",
     selectable: true,
   },
   {
-    id: "seal_ivy",
-    label: "Ivy",
-    imgSrc: "/seals/seal-ivy.png",
+    id: "seal_green",
+    label: "Green",
+    imgSrc: "/seals/seal-flokgreen.png",
     rarity: "uncommon",
     selectable: true,
   },
     {
-    id: "seal_sun",
-    label: "Sun",
-    imgSrc: "/seals/seal-sun.png",
+    id: "seal_flokorange",
+    label: "Orange",
+    imgSrc: "/seals/seal-flokorange.png",
     rarity: "uncommon",
     selectable: true,
   },
@@ -86,11 +86,35 @@ export const SEAL_CATALOG: SealRow[] = [
     selectable: true,
   },
 
+        {
+    id: "seal_flokskull",
+    label: "Skull",
+    imgSrc: "/seals/seal-flokskull.png",
+    rarity: "uncommon",
+    selectable: true,
+  },
+
+        {
+    id: "seal_flokmoon",
+    label: "Moon",
+    imgSrc: "/seals/seal-flokmoon.png",
+    rarity: "uncommon",
+    selectable: true,
+  },
+
+          {
+    id: "seal_floksnow",
+    label: "Snow",
+    imgSrc: "/seals/seal-floksnow.png",
+    rarity: "uncommon",
+    selectable: true,
+  },
+
   // ✅ Fixed bird seals (can be selectable later if you want)
   {
-    id: "seal_raven",
+    id: "seal_flokraven",
     label: "Raven",
-    imgSrc: "/seals/seal-raven.png",
+    imgSrc: "/seals/seal-flokraven.png",
     rarity: "rare",
     selectable: false,
   },
