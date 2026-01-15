@@ -430,7 +430,6 @@ function WaxSealOverlay({
               className="waxImg"
               onError={() => setIdx((n) => Math.min(n + 1, sealSrcs.length - 1))}
             />
-
             {canOpen ? <div className="waxHint">Click to open</div> : null}
           </button>
 
@@ -766,12 +765,13 @@ export default function LetterStatusPage() {
     return Number.isFinite(BIRD_RULES[bird]?.speedKmh) ? BIRD_RULES[bird].speedKmh : 0;
   }, [canceled, letter, uiDelivered, archived, sleeping, flight?.current_speed_kmh, bird]);
 
+  // ✅ CHANGE #1: milestones labels (no "reached" + no bullets from us)
   const milestones = useMemo(() => {
     if (!letter) return [];
     const defs = [
-      { pct: 25, label: "25% reached" },
-      { pct: 50, label: "50% reached" },
-      { pct: 75, label: "75% reached" },
+      { pct: 25, label: "25%" },
+      { pct: 50, label: "50%" },
+      { pct: 75, label: "75%" },
     ];
     return defs.map((m) => ({ ...m, isPast: progressPctFloor >= m.pct }));
   }, [letter, progressPctFloor]);
@@ -1049,9 +1049,9 @@ export default function LetterStatusPage() {
           </div>
         </section>
 
-        {/* ✅ NEW: Letter + Map side-by-side, Timeline beneath both */}
+        {/* ✅ Letter (40%) + Map (60%) side-by-side, Timeline beneath both */}
         <div className="statusGrid">
-          {/* LEFT: Letter (60%) */}
+          {/* LEFT: Letter (40%) */}
           <div className="statusCol">
             <div className="card letterCard" style={{ position: "relative" }}>
               <div className="cardHead" style={{ marginBottom: 8 }}>
@@ -1089,7 +1089,7 @@ export default function LetterStatusPage() {
             </div>
           </div>
 
-          {/* RIGHT: Map (40%) */}
+          {/* RIGHT: Map (60%) */}
           <div className="statusCol">
             <div className="card">
               <MapSection
@@ -1197,7 +1197,7 @@ export default function LetterStatusPage() {
         />
       </main>
 
-      {/* ✅ Scoped layout CSS (so we don’t mess with global grid rules) */}
+      {/* ✅ Scoped layout CSS (Map 60% / Letter 40%) */}
       <style jsx>{`
         .statusGrid {
           margin-top: 14px;
@@ -1207,30 +1207,32 @@ export default function LetterStatusPage() {
           align-items: start;
         }
 
-/* Make the two top columns equal height */
-.statusCol {
-  height: 100%;
-}
+        /* Make the two top columns equal height */
+        .statusCol {
+          height: 100%;
+          min-width: 0; /* prevents overflow weirdness */
+        }
 
-/* Make the cards inside those columns fill the column height */
-.statusCol > :global(.card) {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
+        /* Make the cards inside those columns fill the column height */
+        .statusCol > :global(.card) {
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+        }
 
-/* Let the map area stretch */
-.statusCol > :global(.card) :global(.mapWrap),
-.statusCol > :global(.card) :global(.mapFrame),
-.statusCol > :global(.card) :global(.mapContainer) {
-  flex: 1 1 auto;
-  min-height: 0;
-}
+        /* Let the map area stretch */
+        .statusCol > :global(.card) :global(.mapWrap),
+        .statusCol > :global(.card) :global(.mapFrame),
+        .statusCol > :global(.card) :global(.mapContainer) {
+          flex: 1 1 auto;
+          min-height: 0;
+        }
 
-        /* Desktop: 60/40 */
+        /* Desktop: Letter 40% (left) / Map 60% (right) */
         @media (min-width: 980px) {
           .statusGrid {
-            grid-template-columns: 1.2fr 0.8fr; /* 60/40 */
+            grid-template-columns: 0.8fr 1.2fr; /* 40/60 */
             gap: 14px;
           }
           .statusFull {
@@ -1238,7 +1240,6 @@ export default function LetterStatusPage() {
           }
         }
 
-        /* Slightly nicer spacing on big screens */
         @media (min-width: 1280px) {
           .statusGrid {
             gap: 16px;
