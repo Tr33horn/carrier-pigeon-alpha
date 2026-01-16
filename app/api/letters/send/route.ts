@@ -19,6 +19,7 @@ import { getBirdCatalog } from "@/app/lib/birdsCatalog";
 
 // ✅ Seals registry: validates the seal id exists
 import { getSeal } from "@/app/lib/seals";
+import { normalizeEnvelopeTint } from "@/app/lib/envelopeTints";
 
 // ✅ Email template
 import { LetterOnTheWayEmail } from "@/emails/LetterOnTheWay";
@@ -263,10 +264,23 @@ export async function POST(req: Request) {
   const body = await req.json();
 
   // ✅ NEW: accept seal_id from client
-  const { from_name, from_email, to_name, to_email, subject, message, origin, destination, bird: birdRaw, seal_id } = body;
+  const {
+    from_name,
+    from_email,
+    to_name,
+    to_email,
+    subject,
+    message,
+    origin,
+    destination,
+    bird: birdRaw,
+    seal_id,
+    envelope_tint,
+  } = body;
 
   const bird: BirdType = normalizeBird(birdRaw);
   const birdCfg = BIRD_RULES[bird];
+  const envelopeTint = normalizeEnvelopeTint(envelope_tint);
 
   // ✅ Resolve/validate seal before insert
   const sealResolved = resolveSealId({ bird, requestedSealId: seal_id });
@@ -355,6 +369,7 @@ export async function POST(req: Request) {
 
       // ✅ NEW: store seal_id on the letter (requires DB column letters.seal_id)
       seal_id: sealResolved.sealId,
+      envelope_tint: envelopeTint,
 
       from_name,
       from_email: normalizedFromEmail,

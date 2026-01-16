@@ -11,6 +11,7 @@ import { normalizeBird, type BirdType } from "@/app/lib/birds";
 
 // ✅ Seals catalog + helpers
 import { getSeal, getSealImgSrc, getSelectableSeals } from "@/app/lib/seals";
+import { ENVELOPE_TINTS, getEnvelopeTintColor, type EnvelopeTint } from "@/app/lib/envelopeTints";
 
 /* ---------- helpers ---------- */
 function nearestCity(lat: number, lon: number, cities: { name: string; lat: number; lon: number }[]) {
@@ -114,6 +115,7 @@ function WritePageInner() {
 
   // ✅ Selected seal state (varies by policy)
   const [sealId, setSealId] = useState<string | null>(null);
+  const [envelopeTint, setEnvelopeTint] = useState<EnvelopeTint>("classic");
 
   // Keep seal selection in sync when bird changes
   useEffect(() => {
@@ -268,6 +270,7 @@ function WritePageInner() {
           bird,
           // ✅ NEW
           seal_id: sealId,
+          envelope_tint: envelopeTint,
         }),
       });
 
@@ -506,6 +509,55 @@ function WritePageInner() {
             </section>
           )}
 
+          {/* Envelope tint */}
+          <section className="card">
+            <div className="cardHead" style={{ marginBottom: 10 }}>
+              <div>
+                <div className="kicker">Envelope</div>
+                <div className="h2">Choose a tint</div>
+                <div className="muted" style={{ marginTop: 4 }}>
+                  A little personality. Same paper.
+                </div>
+              </div>
+
+              <div className="metaPill faint">{ENVELOPE_TINTS.find((t) => t.id === envelopeTint)?.label ?? "Classic"}</div>
+            </div>
+
+            <div className="tintRow">
+              {ENVELOPE_TINTS.map((t) => {
+                const on = t.id === envelopeTint;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`tintSwatch ${on ? "on" : ""}`}
+                    style={{ background: getEnvelopeTintColor(t.id) }}
+                    onClick={() => setEnvelopeTint(t.id)}
+                    aria-pressed={on}
+                    aria-label={`Envelope tint: ${t.label}`}
+                    title={t.label}
+                  />
+                );
+              })}
+            </div>
+
+            <div className="soft envelope" style={{ marginTop: 14, ["--env-tint" as any]: getEnvelopeTintColor(envelopeTint) }}>
+              <div className="sealCard">
+                <div className="sealRow">
+                  <button type="button" className="waxBtn" aria-label="Wax seal preview" disabled>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={selectedSealImg || "/waxseal.png"} alt="" className="waxImg" />
+                  </button>
+
+                  <div>
+                    <div className="sealTitle">Sealed letter</div>
+                    <div className="sealSub">Preview only</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
           {/* Step 3 */}
           <section className="card">
             <div className="cardHead" style={{ marginBottom: 10 }}>
@@ -609,6 +661,32 @@ function WritePageInner() {
           </div>
         </div>
       </div>
+      <style jsx>{`
+        .tintRow {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+
+        .tintSwatch {
+          width: 34px;
+          height: 34px;
+          border-radius: 999px;
+          border: 1px solid rgba(0, 0, 0, 0.12);
+          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+          cursor: pointer;
+          transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+        }
+
+        .tintSwatch:hover {
+          transform: translateY(-1px);
+        }
+
+        .tintSwatch.on {
+          border-color: rgba(0, 0, 0, 0.35);
+          box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12);
+        }
+      `}</style>
     </main>
   );
 }

@@ -18,6 +18,7 @@ import {
 
 // ✅ Single source of truth for bird rules
 import { BIRD_RULES, normalizeBird, type BirdType } from "@/app/lib/birds";
+import { normalizeEnvelopeTint } from "@/app/lib/envelopeTints";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -355,7 +356,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
       archived_at,
       canceled_at,
       bird,
-      seal_id
+      seal_id,
+      envelope_tint
     `
     )
     .eq("public_token", token)
@@ -633,6 +635,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   // ✅ Normalize seal_id so client always gets string | null
   const seal_id =
     typeof (meta as any).seal_id === "string" ? ((meta as any).seal_id as string).trim() || null : null;
+  const envelope_tint = normalizeEnvelopeTint((meta as any).envelope_tint);
 
   return NextResponse.json(
     {
@@ -655,6 +658,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
 
         // ✅ NEW: expose seal_id for UI (safe even before delivery)
         seal_id,
+        envelope_tint,
 
         eta_at_adjusted,
         eta_utc_text,

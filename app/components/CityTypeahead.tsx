@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 type City = { name: string; lat: number; lon: number };
 
@@ -24,10 +24,8 @@ export function CityTypeahead({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const listboxId = useMemo(
-    () => `city-listbox-${Math.random().toString(36).slice(2)}`,
-    []
-  );
+  const reactId = useId();
+  const listboxId = `city-listbox-${reactId}`;
 
   useEffect(() => {
     setQuery(value?.name ?? "");

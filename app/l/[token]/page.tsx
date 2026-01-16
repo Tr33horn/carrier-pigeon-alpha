@@ -8,6 +8,7 @@ import { buildTimelineItems, pickCurrentTimelineKey } from "./_lib/letterStatusT
 import MapSection from "./_components/MapSection";
 
 import { BIRD_RULES, normalizeBird } from "@/app/lib/birds";
+import { getEnvelopeTintColor, normalizeEnvelopeTint } from "@/app/lib/envelopeTints";
 
 type Letter = {
   id: string;
@@ -37,6 +38,7 @@ type Letter = {
 
   // ✅ NEW: seal id returned by API
   seal_id?: string | null;
+  envelope_tint?: string | null;
 };
 
 type Checkpoint = {
@@ -689,6 +691,7 @@ function LetterModal({
   subject,
   body,
   confetti,
+  envelopeTintColor,
 }: {
   open: boolean;
   onClose: () => void;
@@ -696,6 +699,7 @@ function LetterModal({
   subject: string;
   body: string;
   confetti: boolean;
+  envelopeTintColor: string;
 }) {
   if (!open) return null;
 
@@ -728,7 +732,12 @@ function LetterModal({
         </div>
 
         <div className="paperWrap">
-          <div className="paperSheet" role="document" aria-label="Letter contents">
+          <div
+            className="paperSheet"
+            role="document"
+            aria-label="Letter contents"
+            style={{ ["--env-tint" as any]: envelopeTintColor }}
+          >
             <div className="paperSubject">{subject || "(No subject)"}</div>
             <div className="paperBody">{body || ""}</div>
           </div>
@@ -1264,6 +1273,8 @@ export default function LetterStatusPage() {
   }, [items.badges]);
 
   const sealSrcs = useMemo(() => sealImageSrcs(letter?.seal_id ?? null), [letter?.seal_id]);
+  const envelopeTint = useMemo(() => normalizeEnvelopeTint(letter?.envelope_tint), [letter?.envelope_tint]);
+  const envelopeTintColor = useMemo(() => getEnvelopeTintColor(envelopeTint), [envelopeTint]);
 
   function openLetter() {
     if (!layout.canOpenLetter) return;
@@ -1454,7 +1465,10 @@ export default function LetterStatusPage() {
               <div className="soft">
                 <div className="subject">{letter.subject || "(No subject)"}</div>
 
-                <div className={layout.waxPulse ? "waxPulse" : ""} style={{ position: "relative" }}>
+                <div
+                  className={layout.waxPulse ? "waxPulse" : ""}
+                  style={{ position: "relative", ["--env-tint" as any]: envelopeTintColor }}
+                >
                   <WaxSealOverlay
                     opensShort={opensShort}
                     cracking={sealCracking}
@@ -1582,14 +1596,15 @@ export default function LetterStatusPage() {
         </div>
 
         {/* Modal */}
-        <LetterModal
-          open={letterOpen}
-          onClose={() => setLetterOpen(false)}
-          title={modalTitle}
-          subject={letter.subject || ""}
-          body={letter.body || ""}
-          confetti={confetti}
-        />
+      <LetterModal
+        open={letterOpen}
+        onClose={() => setLetterOpen(false)}
+        title={modalTitle}
+        subject={letter.subject || ""}
+        body={letter.body || ""}
+        confetti={confetti}
+        envelopeTintColor={envelopeTintColor}
+      />
       </main>
 
       {/* ✅ Scoped layout CSS (Map 60% / Letter 40%) */}
@@ -1822,7 +1837,7 @@ export default function LetterStatusPage() {
   }
 
   .paperSheet {
-    background: rgba(255,255,255,1);
+    background: var(--env-tint, #fff7ea);
     border: 1px solid rgba(0,0,0,0.08);
     border-radius: 12px;
     padding: 18px;
