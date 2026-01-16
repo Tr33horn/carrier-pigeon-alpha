@@ -121,9 +121,12 @@ function WritePageInner() {
   const [previewInk, setPreviewInk] = useState(false);
   const [previewPulse, setPreviewPulse] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [sentFX, setSentFX] = useState(false);
+  const [successLine, setSuccessLine] = useState("");
   const didMountRef = useRef(false);
   const tintTimerRef = useRef<number | null>(null);
   const sealTimerRef = useRef<number | null>(null);
+  const sentFxTimerRef = useRef<number | null>(null);
 
   // Keep seal selection in sync when bird changes
   useEffect(() => {
@@ -142,29 +145,24 @@ function WritePageInner() {
     setSealId(preferred);
   }, [sealPolicy, fixedSealId, defaultSealId, sealOptions]);
 
-useEffect(() => {
-  if (typeof window === "undefined") return;
-
-  const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
-
-  const update = () => setReduceMotion(mql.matches);
-  update();
-
-  // Modern browsers
-  if (typeof mql.addEventListener === "function") {
-    mql.addEventListener("change", update);
-    return () => mql.removeEventListener("change", update);
-  }
-
-  // Legacy Safari / older browsers
-  const legacy = mql as MediaQueryList & {
-    addListener?: (listener: (this: MediaQueryList, ev: MediaQueryListEvent) => any) => void;
-    removeListener?: (listener: (this: MediaQueryList, ev: MediaQueryListEvent) => any) => void;
-  };
-
-  legacy.addListener?.(update);
-  return () => legacy.removeListener?.(update);
-}, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handler = (e: MediaQueryListEvent) => setReduceMotion(e.matches);
+    setReduceMotion(mq.matches);
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", handler as (ev: MediaQueryListEvent) => void);
+    } else {
+      (mq as MediaQueryList).addListener(handler as (this: MediaQueryList, ev: MediaQueryListEvent) => void);
+    }
+    return () => {
+      if (typeof mq.removeEventListener === "function") {
+        mq.removeEventListener("change", handler as (ev: MediaQueryListEvent) => void);
+      } else {
+        (mq as MediaQueryList).removeListener(handler as (this: MediaQueryList, ev: MediaQueryListEvent) => void);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (reduceMotion) return;
@@ -355,6 +353,15 @@ useEffect(() => {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Send failed");
 
+      const successLines = ["Bird accepted the letter.", "The bird takes off.", "Bird clocked in."];
+      const line = successLines[Math.floor(Math.random() * successLines.length)];
+      setSuccessLine(line);
+      setSentFX(true);
+      if (sentFxTimerRef.current) window.clearTimeout(sentFxTimerRef.current);
+      sentFxTimerRef.current = window.setTimeout(() => setSentFX(false), 900);
+      if (!reduceMotion) {
+        await new Promise((resolve) => setTimeout(resolve, 450));
+      }
       setResult({
         url: `${window.location.origin}/l/${data.public_token}`,
         eta_at: data.eta_at,
@@ -746,6 +753,7 @@ useEffect(() => {
                 </div>
 
                 <div className="trustLine">No one reads it early. Not even us.</div>
+                <div className="trustLine">This will open exactly once.</div>
               </div>
             </div>
           </section>
@@ -753,8 +761,12 @@ useEffect(() => {
           {/* Send */}
           <div className="card sendCard">
             <div className="sendStack">
-              <button onClick={sendLetter} disabled={disableSend} className="btnPrimary sendBtn">
-                {sending ? "Sending…" : "Send Letter"}
+              <button
+                onClick={sendLetter}
+                disabled={disableSend || sentFX}
+                className={`btnPrimary sendBtn ${sentFX && !reduceMotion ? "sendFx" : ""}`}
+              >
+                {sentFX ? `🪶 ${successLine || "Bird accepted the letter."}` : sending ? "Sending…" : "Send Letter"}
               </button>
               <div className="sendHelper">
                 {disableSend
@@ -883,6 +895,10 @@ useEffect(() => {
           animation: previewPulse 180ms ease;
         }
 
+        .sendFx {
+          animation: sendFx 520ms ease;
+        }
+
         @keyframes previewInk {
           0% { opacity: 0.95; }
           100% { opacity: 1; }
@@ -892,6 +908,12 @@ useEffect(() => {
           0% { transform: scale(1); box-shadow: 0 0 0 rgba(0,0,0,0); }
           50% { transform: scale(1.015); box-shadow: 0 12px 26px rgba(0,0,0,0.08); }
           100% { transform: scale(1); box-shadow: 0 0 0 rgba(0,0,0,0); }
+        }
+
+        @keyframes sendFx {
+          0% { transform: scale(1); opacity: 0.95; }
+          60% { transform: scale(1.015); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
         }
 
         @media (prefers-reduced-motion: reduce) {

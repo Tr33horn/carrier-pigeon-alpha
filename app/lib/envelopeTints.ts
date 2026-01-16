@@ -1,4 +1,4 @@
-export type EnvelopeTint = "classic" | "fog" | "sky" | "sage" | "blush" | "sand" | "midnight";
+export type EnvelopeTint = "classic" | "fog" | "sky" | "sage" | "blush" | "sand" | "midnight" | "dark" 
 
 export const ENVELOPE_TINTS: { id: EnvelopeTint; label: string; color: string }[] = [
   { id: "classic", label: "Classic", color: "#fff7ea" },
@@ -10,6 +10,7 @@ export const ENVELOPE_TINTS: { id: EnvelopeTint; label: string; color: string }[
 
   // Slightly more "midnight" without killing readability
   { id: "midnight", label: "Midnight", color: "#e3e7f2" },
+  { id: "dark", label: "Dark", color: "#404041ff" },
 ];
 
 const ENVELOPE_TINT_SET: ReadonlySet<EnvelopeTint> = new Set(ENVELOPE_TINTS.map((t) => t.id));
