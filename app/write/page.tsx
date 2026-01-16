@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CITIES } from "../lib/cities";
 import { CityTypeahead } from "../components/CityTypeahead";
@@ -116,6 +116,14 @@ function WritePageInner() {
   // ✅ Selected seal state (varies by policy)
   const [sealId, setSealId] = useState<string | null>(null);
   const [envelopeTint, setEnvelopeTint] = useState<EnvelopeTint>("classic");
+  const [activeStep, setActiveStep] = useState(1);
+  const [showPrompts, setShowPrompts] = useState(false);
+  const [previewInk, setPreviewInk] = useState(false);
+  const [previewPulse, setPreviewPulse] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const didMountRef = useRef(false);
+  const tintTimerRef = useRef<number | null>(null);
+  const sealTimerRef = useRef<number | null>(null);
 
   // Keep seal selection in sync when bird changes
   useEffect(() => {
@@ -133,6 +141,55 @@ function WritePageInner() {
     const preferred = defaultSealId || sealOptions[0]?.id || null;
     setSealId(preferred);
   }, [sealPolicy, fixedSealId, defaultSealId, sealOptions]);
+
+useEffect(() => {
+  if (typeof window === "undefined") return;
+
+  const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  const update = () => setReduceMotion(mql.matches);
+  update();
+
+  // Modern browsers
+  if (typeof mql.addEventListener === "function") {
+    mql.addEventListener("change", update);
+    return () => mql.removeEventListener("change", update);
+  }
+
+  // Legacy Safari / older browsers
+  const legacy = mql as MediaQueryList & {
+    addListener?: (listener: (this: MediaQueryList, ev: MediaQueryListEvent) => any) => void;
+    removeListener?: (listener: (this: MediaQueryList, ev: MediaQueryListEvent) => any) => void;
+  };
+
+  legacy.addListener?.(update);
+  return () => legacy.removeListener?.(update);
+}, []);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
+    if (tintTimerRef.current) window.clearTimeout(tintTimerRef.current);
+    setPreviewInk(true);
+    tintTimerRef.current = window.setTimeout(() => setPreviewInk(false), 180);
+    return () => {
+      if (tintTimerRef.current) window.clearTimeout(tintTimerRef.current);
+    };
+  }, [envelopeTint, reduceMotion]);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    if (!didMountRef.current) return;
+    if (sealTimerRef.current) window.clearTimeout(sealTimerRef.current);
+    setPreviewPulse(true);
+    sealTimerRef.current = window.setTimeout(() => setPreviewPulse(false), 180);
+    return () => {
+      if (sealTimerRef.current) window.clearTimeout(sealTimerRef.current);
+    };
+  }, [sealId, reduceMotion]);
 
   const selectedSealImg = useMemo(() => {
     if (!sealId) return null;
@@ -180,6 +237,17 @@ function WritePageInner() {
   // ✅ seal ok: only required if selectable/fixed and we have a seal concept
   const sealOk = sealPolicy === "none" ? true : !!sealId;
 
+  const stepMeta = useMemo(() => {
+    const steps = [
+      { id: 1, label: "Who" },
+      { id: 2, label: "Message" },
+      { id: 3, label: "Route" },
+      { id: 4, label: "Seal & Envelope" },
+    ];
+    const current = steps.find((s) => s.id === activeStep) ?? steps[0];
+    return { total: steps.length, label: current.label };
+  }, [activeStep]);
+
   /* ---------- geolocation ---------- */
   function useMyLocationForOrigin() {
     setLocError(null);
@@ -219,32 +287,42 @@ function WritePageInner() {
     setResult(null);
 
     if (!routeOk) {
-      setError("Origin and destination must be different (even birds get bored).");
+      setError("Give the bird a destination.");
       setSending(false);
       return;
     }
     if (!fromNameOk) {
-      setError("Please enter a sender name.");
+      setError("Who's this from? Give the bird a name.");
+      setSending(false);
+      return;
+    }
+    if (!fromEmail.trim()) {
+      setError("We need a return roost (your email).");
       setSending(false);
       return;
     }
     if (!senderEmailOk) {
-      setError("Please enter a valid sender email address.");
+      setError("That email doesn't look right.");
       setSending(false);
       return;
     }
     if (!toNameOk) {
-      setError("Please enter a recipient name.");
+      setError("Who's this for? Give the bird a name.");
+      setSending(false);
+      return;
+    }
+    if (!toEmail.trim()) {
+      setError("We need a landing email.");
       setSending(false);
       return;
     }
     if (!recipientEmailOk) {
-      setError("Please enter a valid recipient email address.");
+      setError("That email doesn't look right.");
       setSending(false);
       return;
     }
     if (!messageOk) {
-      setError("Please write a message (birds can’t carry novels).");
+      setError("The bird won't fly without a message.");
       setSending(false);
       return;
     }
@@ -316,6 +394,10 @@ function WritePageInner() {
             <p className="muted" style={{ marginTop: 6 }}>
               It’ll unlock for the recipient when the bird lands.
             </p>
+
+            <div className="stepKicker">
+              Step {activeStep} of {stepMeta.total} — {stepMeta.label}
+            </div>
           </div>
 
           <a href="/new" className="birdPreview" aria-label="Change bird" title="Change bird">
@@ -330,9 +412,9 @@ function WritePageInner() {
           </a>
         </div>
 
-        <div className="stack" style={{ marginTop: 14 }}>
+        <div className="stack writeStack" style={{ marginTop: 14 }}>
           {/* Step 1 */}
-          <section className="card">
+          <section className="card" onFocusCapture={() => setActiveStep(1)} onClick={() => setActiveStep(1)}>
             <div className="cardHead" style={{ marginBottom: 10 }}>
               <div>
                 <div className="kicker">Step 1</div>
@@ -368,7 +450,7 @@ function WritePageInner() {
                     placeholder="you@email.com"
                   />
                   {fromEmail.trim() && !senderEmailOk && (
-                    <div className="errorText">Please enter a valid sender email address.</div>
+                    <div className="errorText">That email doesn&apos;t look right.</div>
                   )}
                 </label>
               </div>
@@ -396,7 +478,7 @@ function WritePageInner() {
                     placeholder="name@email.com"
                   />
                   {toEmail.trim() && !recipientEmailOk && (
-                    <div className="errorText">Please enter a valid recipient email address.</div>
+                    <div className="errorText">That email doesn&apos;t look right.</div>
                   )}
                 </label>
               </div>
@@ -404,7 +486,7 @@ function WritePageInner() {
           </section>
 
           {/* Step 2 */}
-          <section className="card">
+          <section className="card" onFocusCapture={() => setActiveStep(2)} onClick={() => setActiveStep(2)}>
             <div className="cardHead" style={{ marginBottom: 10 }}>
               <div>
                 <div className="kicker">Step 2</div>
@@ -433,133 +515,38 @@ function WritePageInner() {
                   rows={7}
                   placeholder="Write something worth the flight…"
                 />
-                {!messageOk && <div className="errorText">Message is required.</div>}
+                {!messageOk && <div className="errorText">The bird won&apos;t fly without a message.</div>}
               </label>
-            </div>
-          </section>
 
-          {/* Wax seal */}
-          {sealPolicy !== "none" && (
-            <section className="card">
-              <div className="cardHead" style={{ marginBottom: 10 }}>
-                <div>
-                  <div className="kicker">Wax seal</div>
-                  <div className="h2">Choose a seal</div>
-                  <div className="muted" style={{ marginTop: 4 }}>
-                    {sealPolicy === "fixed" ? "This bird insists." : "This will appear on the sealed letter."}
-                  </div>
-                </div>
-
-                {sealPolicy === "fixed" ? (
-                  <div className="metaPill faint" title="This seal is locked for this bird">
-                    Locked
-                  </div>
-                ) : (
-                  <div className="metaPill faint">{selectedSealLabel || "Pick one"}</div>
-                )}
+              <div className="ideaRow">
+                <button type="button" className="ideaToggle" onClick={() => setShowPrompts((v) => !v)}>
+                  Need an idea?
+                </button>
               </div>
 
-              {sealPolicy === "fixed" ? (
-                <div className="sealFixedRow">
-                  <div className="sealThumbLarge">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={selectedSealImg || "/waxseal.png"} alt={selectedSealLabel || "Wax seal"} />
-                  </div>
-
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 900, letterSpacing: "-0.01em" }}>{selectedSealLabel || "Wax seal"}</div>
-                    <div className="muted" style={{ marginTop: 4 }}>
-                      You can’t change this one. The bird filed the paperwork already.
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="sealGrid">
-                    {sealOptions.map((s) => {
-                      const on = s.id === sealId;
-                      const img = getSealImgSrc(s.id) || (s as any).imgSrc || "/waxseal.png";
-
-                      return (
-                        <button
-                          key={s.id}
-                          type="button"
-                          className={`sealPick ${on ? "on" : ""}`}
-                          onClick={() => setSealId(s.id)}
-                          aria-pressed={on}
-                          title={`Choose ${s.label}`}
-                        >
-                          <span className="sealThumb">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={img} alt="" />
-                          </span>
-                          <span className="sealLabel">{s.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {!sealOk && (
-                    <div className="errorText" style={{ marginTop: 10 }}>
-                      Pick a seal to continue.
-                    </div>
-                  )}
-                </>
-              )}
-            </section>
-          )}
-
-          {/* Envelope tint */}
-          <section className="card">
-            <div className="cardHead" style={{ marginBottom: 10 }}>
-              <div>
-                <div className="kicker">Envelope</div>
-                <div className="h2">Choose a tint</div>
-                <div className="muted" style={{ marginTop: 4 }}>
-                  A little personality. Same paper.
-                </div>
-              </div>
-
-              <div className="metaPill faint">{ENVELOPE_TINTS.find((t) => t.id === envelopeTint)?.label ?? "Classic"}</div>
-            </div>
-
-            <div className="tintRow">
-              {ENVELOPE_TINTS.map((t) => {
-                const on = t.id === envelopeTint;
-                return (
+              <div className={`ideaPanel ${showPrompts ? "open" : ""}`}>
+                {[
+                  "I wanted you to have this later…",
+                  "When you read this, I hope you’re smiling.",
+                  "This felt worth the wait.",
+                ].map((text) => (
                   <button
-                    key={t.id}
+                    key={text}
                     type="button"
-                    className={`tintSwatch ${on ? "on" : ""}`}
-                    style={{ background: getEnvelopeTintColor(t.id) }}
-                    onClick={() => setEnvelopeTint(t.id)}
-                    aria-pressed={on}
-                    aria-label={`Envelope tint: ${t.label}`}
-                    title={t.label}
-                  />
-                );
-              })}
-            </div>
-
-            <div className="soft envelope" style={{ marginTop: 14, ["--env-tint" as any]: getEnvelopeTintColor(envelopeTint) }}>
-              <div className="sealCard">
-                <div className="sealRow">
-                  <button type="button" className="waxBtn" aria-label="Wax seal preview" disabled>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={selectedSealImg || "/waxseal.png"} alt="" className="waxImg" />
+                    className="ideaChip"
+                    onClick={() =>
+                      setMessage((prev) => (prev.trim() ? `${prev}\n\n${text}` : text))
+                    }
+                  >
+                    {text}
                   </button>
-
-                  <div>
-                    <div className="sealTitle">Sealed letter</div>
-                    <div className="sealSub">Preview only</div>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
           </section>
 
           {/* Step 3 */}
-          <section className="card">
+          <section className="card" onFocusCapture={() => setActiveStep(3)} onClick={() => setActiveStep(3)}>
             <div className="cardHead" style={{ marginBottom: 10 }}>
               <div>
                 <div className="kicker">Step 3</div>
@@ -576,7 +563,7 @@ function WritePageInner() {
 
             {!routeOk && (
               <div className="errorText" style={{ marginBottom: 10 }}>
-                Origin and destination must be different.
+                Give the bird a destination.
               </div>
             )}
 
@@ -626,15 +613,153 @@ function WritePageInner() {
             </div>
           </section>
 
+          {/* Step 4 */}
+          <section className="card" onFocusCapture={() => setActiveStep(4)} onClick={() => setActiveStep(4)}>
+            <div className="cardHead" style={{ marginBottom: 10 }}>
+              <div>
+                <div className="kicker">Step 4</div>
+                <div className="h2">Seal &amp; Envelope</div>
+              </div>
+            </div>
+
+            <div className="stack" style={{ gap: 14 }}>
+              {/* Wax seal */}
+              {sealPolicy !== "none" && (
+                <div>
+                  <div className="cardHead" style={{ marginBottom: 10 }}>
+                    <div>
+                      <div className="kicker">Wax seal</div>
+                      <div className="h2">Choose a seal</div>
+                      <div className="muted" style={{ marginTop: 4 }}>
+                        {sealPolicy === "fixed" ? "This bird insists." : "This will appear on the sealed letter."}
+                      </div>
+                    </div>
+
+                    {sealPolicy === "fixed" ? (
+                      <div className="metaPill faint" title="This seal is locked for this bird">
+                        Locked
+                      </div>
+                    ) : (
+                      <div className="metaPill faint">{selectedSealLabel || "Pick one"}</div>
+                    )}
+                  </div>
+
+                  {sealPolicy === "fixed" ? (
+                    <div className="sealFixedRow">
+                      <div className="sealThumbLarge">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={selectedSealImg || "/waxseal.png"} alt={selectedSealLabel || "Wax seal"} />
+                      </div>
+
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 900, letterSpacing: "-0.01em" }}>{selectedSealLabel || "Wax seal"}</div>
+                        <div className="muted" style={{ marginTop: 4 }}>
+                          You can’t change this one. The bird filed the paperwork already.
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="sealGrid">
+                        {sealOptions.map((s) => {
+                          const on = s.id === sealId;
+                          const img = getSealImgSrc(s.id) || (s as any).imgSrc || "/waxseal.png";
+
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              className={`sealPick ${on ? "on" : ""}`}
+                              onClick={() => setSealId(s.id)}
+                              aria-pressed={on}
+                              title={`Choose ${s.label}`}
+                            >
+                              <span className="sealThumb">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={img} alt="" />
+                              </span>
+                              <span className="sealLabel">{s.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {!sealOk && (
+                        <div className="errorText" style={{ marginTop: 10 }}>
+                          Pick a seal to continue.
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Envelope tint */}
+              <div>
+                <div className="cardHead" style={{ marginBottom: 10 }}>
+                  <div>
+                    <div className="kicker">Envelope</div>
+                    <div className="h2">Choose a tint</div>
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      A little personality. Same paper.
+                    </div>
+                  </div>
+
+                  <div className="metaPill faint">{ENVELOPE_TINTS.find((t) => t.id === envelopeTint)?.label ?? "Classic"}</div>
+                </div>
+
+                <div className="tintRow">
+                  {ENVELOPE_TINTS.map((t) => {
+                    const on = t.id === envelopeTint;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        className={`tintSwatch ${on ? "on" : ""}`}
+                        style={{ background: getEnvelopeTintColor(t.id) }}
+                        onClick={() => setEnvelopeTint(t.id)}
+                        aria-pressed={on}
+                        aria-label={`Envelope tint: ${t.label}`}
+                        title={t.label}
+                      />
+                    );
+                  })}
+                </div>
+
+                <div
+                  className={`soft envelope envPreview ${previewInk ? "previewInk" : ""} ${previewPulse ? "previewPulse" : ""}`}
+                  style={{ marginTop: 14, ["--env-tint" as any]: getEnvelopeTintColor(envelopeTint) }}
+                >
+                  <div className="sealCard">
+                    <div className="sealRow">
+                      <button type="button" className="waxBtn" aria-label="Wax seal preview" disabled>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={selectedSealImg || "/waxseal.png"} alt="" className="waxImg" />
+                      </button>
+
+                      <div>
+                        <div className="sealTitle">Sealed letter</div>
+                        <div className="sealSub">Preview only</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="trustLine">No one reads it early. Not even us.</div>
+              </div>
+            </div>
+          </section>
+
           {/* Send */}
-          <div className="card">
-            <div className="sendRow">
-              <button onClick={sendLetter} disabled={disableSend} className="btnPrimary">
+          <div className="card sendCard">
+            <div className="sendStack">
+              <button onClick={sendLetter} disabled={disableSend} className="btnPrimary sendBtn">
                 {sending ? "Sending…" : "Send Letter"}
               </button>
-
-              <div className="muted" style={{ alignSelf: "center" }}>
-                {disableSend ? "Fill everything in and the bird will clock in." : "Ready for liftoff."}
+              <div className="sendHelper">
+                {disableSend
+                  ? "Give the bird the missing details, then it can fly."
+                  : "You'll be able to track the flight right after sending."}
               </div>
             </div>
 
@@ -662,6 +787,15 @@ function WritePageInner() {
         </div>
       </div>
       <style jsx>{`
+        .stepKicker {
+          margin-top: 6px;
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 0.02em;
+          text-transform: uppercase;
+          opacity: 0.6;
+        }
+
         .tintRow {
           display: flex;
           flex-wrap: wrap;
@@ -686,7 +820,119 @@ function WritePageInner() {
           border-color: rgba(0, 0, 0, 0.35);
           box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12);
         }
+
+        .ideaRow {
+          display: flex;
+          justify-content: flex-start;
+          margin-top: 2px;
+        }
+
+        .ideaToggle {
+          border: 0;
+          background: transparent;
+          padding: 0;
+          font-weight: 800;
+          font-size: 12px;
+          opacity: 0.7;
+          text-decoration: underline;
+          cursor: pointer;
+        }
+
+        .ideaPanel {
+          display: grid;
+          gap: 8px;
+          margin-top: 6px;
+          max-height: 0;
+          opacity: 0;
+          overflow: hidden;
+          transition: max-height 180ms ease, opacity 180ms ease;
+        }
+
+        .ideaPanel.open {
+          max-height: 200px;
+          opacity: 1;
+        }
+
+        .ideaChip {
+          text-align: left;
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          background: rgba(0, 0, 0, 0.03);
+          border-radius: 12px;
+          padding: 10px 12px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .trustLine,
+        .sendReassure {
+          margin-top: 10px;
+          font-size: 12px;
+          font-weight: 800;
+          opacity: 0.7;
+        }
+
+        .envPreview {
+          transition: box-shadow 180ms ease, transform 180ms ease;
+        }
+
+        .previewInk {
+          animation: previewInk 180ms ease;
+        }
+
+        .previewPulse {
+          animation: previewPulse 180ms ease;
+        }
+
+        @keyframes previewInk {
+          0% { opacity: 0.95; }
+          100% { opacity: 1; }
+        }
+
+        @keyframes previewPulse {
+          0% { transform: scale(1); box-shadow: 0 0 0 rgba(0,0,0,0); }
+          50% { transform: scale(1.015); box-shadow: 0 12px 26px rgba(0,0,0,0.08); }
+          100% { transform: scale(1); box-shadow: 0 0 0 rgba(0,0,0,0); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .ideaPanel {
+            transition: none;
+          }
+          .previewInk,
+          .previewPulse {
+            animation: none;
+          }
+        }
+
+        @media (max-width: 520px) {
+          .writeStack {
+            gap: 12px;
+          }
+
+          .tintRow {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            padding-bottom: 4px;
+          }
+
+          .tintSwatch {
+            width: 40px;
+            height: 40px;
+            flex: 0 0 auto;
+          }
+
+          .envPreview .sealCard {
+            max-width: 340px;
+            margin: 0 auto;
+          }
+        }
       `}</style>
     </main>
   );
 }
+
+/* Manual test checklist:
+   - Step indicator updates when interacting with each section (Who/Message/Envelope/Route).
+   - Envelope preview fades on tint change and pulses on seal change (no motion with reduced motion).
+   - "Need an idea?" toggles prompts and inserts text correctly.
+*/

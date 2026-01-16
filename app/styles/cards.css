@@ -152,6 +152,44 @@
   box-shadow: 0 10px 20px rgba(0,0,0,0.10);
 }
 
+/* Write page: send card spacing */
+.sendCard {
+  padding-top: 6px;
+  padding-bottom: 2px;
+}
+
+.sendStack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sendHelper {
+  font-size: 12px;
+  font-weight: 800;
+  opacity: 0.7;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.sendBtn {
+  margin-top: 2px;
+  align-self: flex-start;
+}
+
+@media (max-width: 520px) {
+  .sendBtn {
+    width: 100%;
+    align-self: stretch;
+  }
+  .sendCard {
+    padding-top: 10px;
+  }
+  .sendHelper {
+    padding-bottom: 6px;
+  }
+}
+
 .btnGhost {
   background: rgba(0,0,0,0.04);
   white-space: nowrap;
@@ -981,6 +1019,10 @@
 }
 @media (max-width: 520px) {
   .sealGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sealGrid { gap: 12px; }
+  .sealPick {
+    padding: 12px;
+  }
 }
 
 .sealPick {
