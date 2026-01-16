@@ -509,6 +509,30 @@ function collapseTimelineItems(items: TimelineItem[]) {
   return trimmed;
 }
 
+function pickTimelineTail(items: TimelineItem[], count = 3) {
+  if (!items.length) return items;
+
+  const target: number[] = [];
+  for (let i = items.length - 1; i >= 0 && target.length < count; i--) {
+    if (items[i].kind !== "day") target.push(i);
+  }
+
+  if (!target.length) return items;
+
+  const include = new Set<number>();
+  for (const idx of target) {
+    include.add(idx);
+    for (let j = idx - 1; j >= 0; j--) {
+      if (items[j].kind === "day") {
+        include.add(j);
+        break;
+      }
+    }
+  }
+
+  return items.filter((_, i) => include.has(i));
+}
+
 /** ✅ Bird image based on bird + state */
 function birdImageSrc(bird: BirdType, mode: "flying" | "sleeping" | "delivered" | "canceled") {
   const base = bird === "snipe" ? "great-snipe" : bird === "goose" ? "canada-goose" : "homing-pigeon";
@@ -1147,9 +1171,26 @@ const flightState: FlightState = deliveredState
     });
   }, [now, letter, checkpointsByTime, layout.timelineFinal, layout.state, canceled, effectiveEtaISO, nightFlightExceptionActive]);
 
-  const timelineItems = useMemo(() => {
+  const timelineItemsAll = useMemo(() => {
     return layout.collapseTimeline ? collapseTimelineItems(timelineItemsRaw) : timelineItemsRaw;
   }, [layout.collapseTimeline, timelineItemsRaw]);
+
+  const [timelineExpanded, setTimelineExpanded] = useState(layout.state !== "delivered");
+
+  useEffect(() => {
+    setTimelineExpanded(layout.state !== "delivered");
+  }, [layout.state]);
+
+  const timelineItems = useMemo(() => {
+    if (layout.state === "delivered" && !timelineExpanded) {
+      return pickTimelineTail(timelineItemsAll, 3);
+    }
+    return timelineItemsAll;
+  }, [layout.state, timelineExpanded, timelineItemsAll]);
+
+  const timelineRealCount = useMemo(() => {
+    return timelineItemsAll.filter((it) => it.kind !== "day").length;
+  }, [timelineItemsAll]);
 
   const latestTimelineKey = useMemo(() => {
     const realItems = timelineItems.filter((it) => it.kind !== "day");
@@ -1413,7 +1454,9 @@ const flightState: FlightState = deliveredState
               sentAtISO={letter.sent_at}
               etaAtISO={effectiveEtaISO}
               currentlyOver={currentlyOver}
-              cardClassName={`${layout.mapPrimary ? "primary" : ""} ${layout.mapDesaturate ? "desaturate" : ""}`.trim()}
+              cardClassName={`${layout.mapPrimary ? "primary" : ""} ${layout.mapDesaturate ? "desaturate" : ""} ${
+                layout.state === "delivered" ? "mapComplete" : ""
+              }`.trim()}
             />
           </div>
 
@@ -1426,11 +1469,25 @@ const flightState: FlightState = deliveredState
                   <div className="h2">{layout.timelineTitle}</div>
                 </div>
 
-                <div className="pillBtn subtle" title="Timeline mode">
-                  <span className="ico">
-                    <Ico name="live" />
-                  </span>
-                  {layout.timelineModeLabel}
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div className="pillBtn subtle" title="Timeline mode">
+                    <span className="ico">
+                      <Ico name="live" />
+                    </span>
+                    {layout.timelineModeLabel}
+                  </div>
+
+                  {layout.state === "delivered" ? (
+                    <button
+                      type="button"
+                      className="pillBtn subtle"
+                      onClick={() => setTimelineExpanded((prev) => !prev)}
+                    >
+                      {timelineExpanded
+                        ? "Collapse story"
+                        : `Show full flight story${timelineRealCount ? ` (${timelineRealCount})` : ""}`}
+                    </button>
+                  ) : null}
                 </div>
               </div>
 
@@ -1571,6 +1628,33 @@ const flightState: FlightState = deliveredState
 
         :global(.mapCard.desaturate) :global(.mapShell) {
           filter: saturate(0.7);
+        }
+
+        :global(.mapCard.mapComplete) :global(.leaflet-tile-pane),
+        :global(.mapCard.mapComplete) :global(.leaflet-map-pane),
+        :global(.mapCard.mapComplete) :global(.leaflet-container) {
+          filter: saturate(0.82) contrast(0.97) brightness(1.01);
+        }
+
+        :global(.mapCard.mapComplete) :global(.leaflet-control-container) {
+          opacity: 0.85;
+        }
+
+        :global(.mapCard.mapComplete) :global(.leaflet-interactive) {
+          opacity: 0.65;
+        }
+
+        :global(.mapCard.mapComplete)::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background: linear-gradient(
+            to bottom,
+            rgba(255, 248, 235, 0.35),
+            rgba(255, 248, 235, 0.15)
+          );
+          border-radius: inherit;
         }
 
         .waxPulse :global(.waxBtn) {
