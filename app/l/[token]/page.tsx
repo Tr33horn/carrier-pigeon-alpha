@@ -768,6 +768,7 @@ export default function LetterStatusPage() {
 
   const [serverNowISO, setServerNowISO] = useState<string | null>(null);
   const [serverNowUtcText, setServerNowUtcText] = useState<string | null>(null);
+  const [serverNowCapturedAtMs, setServerNowCapturedAtMs] = useState<number | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
@@ -863,7 +864,9 @@ export default function LetterStatusPage() {
         }
         if (!alive) return;
 
-        setServerNowISO(typeof data.server_now_iso === "string" ? data.server_now_iso : null);
+        const nextServerNowISO = typeof data.server_now_iso === "string" ? data.server_now_iso : null;
+        setServerNowISO(nextServerNowISO);
+        setServerNowCapturedAtMs(nextServerNowISO ? Date.now() : null);
         setServerNowUtcText(typeof data.server_now_utc_text === "string" ? data.server_now_utc_text : null);
 
         setLetter(data.letter as Letter);
@@ -985,6 +988,12 @@ export default function LetterStatusPage() {
 
   const deliveredState = uiDelivered || progress >= 1 || markerMode === "delivered";
 
+  const flightState: FlightState = deliveredState
+    ? "delivered"
+    : progress >= ARRIVING_PROGRESS_THRESHOLD
+    ? "arriving"
+    : "in_flight";
+
   const sentAtDate = useMemo(() => {
     if (!letter?.sent_at) return null;
     const d = new Date(letter.sent_at);
@@ -1003,10 +1012,38 @@ export default function LetterStatusPage() {
     sentAtInSleepWindow && !sleeping && !canceled && !archived && !deliveredState;
 
   const countdown = useMemo(() => {
-    if (!letter) return "";
-    const msLeft = new Date(effectiveEtaISO).getTime() - now.getTime();
-    return formatCountdown(msLeft);
-  }, [letter, effectiveEtaISO, now]);
+    if (!letter) return null;
+    if (flightState === "delivered" || canceled || archived) return null;
+    const etaMsLocal = Date.parse(effectiveEtaISO);
+    const authoritativeNowMs =
+      serverNowISO && serverNowCapturedAtMs
+        ? Date.parse(serverNowISO) + (now.getTime() - serverNowCapturedAtMs)
+        : now.getTime();
+    const msLeft = etaMsLocal - authoritativeNowMs;
+    if (!Number.isFinite(msLeft)) return null;
+    if (msLeft > 24 * 60 * 60 * 1000) return null;
+    return formatCountdown(Math.max(0, msLeft));
+  }, [letter, effectiveEtaISO, now, flightState, canceled, archived, serverNowISO, serverNowCapturedAtMs]);
+
+  const debugLoggedRef = useRef(false);
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    if (debugLoggedRef.current) return;
+    if (!effectiveEtaISO) return;
+    const authoritativeNowMs =
+      serverNowISO && serverNowCapturedAtMs
+        ? Date.parse(serverNowISO) + (Date.now() - serverNowCapturedAtMs)
+        : Date.now();
+    const msLeft = Date.parse(effectiveEtaISO) - authoritativeNowMs;
+    const authoritativeNowISO = Number.isFinite(authoritativeNowMs) ? new Date(authoritativeNowMs).toISOString() : null;
+    console.log({
+      serverNowISO,
+      authoritativeNowISO,
+      effectiveEtaISO,
+      msLeft,
+    });
+    debugLoggedRef.current = true;
+  }, [effectiveEtaISO, serverNowISO, serverNowCapturedAtMs]);
 
   const bird: BirdType = useMemo(() => normalizeBird(letter?.bird), [letter?.bird]);
   const birdName = useMemo(() => BIRD_RULES[bird].label, [bird]);
@@ -1069,12 +1106,6 @@ export default function LetterStatusPage() {
 
   const archivedLabel = archivedAtISO ? `Archived • ${new Date(archivedAtISO).toLocaleString()}` : "Archived";
   const canceledLabel = canceledAtISO ? `Canceled • ${new Date(canceledAtISO).toLocaleString()}` : "Canceled";
-
-const flightState: FlightState = deliveredState
-  ? "delivered"
-  : progress >= ARRIVING_PROGRESS_THRESHOLD
-  ? "arriving"
-  : "in_flight";
 
   const layout = useMemo<PageLayout>(() => {
     const base = getPageLayout(flightState);
@@ -1354,7 +1385,7 @@ const flightState: FlightState = deliveredState
                 (UTC: {etaTextUTC})
               </div>
 
-              {layout.showCountdown ? <div className="etaSub">T-minus {countdown}</div> : null}
+              {countdown ? <div className="etaSub">Arrives in {countdown}</div> : null}
 
               {layout.showSnapshot ? (
                 <div className="etaSub">
