@@ -2,442 +2,505 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 
-// ✅ Flight-engine truth (types + enabled BirdType list)
-import { getEnabledBirdTypes, type BirdType } from "@/app/lib/birds";
+import { CITIES } from "../lib/cities";
+import { CityTypeahead } from "../components/CityTypeahead";
+import { replaceDraft, useLetterDraftStore, type LatLonCity } from "@/app/lib/letterDraftStore";
 
-// ✅ Catalog truth (rows + enabled filter)
-import { BIRD_CATALOG, enabledBirdCatalog, type BirdCatalogRow } from "@/app/lib/birdsCatalog";
+/* ---------- helpers ---------- */
+function nearestCity(lat: number, lon: number, cities: { name: string; lat: number; lon: number }[]) {
+  let best = cities[0];
+  let bestDist = Infinity;
 
-type BirdOption = {
-  id: BirdType;
-  title: string;
-  subtitle: string;
-  imgSrc: string;
-  recommended?: boolean;
-};
+  for (const c of cities) {
+    const dLat = lat - c.lat;
+    const dLon = lon - c.lon;
+    const d = dLat * dLat + dLon * dLon;
+    if (d < bestDist) {
+      bestDist = d;
+      best = c;
+    }
+  }
+  return best;
+}
 
-type FutureBirdOption = {
-  id: string;
-  title: string;
-  subtitle: string;
-  imgSrc: string;
-};
+function isEmailValid(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
 
 export default function NewPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="pageBg">
+          <div className="wrap">
+            <Link href="/" className="linkPill">
+              ← Home
+            </Link>
+            <div style={{ marginTop: 12 }}>
+              <div className="kicker">Compose</div>
+              <h1 className="h1">Write a Letter</h1>
+              <p className="muted" style={{ marginTop: 6 }}>
+                Loading...
+              </p>
+            </div>
+          </div>
+        </main>
+      }
+    >
+      <ComposePage />
+    </Suspense>
+  );
+}
+
+function ComposePage() {
   const router = useRouter();
+  const draft = useLetterDraftStore();
 
-  // ✅ BirdType list that the engine currently accepts AND is enabled in catalog (birds.ts enforces this)
-  const enabledTypes = useMemo(() => getEnabledBirdTypes(), []);
+  // ✅ Hydration-safe: only show invalid states after the user attempts to continue
+  const [showErrors, setShowErrors] = useState(false);
 
-  // ✅ Catalog rows that are enabled (catalog-side)
-  const enabledCatalog = useMemo(() => enabledBirdCatalog(), []);
+  // Step 1: who
+  const [fromName, setFromName] = useState(draft.fromName || "You");
+  const [toName, setToName] = useState(draft.toName || "");
 
-  // ✅ Convert catalog → picker options (ONLY ones the engine supports)
-  const options = useMemo<BirdOption[]>(() => {
-    const supported = new Set<BirdType>(enabledTypes);
+  const [fromEmail, setFromEmail] = useState(draft.fromEmail || "");
+  const [toEmail, setToEmail] = useState(draft.toEmail || "");
 
-    return (enabledCatalog as BirdCatalogRow[])
-      .filter((row) => row.visible) // ✅ visible gate
-      .filter((row) => supported.has(row.id as BirdType)) // ✅ engine-safe gate
-      .map((row) => ({
-        id: row.id as BirdType,
-        title: row.displayLabel,
-        subtitle: row.availabilityNotes ?? "",
-        imgSrc: row.imgSrc || "/birds/homing-pigeon.gif",
-        recommended: row.id === "pigeon",
-      }));
-  }, [enabledCatalog, enabledTypes]);
+  // Step 2: message
+  const [subject, setSubject] = useState(draft.subject || "");
+  const [message, setMessage] = useState(draft.message || "");
+  const [showPrompts, setShowPrompts] = useState(false);
 
-  // ✅ Coming soon = visible:true + enabled:false (NOT engine constrained)
-  const futureFowls = useMemo<FutureBirdOption[]>(() => {
-    return (BIRD_CATALOG as BirdCatalogRow[])
-      .filter((row) => row.visible) // ✅ visible gate
-      .filter((row) => !row.enabled) // ✅ NOT enabled => coming soon
-      .map((row) => ({
-        id: row.id,
-        title: row.displayLabel,
-        subtitle: row.availabilityNotes ?? "Coming soon",
-        imgSrc: row.imgSrc || "/birds/homing-pigeon.gif",
-      }));
-  }, []);
+  // Step 3: route
+  const defaultOrigin = useMemo(() => CITIES[0], []);
+  const defaultDest = useMemo(() => CITIES[CITIES.length - 1], []);
 
-  // ✅ selected bird (default: pigeon if available, else first enabled)
-  const [bird, setBird] = useState<BirdType>(() => {
-    if (enabledTypes.includes("pigeon")) return "pigeon";
-    return (enabledTypes[0] ?? "pigeon") as BirdType;
-  });
-  const [showWriteOn, setShowWriteOn] = useState(false);
+  const [origin, setOrigin] = useState<LatLonCity>(draft.origin?.name ? draft.origin : defaultOrigin);
+  const [destination, setDestination] = useState<LatLonCity>(draft.destination?.name ? draft.destination : defaultDest);
 
-  // ✅ intermittent shake state
-  const [shake, setShake] = useState(false);
-  const shakeIntervalRef = useRef<number | null>(null);
-  const shakeTimeoutRef = useRef<number | null>(null);
+  const [showOriginPicker, setShowOriginPicker] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
 
-  // ✅ tiny toast
-  const [toast, setToast] = useState<string | null>(null);
-  const toastTimer = useRef<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [activeStep, setActiveStep] = useState(1);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    if (toastTimer.current) window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(null), 2200);
-  };
+  /* ---------- validation ---------- */
+  const senderEmailOk = isEmailValid(fromEmail);
+  const recipientEmailOk = isEmailValid(toEmail);
 
-  useEffect(() => {
-    return () => {
-      if (toastTimer.current) window.clearTimeout(toastTimer.current);
-      if (shakeIntervalRef.current) window.clearInterval(shakeIntervalRef.current);
-      if (shakeTimeoutRef.current) window.clearTimeout(shakeTimeoutRef.current);
-    };
-  }, []);
+  const fromNameOk = fromName.trim().length > 0;
+  const toNameOk = toName.trim().length > 0;
+  const messageOk = message.trim().length > 0;
 
-  const go = (b: BirdType) => {
-    // ✅ safety: only allow enabled BirdTypes
-    if (!enabledTypes.includes(b)) {
-      showToast("That bird isn’t enabled yet.");
+  const routeOk = origin.name !== destination.name;
+
+  const stepMeta = useMemo(() => {
+    const steps = [
+      { id: 1, label: "Who" },
+      { id: 2, label: "Message" },
+      { id: 3, label: "Route" },
+    ];
+    const current = steps.find((s) => s.id === activeStep) ?? steps[0];
+    return { total: steps.length, label: current.label };
+  }, [activeStep]);
+
+  /* ---------- geolocation ---------- */
+  function useMyLocationForOrigin() {
+    setLocError(null);
+
+    if (!navigator.geolocation) {
+      setLocError("Geolocation isn't supported on this device.");
       return;
     }
-    router.push(`/write?bird=${encodeURIComponent(b)}`);
-  };
 
-  // ✅ Per-bird CTA text (easy to tweak later)
-  const ctaTextFor = (b: BirdType) => {
-    switch (b) {
-      case "goose":
-        return "Honk & Send";
-      case "snipe":
-        return "Snipe & Swipe";
-      case "pigeon":
-      default:
-        return "Let it Fly";
+    setLocating(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const city = nearestCity(latitude, longitude, CITIES);
+        setOrigin(city);
+        setLocating(false);
+      },
+      (err) => {
+        setLocError(err?.message || "Couldn't determine location.");
+        setLocating(false);
+      },
+      { enableHighAccuracy: false, timeout: 8000 }
+    );
+  }
+
+  function swapRoute() {
+    setShowOriginPicker(false);
+    setOrigin(destination);
+    setDestination(origin);
+  }
+
+  /* ---------- continue ---------- */
+  function continueToSend() {
+    setError(null);
+    setShowErrors(true); // ✅ enables invalid styling and inline errors
+
+    if (!routeOk) {
+      setError("Give the bird a destination.");
+      return;
     }
-  };
+    if (!fromNameOk) {
+      setError("Who's this from? Give the bird a name.");
+      return;
+    }
+    if (!fromEmail.trim()) {
+      setError("We need a return roost (your email).");
+      return;
+    }
+    if (!senderEmailOk) {
+      setError("That email doesn't look right.");
+      return;
+    }
+    if (!toNameOk) {
+      setError("Who's this for? Give the bird a name.");
+      return;
+    }
+    if (!toEmail.trim()) {
+      setError("We need a landing email.");
+      return;
+    }
+    if (!recipientEmailOk) {
+      setError("That email doesn't look right.");
+      return;
+    }
+    if (!messageOk) {
+      setError("The bird won't fly without a message.");
+      return;
+    }
 
-  // ✅ start/stop the "shake every 5s" loop when the button is visible
-  useEffect(() => {
-    if (shakeIntervalRef.current) window.clearInterval(shakeIntervalRef.current);
-    if (shakeTimeoutRef.current) window.clearTimeout(shakeTimeoutRef.current);
-    setShake(false);
+    replaceDraft({
+      ...draft,
+      fromName: fromName.trim(),
+      fromEmail: fromEmail.trim(),
+      toName: toName.trim(),
+      toEmail: toEmail.trim(),
+      subject: subject.trim(),
+      message,
+      origin,
+      destination,
+    });
 
-    if (!showWriteOn) return;
-
-    const pulse = () => {
-      setShake(true);
-      if (shakeTimeoutRef.current) window.clearTimeout(shakeTimeoutRef.current);
-      shakeTimeoutRef.current = window.setTimeout(() => setShake(false), 650);
-    };
-
-    const initial = window.setTimeout(() => pulse(), 800);
-    shakeTimeoutRef.current = initial as unknown as number;
-
-    shakeIntervalRef.current = window.setInterval(pulse, 5000);
-
-    return () => {
-      if (shakeIntervalRef.current) window.clearInterval(shakeIntervalRef.current);
-      if (shakeTimeoutRef.current) window.clearTimeout(shakeTimeoutRef.current);
-      setShake(false);
-    };
-  }, [showWriteOn]);
+    router.push("/send");
+  }
 
   return (
     <main className="pageBg">
-      <div className="wrap" style={{ paddingTop: 12, position: "relative" }}>
+      <div className="wrap">
         <Link href="/" className="linkPill">
-          ← Back
+          ← Home
         </Link>
 
-        <div style={{ marginTop: 12 }}>
-          <div className="kicker">Compose</div>
-          <h1 className="h1">Choose a bird</h1>
-          <p className="muted" style={{ marginTop: 6 }}>
-            How should this message travel?
-          </p>
-          <p className="muted" style={{ marginTop: 6, fontSize: 14, opacity: 0.8 }}>
-            You can change this later.
-          </p>
+        {/* Header */}
+        <div className="writeHead" style={{ marginTop: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <div className="kicker">Compose</div>
+            <h1 className="h1 h1Bold">Write a Letter</h1>
+
+            <p className="muted" style={{ marginTop: 6 }}>
+              Choose the bird and seal after writing.
+            </p>
+
+            <div className="stepKicker">
+              Step {activeStep} of {stepMeta.total} - {stepMeta.label}
+            </div>
+          </div>
         </div>
 
-        {/* Current birds (enabled + visible + supported by engine) */}
-        <div className="birdGrid">
-          {options.map((opt) => {
-            const isSelected = bird === opt.id;
+        <div className="stack writeStack" style={{ marginTop: 14 }}>
+          {/* Step 1 */}
+          <section className="card" onFocusCapture={() => setActiveStep(1)} onClick={() => setActiveStep(1)}>
+            <div className="cardHead" style={{ marginBottom: 10 }}>
+              <div>
+                <div className="kicker">Step 1</div>
+                <div className="h2">Who</div>
+              </div>
 
-            return (
-              <div key={opt.id} className="birdPick">
-                <button
-                  type="button"
-                  className={`card birdCard ${isSelected ? "on" : ""}`}
-                  onClick={() => {
-                    if (isSelected) setShowWriteOn((v) => !v);
-                    else {
-                      setBird(opt.id);
-                      setShowWriteOn(true);
-                    }
-                  }}
-                  aria-pressed={isSelected}
-                  style={{ position: "relative" }}
-                  title={`Choose ${opt.title}`}
-                >
-                  {isSelected && (
-                    <div className="birdBadge" aria-hidden="true">
-                      ✓
-                    </div>
+              <div className="metaPill faint">
+                <span>Required</span>
+              </div>
+            </div>
+
+            <div className="twoCol">
+              <div className="stack" style={{ gap: 10 }}>
+                <label className="field">
+                  <span className="fieldLabel">From</span>
+                  <input
+                    className={`input ${showErrors && !fromNameOk ? "invalid" : ""}`}
+                    value={fromName}
+                    onChange={(e) => setFromName(e.target.value)}
+                    placeholder="Your name"
+                  />
+                </label>
+
+                <label className="field">
+                  <span className="fieldLabel">
+                    Sender Email <span className="muted">(required)</span>
+                  </span>
+                  <input
+                    className={`input ${showErrors && fromEmail.trim() && !senderEmailOk ? "invalid" : ""}`}
+                    type="email"
+                    value={fromEmail}
+                    onChange={(e) => setFromEmail(e.target.value)}
+                    placeholder="you@email.com"
+                  />
+                  {showErrors && fromEmail.trim() && !senderEmailOk && (
+                    <div className="errorText">That email doesn&apos;t look right.</div>
                   )}
+                </label>
+              </div>
 
-                  {/* Recommended pill */}
-                  {opt.recommended && <div className="birdRec">Recommended</div>}
+              <div className="stack" style={{ gap: 10 }}>
+                <label className="field">
+                  <span className="fieldLabel">To</span>
+                  <input
+                    className={`input ${showErrors && !toNameOk ? "invalid" : ""}`}
+                    value={toName}
+                    onChange={(e) => setToName(e.target.value)}
+                    placeholder="Recipient name"
+                  />
+                </label>
 
-                  <div className="birdRow">
-                    <div className="birdThumb" aria-hidden="true">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={opt.imgSrc} alt="" />
-                    </div>
+                <label className="field">
+                  <span className="fieldLabel">
+                    Recipient Email <span className="muted">(required)</span>
+                  </span>
+                  <input
+                    className={`input ${showErrors && toEmail.trim() && !recipientEmailOk ? "invalid" : ""}`}
+                    type="email"
+                    value={toEmail}
+                    onChange={(e) => setToEmail(e.target.value)}
+                    placeholder="name@email.com"
+                  />
+                  {showErrors && toEmail.trim() && !recipientEmailOk && (
+                    <div className="errorText">That email doesn&apos;t look right.</div>
+                  )}
+                </label>
+              </div>
+            </div>
+          </section>
 
-                    <div style={{ minWidth: 0 }}>
-                      <div className="birdTitle">{opt.title}</div>
-                      <div className="muted birdSub">{opt.subtitle}</div>
-                    </div>
-                  </div>
+          {/* Step 2 */}
+          <section className="card" onFocusCapture={() => setActiveStep(2)} onClick={() => setActiveStep(2)}>
+            <div className="cardHead" style={{ marginBottom: 10 }}>
+              <div>
+                <div className="kicker">Step 2</div>
+                <div className="h2">Message</div>
+              </div>
+              <div className="metaPill faint">Sealed until delivery</div>
+            </div>
+
+            <div className="stack">
+              <label className="field">
+                <span className="fieldLabel">Subject (optional)</span>
+                <input
+                  className="input"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="Optional subject..."
+                />
+              </label>
+
+              <label className="field">
+                <span className="fieldLabel">Message</span>
+                <textarea
+                  className={`textarea ${showErrors && !messageOk ? "invalid" : ""}`}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  rows={7}
+                  placeholder="Write something worth the flight..."
+                />
+                {showErrors && !messageOk && (
+                  <div className="errorText">The bird won&apos;t fly without a message.</div>
+                )}
+              </label>
+
+              <div className="ideaRow">
+                <button type="button" className="ideaToggle" onClick={() => setShowPrompts((v) => !v)}>
+                  Need an idea?
+                </button>
+              </div>
+
+              <div className={`ideaPanel ${showPrompts ? "open" : ""}`}>
+                {[
+                  "I wanted you to have this later...",
+                  "When you read this, I hope you're smiling.",
+                  "This felt worth the wait.",
+                ].map((text) => (
+                  <button
+                    key={text}
+                    type="button"
+                    className="ideaChip"
+                    onClick={() => setMessage((prev) => (prev.trim() ? `${prev}\n\n${text}` : text))}
+                  >
+                    {text}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Step 3 */}
+          <section className="card" onFocusCapture={() => setActiveStep(3)} onClick={() => setActiveStep(3)}>
+            <div className="cardHead" style={{ marginBottom: 10 }}>
+              <div>
+                <div className="kicker">Step 3</div>
+                <div className="h2">Route</div>
+                <div className="muted" style={{ marginTop: 4 }}>
+                  Route:{" "}
+                  <strong>
+                    {origin.name} → {destination.name}
+                  </strong>
+                </div>
+              </div>
+
+              <button type="button" onClick={swapRoute} className="btnGhost" title="Swap route">
+                Swap
+              </button>
+            </div>
+
+            {showErrors && !routeOk && (
+              <div className="errorText" style={{ marginBottom: 10 }}>
+                Give the bird a destination.
+              </div>
+            )}
+
+            <div className="twoCol">
+              <div className="stack">
+                <div className="fieldLabel">Origin</div>
+
+                <div className="softRow">
+                  <div className="softValue">{origin.name}</div>
+                </div>
+
+                <button type="button" onClick={useMyLocationForOrigin} disabled={locating} className="btnGhost">
+                  {locating ? "Finding your roost..." : "Use my location"}
                 </button>
 
-                {/* Pop-up button beneath the selected card (toggle-able) */}
-                {isSelected && showWriteOn && (
-                  <button
-                    type="button"
-                    className={`btnPrimary writeOnBtn ${shake ? "shakeNow" : ""}`}
-                    onClick={() => go(opt.id)}
-                    title="Write your letter"
-                  >
-                    {ctaTextFor(opt.id)}
-                  </button>
+                <button type="button" onClick={() => setShowOriginPicker((v) => !v)} className="btnSubtle">
+                  {showOriginPicker ? "Hide origin picker" : "Change origin"}
+                </button>
+
+                {showOriginPicker && (
+                  <div style={{ marginTop: 4 }}>
+                    <CityTypeahead
+                      label=""
+                      cities={CITIES}
+                      value={origin}
+                      onChange={(c) => {
+                        setOrigin(c);
+                        setShowOriginPicker(false);
+                      }}
+                      placeholder="Type a US city..."
+                    />
+                  </div>
                 )}
+
+                {locError && <div className="errorText">{locError}</div>}
               </div>
-            );
-          })}
-        </div>
 
-        {/* Future Fowls (visible + enabled:false) */}
-        <div style={{ marginTop: 14 }}>
-          <div className="kicker">Coming soon</div>
-          <h2 className="h2" style={{ marginTop: 6 }}>
-            Future Fowls
-          </h2>
-          <p className="muted" style={{ marginTop: 6 }}>
-            Not selectable yet. The roster is… evolving.
-          </p>
+              <div>
+                <CityTypeahead
+                  label="Destination"
+                  cities={CITIES}
+                  value={destination}
+                  onChange={setDestination}
+                  placeholder="Type a US city..."
+                />
+              </div>
+            </div>
+          </section>
 
-          <div className="birdGrid" style={{ marginTop: 10 }}>
-            {futureFowls.map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                className="card birdCard futureCard"
-                aria-disabled="true"
-                title={`${opt.title} (Coming soon)`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  showToast("Coming soon — Future Fowls aren’t selectable yet.");
-                }}
-              >
-                <div className="birdRec futurePill" aria-hidden="true">
-                  Coming soon
-                </div>
-
-                <div className="birdRow">
-                  <div className="birdThumb" aria-hidden="true">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={opt.imgSrc} alt="" />
-                  </div>
-
-                  <div style={{ minWidth: 0 }}>
-                    <div className="birdTitle">{opt.title}</div>
-                    <div className="muted birdSub">{opt.subtitle}</div>
-                  </div>
-                </div>
+          {/* Continue */}
+          <div className="card sendCard">
+            <div className="sendStack">
+              <button onClick={continueToSend} className="btnPrimary sendBtn">
+                Continue
               </button>
-            ))}
-          </div>
+              <div className="sendHelper">You&apos;ll choose the bird and seal next.</div>
+            </div>
 
-          <div className="muted" style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
-            More birds are molting.
+            {error && (
+              <p className="errorText" style={{ marginTop: 12 }}>
+                {error}
+              </p>
+            )}
           </div>
         </div>
-
-        {/* Toast UI */}
-        {toast && (
-          <div
-            role="status"
-            aria-live="polite"
-            onClick={() => setToast(null)}
-            style={{
-              position: "fixed",
-              left: "50%",
-              bottom: 18,
-              transform: "translateX(-50%)",
-              zIndex: 9999,
-              padding: "10px 12px",
-              borderRadius: 12,
-              background: "rgba(0,0,0,0.88)",
-              color: "white",
-              fontSize: 13,
-              lineHeight: "16px",
-              maxWidth: 520,
-              width: "calc(100% - 24px)",
-              boxShadow: "0 12px 30px rgba(0,0,0,0.25)",
-              cursor: "pointer",
-              userSelect: "none",
-            }}
-            title="Click to dismiss"
-          >
-            {toast}
-            <span style={{ opacity: 0.65, marginLeft: 8 }}>(tap to dismiss)</span>
-          </div>
-        )}
-
-        <style jsx global>{`
-          .birdPick {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-          }
-
-          .writeOnBtn {
-            width: 100%;
-            border-radius: 14px;
-            padding: 12px 14px;
-            font-weight: 900;
-            letter-spacing: -0.01em;
-            animation: popIn 160ms ease-out;
-            will-change: transform;
-          }
-
-          @keyframes popIn {
-            from {
-              transform: translateY(-6px);
-              opacity: 0;
-            }
-            to {
-              transform: translateY(0px);
-              opacity: 1;
-            }
-          }
-
-          .shakeNow {
-            animation: popIn 160ms ease-out, shake 520ms ease-in-out;
-          }
-
-          @keyframes shake {
-            0% {
-              transform: translateX(0) rotate(0deg);
-            }
-            12% {
-              transform: translateX(-2px) rotate(-0.5deg);
-            }
-            25% {
-              transform: translateX(3px) rotate(0.6deg);
-            }
-            38% {
-              transform: translateX(-3px) rotate(-0.6deg);
-            }
-            52% {
-              transform: translateX(2px) rotate(0.4deg);
-            }
-            68% {
-              transform: translateX(-1px) rotate(-0.2deg);
-            }
-            100% {
-              transform: translateX(0) rotate(0deg);
-            }
-          }
-
-          @media (prefers-reduced-motion: reduce) {
-            .writeOnBtn,
-            .shakeNow {
-              animation: none !important;
-            }
-          }
-
-          .birdCard {
-            position: relative;
-          }
-
-          .birdCard .birdThumb {
-            position: relative;
-            z-index: 1;
-          }
-
-          .birdCard .birdRec,
-          .birdCard .birdBadge {
-            z-index: 5;
-          }
-
-          .futureCard {
-            position: relative;
-            cursor: pointer;
-          }
-
-          .futurePill {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            z-index: 5;
-            pointer-events: none;
-          }
-
-          .futureCard .birdThumb img {
-            filter: saturate(0.3) contrast(1.02) brightness(0.98);
-            transition: filter 180ms ease, transform 180ms ease;
-            transform: translateZ(0);
-          }
-
-          .futureCard:hover .birdThumb img,
-          .futureCard:focus-visible .birdThumb img {
-            filter: saturate(1) contrast(1) brightness(1);
-          }
-
-          .birdCard:not(.on) .birdThumb img {
-            filter: saturate(0.35) contrast(1.02) brightness(0.98);
-            transition: filter 180ms ease, transform 180ms ease;
-            transform: translateZ(0);
-          }
-
-          .birdCard:not(.on) .birdTitle {
-            opacity: 0.88;
-            transition: opacity 180ms ease;
-          }
-          .birdCard:not(.on) .birdSub {
-            opacity: 0.7;
-            transition: opacity 180ms ease;
-          }
-
-          .birdCard:not(.on):hover .birdThumb img,
-          .birdCard:not(.on):focus-visible .birdThumb img {
-            filter: saturate(1) contrast(1) brightness(1);
-            transform: scale(1.02);
-          }
-
-          .birdCard:not(.on):hover .birdTitle,
-          .birdCard:not(.on):focus-visible .birdTitle {
-            opacity: 1;
-          }
-          .birdCard:not(.on):hover .birdSub,
-          .birdCard:not(.on):focus-visible .birdSub {
-            opacity: 0.9;
-          }
-
-          .birdCard.on .birdThumb img {
-            filter: none;
-            transform: none;
-          }
-
-          .birdCard.on .birdTitle,
-          .birdCard.on .birdSub {
-            opacity: 1;
-          }
-        `}</style>
       </div>
+
+      <style jsx>{`
+        .stepKicker {
+          margin-top: 6px;
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 0.02em;
+          text-transform: uppercase;
+          opacity: 0.6;
+        }
+
+        .ideaRow {
+          display: flex;
+          justify-content: flex-start;
+          margin-top: 2px;
+        }
+
+        .ideaToggle {
+          border: 0;
+          background: transparent;
+          padding: 0;
+          font-weight: 800;
+          font-size: 12px;
+          opacity: 0.7;
+          text-decoration: underline;
+          cursor: pointer;
+        }
+
+        .ideaPanel {
+          display: grid;
+          gap: 8px;
+          margin-top: 6px;
+          max-height: 0;
+          opacity: 0;
+          overflow: hidden;
+          transition: max-height 180ms ease, opacity 180ms ease;
+        }
+
+        .ideaPanel.open {
+          max-height: 200px;
+          opacity: 1;
+        }
+
+        .ideaChip {
+          text-align: left;
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          background: rgba(0, 0, 0, 0.03);
+          border-radius: 12px;
+          padding: 10px 12px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .ideaPanel {
+            transition: none;
+          }
+        }
+
+        @media (max-width: 520px) {
+          .writeStack {
+            gap: 12px;
+          }
+        }
+      `}</style>
     </main>
   );
 }
