@@ -41,12 +41,13 @@ export const US_REGIONS: GeoRegion[] = [
   R("lake-washington", "Lake Washington", [47.53, -122.31, 47.76, -122.16], "along"),
   R("snoqualmie-pass", "Snoqualmie Pass", [47.37, -121.50, 47.48, -121.33], "crossing"),
   R("issaquah-alps", "the Issaquah Alps", [47.47, -122.06, 47.61, -121.85], "over"),
+  R("squak-mountain", "Squak Mountain", [47.48, -122.059, 47.51, -122.028], "over"),
 
   // --- Puget Sound / I-5 corridor ---
   R("puget-sound", "Puget Sound", [47.0, -123.5, 48.6, -122.0], "over"),
   R("salish-sea", "Salish Sea", [47.391795,-122.434049,47.456369,-122.352338], "over"),
   R("seattle-metro", "Seattle Metro", [47.2, -122.6, 47.9, -121.9], "over"),
-
+  R("sea-tac", "Seattle Tacoma International Airport", [47.42,-122.31,47.46,-122.29], "over"),
   // --- Oregon / Columbia specifics ---
   R("portland-metro", "Portland Metro", [45.40, -122.95, 45.72, -122.35], "over"),
   R("columbia-gorge", "the Columbia River Gorge", [45.35, -122.25, 45.95, -120.75], "along"),
