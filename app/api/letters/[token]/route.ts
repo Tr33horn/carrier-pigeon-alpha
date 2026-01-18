@@ -270,9 +270,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const distanceKm = Number((meta as any).distance_km);
 
   const originLon = Number((meta as any).origin_lon);
-  const originLat = Number((meta as any).origin_lat);
   const destLon = Number((meta as any).dest_lon);
-  const destLat = Number((meta as any).dest_lat);
 
   // ✅ Bird behavior (single source of truth)
   const bird: BirdType = normalizeBird((meta as any).bird);
