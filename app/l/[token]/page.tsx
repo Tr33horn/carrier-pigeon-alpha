@@ -56,7 +56,7 @@ type BadgeItem = {
   code: string;
   title: string;
   subtitle?: string | null;
-  icon?: string | null;
+  iconSrc?: string | null;
   rarity?: "common" | "rare" | "legendary";
   earned_at?: string | null;
   meta?: any;
@@ -1550,13 +1550,13 @@ export default function LetterStatusPage() {
                 </div>
 
                 <div className="metaPill faint" title="Badges earned so far">
-                  🏅 <strong>{badgesSorted.length}</strong>
+                  <strong>{badgesSorted.length}</strong>
                 </div>
               </div>
 
               {badgesSorted.length === 0 ? (
                 <div className="soft">
-                  <div className="muted">None yet. The bird’s still grinding XP. 🕊️</div>
+                  <div className="muted">None yet. The bird is still grinding XP.</div>
                 </div>
               ) : (
                 <div className="stack">
@@ -1573,7 +1573,10 @@ export default function LetterStatusPage() {
                         aria-label="Badge icon"
                         title={rarityLabel(b.rarity)}
                       >
-                        <span style={{ fontSize: 16, lineHeight: "16px" }}>{b.icon || "🏅"}</span>
+                        {b.iconSrc ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img className="badgeIconImg" src={b.iconSrc} alt={b.title} title={b.title} />
+                        ) : null}
                       </div>
 
                       <div style={{ minWidth: 0, flex: "1 1 auto" }}>

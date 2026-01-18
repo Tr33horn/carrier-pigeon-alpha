@@ -18,6 +18,7 @@ import {
 
 // ✅ Single source of truth for bird rules
 import { BIRD_RULES, normalizeBird, type BirdType } from "@/app/lib/birds";
+import { BADGES, computeBadgesFromRegions, type BadgeId } from "@/app/lib/badges";
 import { normalizeEnvelopeTint } from "@/app/lib/envelopeTints";
 
 export const dynamic = "force-dynamic";
@@ -82,110 +83,6 @@ type LetterItemInsert = {
   earned_at?: string;
   meta?: any;
 };
-
-type BadgeDef = {
-  code: string;
-  title: string;
-  subtitle?: string;
-  icon?: string;
-  rarity?: "common" | "rare" | "legendary";
-  meta?: any;
-  earned_at?: string;
-};
-
-function computeBadgesFromRegions(args: {
-  origin?: { name?: string; regionId?: string | null };
-  dest?: { name?: string; regionId?: string | null };
-  pastRegionIds: string[];
-  delivered?: boolean;
-  deliveredAtISO?: string;
-}) {
-  const { pastRegionIds, delivered, deliveredAtISO } = args;
-
-  const seq: string[] = [];
-  for (const r of pastRegionIds) {
-    if (!r) continue;
-    if (seq.length === 0 || seq[seq.length - 1] !== r) seq.push(r);
-  }
-
-  const has = (id: string) => seq.includes(id);
-  const crossed = (regionId: string) => {
-    const i = seq.indexOf(regionId);
-    return i !== -1 && i < seq.length - 1;
-  };
-
-  const out: BadgeDef[] = [];
-
-  if (crossed("cascades-n")) {
-    out.push({
-      code: "crossed_cascades",
-      title: "Crossed the Cascades",
-      subtitle: "Mountains approved. Wings questionable.",
-      icon: "🏔️",
-      rarity: "common",
-      meta: { region: "cascades-n" },
-    });
-  }
-
-  if (crossed("rockies-n")) {
-    out.push({
-      code: "crossed_rockies",
-      title: "Crossed the Rockies",
-      subtitle: "Altitude gained. Ego remained modest.",
-      icon: "⛰️",
-      rarity: "rare",
-      meta: { region: "rockies-n" },
-    });
-  }
-
-  if (crossed("great-plains")) {
-    out.push({
-      code: "across_the_plains",
-      title: "Across the Great Plains",
-      subtitle: "So flat you can hear tomorrow.",
-      icon: "🌾",
-      rarity: "common",
-      meta: { region: "great-plains" },
-    });
-  }
-
-  if (crossed("appalachians")) {
-    out.push({
-      code: "crossed_appalachians",
-      title: "Crossed the Appalachians",
-      subtitle: "Old hills, new bragging rights.",
-      icon: "⛰️",
-      rarity: "rare",
-      meta: { region: "appalachians" },
-    });
-  }
-
-  if (has("snake-river")) {
-    out.push({
-      code: "over_snake_river_plain",
-      title: "Over the Snake River Plain",
-      subtitle: "Wide open, tailwind energy.",
-      icon: "🌀",
-      rarity: "common",
-      meta: { region: "snake-river" },
-    });
-  }
-
-  if (delivered) {
-    out.push({
-      code: "delivered",
-      title: "Delivered",
-      subtitle: "Wax seal retired with honor.",
-      icon: "📬",
-      rarity: "common",
-      meta: { delivered: true },
-      earned_at: deliveredAtISO,
-    });
-  }
-
-  const seen = new Set<string>();
-  return out.filter((b) => (seen.has(b.code) ? false : (seen.add(b.code), true)));
-}
 
 /* -------------------------------------------------
    Skip-initial-sleep helpers (uses flightSleep.ts)
@@ -570,10 +467,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
 
   const pastRegionIds = past.map((cp: any) => cp.region_id).filter(Boolean) as string[];
 
-  const originRegion =
-    Number.isFinite(originLat) && Number.isFinite(originLon) ? geoRegionForPoint(originLat, originLon) : null;
-  const destRegion = Number.isFinite(destLat) && Number.isFinite(destLon) ? geoRegionForPoint(destLat, destLon) : null;
-
   const deliveredAtISO =
     delivered && Number.isFinite(etaAdjustedMs)
       ? new Date(etaAdjustedMs).toISOString()
@@ -582,9 +475,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
       : undefined;
 
   const computedBadges = computeBadgesFromRegions({
-    origin: { name: (meta as any).origin_name, regionId: originRegion?.id ?? null },
-    dest: { name: (meta as any).dest_name, regionId: destRegion?.id ?? null },
-    pastRegionIds,
+    regionIds: pastRegionIds,
     delivered,
     deliveredAtISO,
   });
@@ -593,17 +484,23 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   if (!archived && !canceled && computedBadges.length) {
     const earnedAtDefault = new Date(nowMsFinal).toISOString();
 
-    const rows: LetterItemInsert[] = computedBadges.map((b) => ({
-      letter_id: (meta as any).id,
-      kind: "badge",
-      code: b.code,
-      title: b.title,
-      subtitle: b.subtitle ?? null,
-      icon: b.icon ?? null,
-      rarity: b.rarity ?? "common",
-      earned_at: b.earned_at ?? earnedAtDefault,
-      meta: b.meta ?? {},
-    }));
+    const rows: LetterItemInsert[] = computedBadges
+      .map((b) => {
+        const def = BADGES[b.id];
+        if (!def) return null;
+        return {
+          letter_id: (meta as any).id,
+          kind: "badge" as const,
+          code: def.id,
+          title: def.title,
+          subtitle: def.subtitle ?? null,
+          icon: def.iconSrc,
+          rarity: def.rarity ?? "common",
+          earned_at: b.earnedAt ?? earnedAtDefault,
+          meta: b.meta ?? {},
+        };
+      })
+      .filter(Boolean) as LetterItemInsert[];
 
     const { error: upsertErr } = await supabaseServer.from("letter_items").upsert(rows, { onConflict: "letter_id,kind,code" });
 
@@ -620,7 +517,23 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
     return NextResponse.json({ error: itemsErr.message }, { status: 500 });
   }
 
-  const badges = (items ?? []).filter((x: any) => x.kind === "badge");
+  const badges = (items ?? [])
+    .filter((x: any) => x.kind === "badge")
+    .map((b: any) => {
+      const id = b.code as BadgeId;
+      const def = BADGES[id];
+      return {
+        id: b.id,
+        kind: "badge",
+        code: id,
+        title: def?.title ?? b.title,
+        subtitle: def?.subtitle ?? b.subtitle,
+        iconSrc: def?.iconSrc ?? null,
+        rarity: def?.rarity ?? b.rarity,
+        earned_at: b.earned_at ?? null,
+        meta: b.meta ?? {},
+      };
+    });
   const addons = (items ?? []).filter((x: any) => x.kind === "addon");
 
   // ✅ ETA fields:

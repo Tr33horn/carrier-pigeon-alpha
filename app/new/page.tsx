@@ -58,7 +58,7 @@ function ComposePage() {
   const router = useRouter();
   const draft = useLetterDraftStore();
 
-  // ✅ Hydration-safe: only show invalid states after the user attempts to continue
+  // Hydration-safe: only show invalid states after the user attempts to continue
   const [showErrors, setShowErrors] = useState(false);
 
   // Step 1: who
@@ -142,7 +142,7 @@ function ComposePage() {
   /* ---------- continue ---------- */
   function continueToSend() {
     setError(null);
-    setShowErrors(true); // ✅ enables invalid styling and inline errors
+    setShowErrors(true); // enables invalid styling and inline errors
 
     if (!routeOk) {
       setError("Give the bird a destination.");

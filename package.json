@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "validate:badges": "node scripts/validateBadges.js",
     "email": "npx react-email dev"
   },
   "dependencies": {
