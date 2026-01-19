@@ -4,6 +4,7 @@ export type BadgeId =
   | "across-great-plains"
   | "crossed-appalachians"
   | "over-snake-river-plain"
+  | "over-mount-rainier"
   | "delivered";
 
 export type BadgeDef = {
@@ -56,6 +57,13 @@ export const BADGES: Record<BadgeId, BadgeDef> = {
     rarity: "common",
     iconSrc: "/badges/over-snake-river-plain.svg",
   },
+  "over-mount-rainier": {
+    id: "over-mount-rainier",
+    title: "Over Mount Rainier",
+    subtitle: "Whoa. That's big",
+    rarity: "rare",
+    iconSrc: "/badges/over-mount-rainier.svg",
+  },
   delivered: {
     id: "delivered",
     title: "Delivered",
@@ -104,6 +112,9 @@ export function computeBadgesFromRegions(args: {
   }
   if (has("snake-river")) {
     out.push({ id: "over-snake-river-plain", meta: { region: "snake-river" } });
+  }
+  if (has("mount-rainier")) {
+    out.push({ id: "over-mount-rainier", meta: { region: "mount-rainier" } });
   }
   if (delivered) {
     out.push({ id: "delivered", meta: { delivered: true }, earnedAt: deliveredAtISO });
