@@ -293,14 +293,16 @@ export async function GET(req: Request) {
   const missingSleepColumns = (err: any) =>
     !!err && (err.code === "42703" || /sleep_(offset|min|start|end)/i.test(err.message || ""));
 
-  let { data: deliverCandidates, error: deliverErr } = await supabaseServer
+  let deliverCandidates: any[] | null = null;
+  let deliverErr: any = null;
+  ({ data: deliverCandidates, error: deliverErr } = await supabaseServer
     .from("letters")
     .select(sleepSelect)
     .is("delivered_notified_at", null)
     .is("archived_at", null)
     .is("canceled_at", null)
     // grab anything that *might* be due (covers adjusted earlier-than-stored eta_at)
-    .lte("eta_at", lookaheadISO);
+    .lte("eta_at", lookaheadISO));
 
   if (deliverErr && missingSleepColumns(deliverErr)) {
     if (!warnedMissingSleepColumns) {
@@ -406,7 +408,9 @@ export async function GET(req: Request) {
      B) MID-FLIGHT UPDATES (25/50/75) — ✅ same progress math as UI
   -------------------------- */
 
-  let { data: inFlight, error: inflightErr } = await supabaseServer
+  let inFlight: any[] | null = null;
+  let inflightErr: any = null;
+  ({ data: inFlight, error: inflightErr } = await supabaseServer
     .from("letters")
     .select(`${inflightBaseSelect}, sleep_offset_min, sleep_start_hour, sleep_end_hour`)
     .is("delivered_notified_at", null)
@@ -414,7 +418,7 @@ export async function GET(req: Request) {
     .is("canceled_at", null)
     .lte("sent_at", nowISO)
     // keep query sane; we rely on adjusted ETA checks below
-    .gt("eta_at", new Date(nowMs - 7 * 24 * 3600_000).toISOString());
+    .gt("eta_at", new Date(nowMs - 7 * 24 * 3600_000).toISOString()));
 
   if (inflightErr && missingSleepColumns(inflightErr)) {
     if (!warnedMissingSleepColumns) {
