@@ -24,6 +24,8 @@ import { normalizeEnvelopeTint } from "@/app/lib/envelopeTints";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+let warnedMissingSleepColumns = false;
+
 /* -------------------------------------------------
    tiny helpers
 ------------------------------------------------- */
@@ -153,11 +155,9 @@ function buildSleepEvents(args: {
   sentMs: number;
   nowMs: number;
   offsetMin: number;
-  birdLabel?: string;
   cfg: SleepConfig;
 }) {
   const { sentMs, nowMs, offsetMin, cfg } = args;
-  const birdLabel = (args.birdLabel || "Pigeon").trim() || "Pigeon";
 
   if (!Number.isFinite(sentMs) || !Number.isFinite(nowMs) || nowMs <= sentMs) return [];
 
@@ -197,7 +197,6 @@ function buildSleepEvents(args: {
 
       if (started <= nowMs) {
         const wakeText = sleepUntilLocalText(wake, offsetMin);
-        const verb = wake <= nowMs ? "awoke at" : "wakes at";
 
         events.push({
           id: `sleep-${y}-${m + 1}-${d}`,
@@ -209,7 +208,7 @@ function buildSleepEvents(args: {
           geo_text: "Sleeping",
           region_id: null,
           region_label: null,
-          name: `${birdLabel} slept — ${verb} ${wakeText}`,
+          name: `Sleeping — wakes at ${wakeText}`,
         });
       }
     }
@@ -231,10 +230,7 @@ function buildSleepEvents(args: {
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
 
-  const { data: meta, error: metaErr } = await supabaseServer
-    .from("letters")
-    .select(
-      `
+  const baseSelect = `
       id,
       public_token,
       from_name,
@@ -254,13 +250,33 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
       canceled_at,
       bird,
       seal_id,
-      envelope_tint
-    `
-    )
+      envelope_tint,
+  `;
+  const sleepSelect = `${baseSelect} sleep_offset_min, sleep_start_hour, sleep_end_hour`;
+  const missingSleepColumns = (err: any) =>
+    !!err && (err.code === "42703" || /sleep_(offset|min|start|end)/i.test(err.message || ""));
+
+  let { data: meta, error: metaErr } = await supabaseServer
+    .from("letters")
+    .select(sleepSelect)
     .eq("public_token", token)
     .order("sent_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (metaErr && missingSleepColumns(metaErr)) {
+    if (!warnedMissingSleepColumns) {
+      console.warn("letters.sleep_* columns missing (api/letters/[token]); falling back to legacy select.");
+      warnedMissingSleepColumns = true;
+    }
+    ({ data: meta, error: metaErr } = await supabaseServer
+      .from("letters")
+      .select(baseSelect)
+      .eq("public_token", token)
+      .order("sent_at", { ascending: false })
+      .limit(1)
+      .maybeSingle());
+  }
 
   if (metaErr || !meta) {
     return NextResponse.json({ error: metaErr?.message ?? "Not found" }, { status: 404 });
@@ -276,7 +292,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const bird: BirdType = normalizeBird((meta as any).bird);
   const birdRule = BIRD_RULES[bird];
   const ignoresSleep = birdRule.ignoresSleep;
-  const sleepCfg = birdRule.sleepCfg;
+  const sleepStartStored = Number((meta as any).sleep_start_hour);
+  const sleepEndStored = Number((meta as any).sleep_end_hour);
+  const sleepCfg =
+    Number.isFinite(sleepStartStored) && Number.isFinite(sleepEndStored)
+      ? {
+          sleepStartHour: clamp(sleepStartStored, 0, 23),
+          sleepEndHour: clamp(sleepEndStored, 0, 23),
+        }
+      : birdRule.sleepCfg;
 
   // ✅ SPEED NOW COMES FROM CODE, NOT DB
   const speedKmh = Number.isFinite(birdRule.speedKmh) && birdRule.speedKmh > 0 ? birdRule.speedKmh : 0;
@@ -317,7 +341,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const hasOLon = Number.isFinite(originLon);
   const hasDLon = Number.isFinite(destLon);
   const midLon = hasOLon && hasDLon ? (originLon + destLon) / 2 : hasOLon ? originLon : hasDLon ? destLon : 0;
-  const offsetMin = offsetMinutesFromLon(midLon);
+  const storedOffsetMin = Number((meta as any).sleep_offset_min);
+  const offsetMin = Number.isFinite(storedOffsetMin)
+    ? clamp(storedOffsetMin, -12 * 60, 14 * 60)
+    : offsetMinutesFromLon(midLon);
 
   // ✅ Required awake ms MUST match send route: km/speed * inefficiency
   const requiredAwakeMs =
@@ -426,7 +453,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
           sentMs: skipUntilMs ?? sentMs,
           nowMs: nowMsFinal,
           offsetMin,
-          birdLabel: birdRule.sleepLabel,
           cfg: sleepCfg,
         })
       : [];

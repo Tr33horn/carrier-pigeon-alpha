@@ -333,6 +333,7 @@ export async function POST(req: Request) {
   // ✅ Pick a single timezone offset for the flight (MIDPOINT lon)
   const midLon = lerp(origin.lon, destination.lon, 0.5);
   const offsetMin = offsetMinutesFromLon(midLon);
+  const sleepCfg = birdCfg.sleepCfg;
 
   // ✅ IMPORTANT: Do NOT delay sent_at for sleep.
   const sentUtcMs = Date.now();
@@ -370,6 +371,9 @@ export async function POST(req: Request) {
       // ✅ NEW: store seal_id on the letter (requires DB column letters.seal_id)
       seal_id: sealResolved.sealId,
       envelope_tint: envelopeTint,
+      sleep_offset_min: offsetMin,
+      sleep_start_hour: sleepCfg?.sleepStartHour ?? null,
+      sleep_end_hour: sleepCfg?.sleepEndHour ?? null,
 
       from_name,
       from_email: normalizedFromEmail,

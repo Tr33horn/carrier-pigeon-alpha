@@ -24,6 +24,8 @@ import { BIRD_RULES, normalizeBird, type BirdType } from "@/app/lib/birds";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+let warnedMissingSleepColumns = false;
+
 /* -------------------- tiny helpers -------------------- */
 
 function clamp01(n: number) {
@@ -169,6 +171,9 @@ function computeAdjustedEtaAndPct(args: {
   speed_kmh: any;
   origin_lon: any;
   dest_lon: any;
+  sleep_offset_min?: any;
+  sleep_start_hour?: any;
+  sleep_end_hour?: any;
   bird: BirdType;
   nowMs: number;
 }) {
@@ -178,11 +183,22 @@ function computeAdjustedEtaAndPct(args: {
   const destLon = Number(args.dest_lon);
 
   const midLon = midpointLon(originLon, destLon);
-  const offsetMin = offsetMinutesFromLon(midLon ?? 0);
+  const storedOffsetMin = Number(args.sleep_offset_min);
+  const offsetMin = Number.isFinite(storedOffsetMin)
+    ? Math.max(-12 * 60, Math.min(14 * 60, storedOffsetMin))
+    : offsetMinutesFromLon(midLon ?? 0);
 
   const birdRule = BIRD_RULES[args.bird];
   const ignoresSleep = birdRule.ignoresSleep;
-  const sleepCfg = birdRule.sleepCfg;
+  const sleepStartStored = Number(args.sleep_start_hour);
+  const sleepEndStored = Number(args.sleep_end_hour);
+  const sleepCfg =
+    Number.isFinite(sleepStartStored) && Number.isFinite(sleepEndStored)
+      ? {
+          sleepStartHour: Math.max(0, Math.min(23, sleepStartStored)),
+          sleepEndHour: Math.max(0, Math.min(23, sleepEndStored)),
+        }
+      : birdRule.sleepCfg;
 
   const speedKmh = Number(args.speed_kmh);
   const distanceKm = Number(args.distance_km);
@@ -269,16 +285,36 @@ export async function GET(req: Request) {
      A) DELIVERIES (✅ adjusted ETA)
   -------------------------- */
 
-  const { data: deliverCandidates, error: deliverErr } = await supabaseServer
+  const baseSelect =
+    "id, public_token, eta_at, sent_at, distance_km, speed_kmh, from_name, from_email, to_name, to_email, delivered_notified_at, sender_receipt_sent_at, origin_name, dest_name, subject, bird, origin_lon, dest_lon, archived_at, canceled_at";
+  const inflightBaseSelect =
+    "id, public_token, subject, from_name, to_email, sent_at, eta_at, distance_km, speed_kmh, progress_25_sent_at, progress_50_sent_at, progress_75_sent_at, bird, origin_lon, dest_lon, origin_lat, dest_lat, origin_name, dest_name, archived_at, canceled_at";
+  const sleepSelect = `${baseSelect}, sleep_offset_min, sleep_start_hour, sleep_end_hour`;
+  const missingSleepColumns = (err: any) =>
+    !!err && (err.code === "42703" || /sleep_(offset|min|start|end)/i.test(err.message || ""));
+
+  let { data: deliverCandidates, error: deliverErr } = await supabaseServer
     .from("letters")
-    .select(
-      "id, public_token, eta_at, sent_at, distance_km, speed_kmh, from_name, from_email, to_name, to_email, delivered_notified_at, sender_receipt_sent_at, origin_name, dest_name, subject, bird, origin_lon, dest_lon, archived_at, canceled_at"
-    )
+    .select(sleepSelect)
     .is("delivered_notified_at", null)
     .is("archived_at", null)
     .is("canceled_at", null)
     // grab anything that *might* be due (covers adjusted earlier-than-stored eta_at)
     .lte("eta_at", lookaheadISO);
+
+  if (deliverErr && missingSleepColumns(deliverErr)) {
+    if (!warnedMissingSleepColumns) {
+      console.warn("letters.sleep_* columns missing (api/cron/deliveries); falling back to legacy select.");
+      warnedMissingSleepColumns = true;
+    }
+    ({ data: deliverCandidates, error: deliverErr } = await supabaseServer
+      .from("letters")
+      .select(baseSelect)
+      .is("delivered_notified_at", null)
+      .is("archived_at", null)
+      .is("canceled_at", null)
+      .lte("eta_at", lookaheadISO));
+  }
 
   if (deliverErr) {
     return NextResponse.json({ error: deliverErr.message }, { status: 500 });
@@ -299,6 +335,9 @@ export async function GET(req: Request) {
       speed_kmh: (letter as any).speed_kmh,
       origin_lon: (letter as any).origin_lon,
       dest_lon: (letter as any).dest_lon,
+      sleep_offset_min: (letter as any).sleep_offset_min,
+      sleep_start_hour: (letter as any).sleep_start_hour,
+      sleep_end_hour: (letter as any).sleep_end_hour,
       bird,
       nowMs,
     });
@@ -367,17 +406,30 @@ export async function GET(req: Request) {
      B) MID-FLIGHT UPDATES (25/50/75) — ✅ same progress math as UI
   -------------------------- */
 
-  const { data: inFlight, error: inflightErr } = await supabaseServer
+  let { data: inFlight, error: inflightErr } = await supabaseServer
     .from("letters")
-    .select(
-      "id, public_token, subject, from_name, to_email, sent_at, eta_at, distance_km, speed_kmh, progress_25_sent_at, progress_50_sent_at, progress_75_sent_at, bird, origin_lon, dest_lon, origin_lat, dest_lat, origin_name, dest_name, archived_at, canceled_at"
-    )
+    .select(`${inflightBaseSelect}, sleep_offset_min, sleep_start_hour, sleep_end_hour`)
     .is("delivered_notified_at", null)
     .is("archived_at", null)
     .is("canceled_at", null)
     .lte("sent_at", nowISO)
     // keep query sane; we rely on adjusted ETA checks below
     .gt("eta_at", new Date(nowMs - 7 * 24 * 3600_000).toISOString());
+
+  if (inflightErr && missingSleepColumns(inflightErr)) {
+    if (!warnedMissingSleepColumns) {
+      console.warn("letters.sleep_* columns missing (api/cron/deliveries); falling back to legacy select.");
+      warnedMissingSleepColumns = true;
+    }
+    ({ data: inFlight, error: inflightErr } = await supabaseServer
+      .from("letters")
+      .select(inflightBaseSelect)
+      .is("delivered_notified_at", null)
+      .is("archived_at", null)
+      .is("canceled_at", null)
+      .lte("sent_at", nowISO)
+      .gt("eta_at", new Date(nowMs - 7 * 24 * 3600_000).toISOString()));
+  }
 
   if (inflightErr) {
     return NextResponse.json({ error: inflightErr.message }, { status: 500 });
@@ -393,6 +445,9 @@ export async function GET(req: Request) {
       speed_kmh: (l as any).speed_kmh,
       origin_lon: (l as any).origin_lon,
       dest_lon: (l as any).dest_lon,
+      sleep_offset_min: (l as any).sleep_offset_min,
+      sleep_start_hour: (l as any).sleep_start_hour,
+      sleep_end_hour: (l as any).sleep_end_hour,
       bird,
       nowMs,
     });
@@ -439,6 +494,9 @@ export async function GET(req: Request) {
       speed_kmh: (letter as any).speed_kmh,
       origin_lon: (letter as any).origin_lon,
       dest_lon: (letter as any).dest_lon,
+      sleep_offset_min: (letter as any).sleep_offset_min,
+      sleep_start_hour: (letter as any).sleep_start_hour,
+      sleep_end_hour: (letter as any).sleep_end_hour,
       bird,
       nowMs,
     });

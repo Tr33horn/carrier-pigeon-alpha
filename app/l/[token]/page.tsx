@@ -1034,6 +1034,19 @@ export default function LetterStatusPage() {
     return formatCountdown(Math.max(0, msLeft));
   }, [letter, effectiveEtaISO, now, flightState, canceled, archived, serverNowISO, serverNowCapturedAtMs]);
 
+  const wakeCountdown = useMemo(() => {
+    if (!sleeping || !flight?.sleep_until_iso) return null;
+    const wakeMs = Date.parse(flight.sleep_until_iso);
+    if (!Number.isFinite(wakeMs)) return null;
+    const authoritativeNowMs =
+      serverNowISO && serverNowCapturedAtMs
+        ? Date.parse(serverNowISO) + (now.getTime() - serverNowCapturedAtMs)
+        : now.getTime();
+    const msLeft = wakeMs - authoritativeNowMs;
+    if (!Number.isFinite(msLeft)) return null;
+    return formatCountdown(Math.max(0, msLeft));
+  }, [sleeping, flight?.sleep_until_iso, now, serverNowISO, serverNowCapturedAtMs]);
+
   const debugLoggedRef = useRef(false);
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
@@ -1163,7 +1176,7 @@ export default function LetterStatusPage() {
       ? {
           label: sleeping ? "SLEEPING" : next.liveLabel,
           subLabel: sleeping
-            ? `Wakes at ${flight?.sleep_local_text || "soon"}`
+            ? `Sleeping — wakes at ${flight?.sleep_local_text || "soon"}${wakeCountdown ? ` (${wakeCountdown})` : ""}`
             : useNightLine
             ? nightLine
             : `Last updated: ${secondsSinceFetch ?? 0}s ago`,
@@ -1178,6 +1191,7 @@ export default function LetterStatusPage() {
     archived,
     sleeping,
     flight?.sleep_local_text,
+    wakeCountdown,
     secondsSinceFetch,
     archivedLabel,
     canceledLabel,

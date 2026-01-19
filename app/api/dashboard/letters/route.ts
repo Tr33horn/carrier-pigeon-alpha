@@ -9,10 +9,13 @@ import {
   awakeMsBetween,
   etaFromRequiredAwakeMs,
   initialSleepSkipUntilUtcMs,
+  type SleepConfig,
 } from "@/app/lib/flightSleep";
 
 // ✅ Single source of truth for bird rules
 import { BIRD_RULES, normalizeBird, type BirdType } from "@/app/lib/birds";
+
+let warnedMissingSleepColumns = false;
 
 /* -------------------------------------------------
    Email + formatting
@@ -77,11 +80,10 @@ function matchesQueryIncoming(l: RawLetter, q: string) {
  * Treat [sent..skipUntil) as awake if the send happened during the bird's sleep window.
  * This matches your /api/letters/[token] behavior.
  */
-function computeInitialSleepSkip(sentMs: number, offsetMin: number, bird: BirdType) {
-  const rule = BIRD_RULES[bird];
-  if (rule.ignoresSleep) return { skipUntilMs: null as number | null };
+function computeInitialSleepSkip(sentMs: number, offsetMin: number, sleepCfg: SleepConfig, ignoresSleep: boolean) {
+  if (ignoresSleep) return { skipUntilMs: null as number | null };
 
-  const wake = initialSleepSkipUntilUtcMs(sentMs, offsetMin, rule.sleepCfg);
+  const wake = initialSleepSkipUntilUtcMs(sentMs, offsetMin, sleepCfg);
   if (!wake || !Number.isFinite(wake) || wake <= sentMs) return { skipUntilMs: null };
 
   return { skipUntilMs: wake };
@@ -91,13 +93,13 @@ function awakeMsBetweenWithSkip(
   startMs: number,
   endMs: number,
   offsetMin: number,
-  bird: BirdType,
-  skipUntilMs: number | null
+  sleepCfg: SleepConfig,
+  skipUntilMs: number | null,
+  ignoresSleep: boolean
 ) {
   if (endMs <= startMs) return 0;
 
-  const rule = BIRD_RULES[bird];
-  if (rule.ignoresSleep) return endMs - startMs;
+  if (ignoresSleep) return endMs - startMs;
 
   // If we’re in the initial skip window, count it as awake time.
   if (skipUntilMs && startMs < skipUntilMs) {
@@ -107,22 +109,22 @@ function awakeMsBetweenWithSkip(
 
     if (endMs <= skipUntilMs) return awakeInSkip;
 
-    return awakeInSkip + awakeMsBetween(skipUntilMs, endMs, offsetMin, rule.sleepCfg);
+    return awakeInSkip + awakeMsBetween(skipUntilMs, endMs, offsetMin, sleepCfg);
   }
 
-  return awakeMsBetween(startMs, endMs, offsetMin, rule.sleepCfg);
+  return awakeMsBetween(startMs, endMs, offsetMin, sleepCfg);
 }
 
 function etaFromRequiredAwakeMsWithSkip(
   sentMs: number,
   requiredAwakeMs: number,
   offsetMin: number,
-  bird: BirdType,
-  skipUntilMs: number | null
+  sleepCfg: SleepConfig,
+  skipUntilMs: number | null,
+  ignoresSleep: boolean
 ) {
-  const rule = BIRD_RULES[bird];
   if (requiredAwakeMs <= 0) return sentMs;
-  if (rule.ignoresSleep) return sentMs + requiredAwakeMs;
+  if (ignoresSleep) return sentMs + requiredAwakeMs;
 
   // Spend the “initial awake budget” first (skip window), then run sleep-aware ETA from skipUntil.
   if (skipUntilMs && sentMs < skipUntilMs) {
@@ -130,10 +132,10 @@ function etaFromRequiredAwakeMsWithSkip(
     if (requiredAwakeMs <= initialAwakeBudget) return sentMs + requiredAwakeMs;
 
     const remaining = requiredAwakeMs - initialAwakeBudget;
-    return etaFromRequiredAwakeMs(skipUntilMs, remaining, offsetMin, rule.sleepCfg);
+    return etaFromRequiredAwakeMs(skipUntilMs, remaining, offsetMin, sleepCfg);
   }
 
-  return etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin, rule.sleepCfg);
+  return etaFromRequiredAwakeMs(sentMs, requiredAwakeMs, offsetMin, sleepCfg);
 }
 
 /* -------------------------------------------------
@@ -159,7 +161,10 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
   const hasOLon = Number.isFinite(oLon);
   const hasDLon = Number.isFinite(dLon);
   const midLon = hasOLon && hasDLon ? (oLon + dLon) / 2 : hasOLon ? oLon : hasDLon ? dLon : 0;
-  const offsetMin = offsetMinutesFromLon(midLon);
+  const storedOffsetMin = Number(l.sleep_offset_min);
+  const offsetMin = Number.isFinite(storedOffsetMin)
+    ? clamp(storedOffsetMin, -12 * 60, 14 * 60)
+    : offsetMinutesFromLon(midLon);
 
   const distanceKm = Number(l.distance_km);
   const hasDistance = Number.isFinite(distanceKm) && distanceKm > 0;
@@ -172,17 +177,27 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
 
   const requiredAwakeMs = hasFlightInputs ? (distanceKm / speedKmhEffective) * ineff * 3600_000 : 0;
 
+  const sleepStartStored = Number(l.sleep_start_hour);
+  const sleepEndStored = Number(l.sleep_end_hour);
+  const sleepCfg =
+    Number.isFinite(sleepStartStored) && Number.isFinite(sleepEndStored)
+      ? {
+          sleepStartHour: clamp(sleepStartStored, 0, 23),
+          sleepEndHour: clamp(sleepEndStored, 0, 23),
+        }
+      : rule.sleepCfg;
+
   // ✅ Skip-initial-sleep-window policy (same as status API)
   const { skipUntilMs } =
     sentMs != null && Number.isFinite(sentMs)
-      ? computeInitialSleepSkip(sentMs, offsetMin, bird)
+      ? computeInitialSleepSkip(sentMs, offsetMin, sleepCfg, rule.ignoresSleep)
       : { skipUntilMs: null as number | null };
 
   // ✅ Compute adjusted ETA if we safely can; otherwise fall back to stored eta_at.
   let etaAdjustedMs: number | null = null;
 
   if (sentMs != null && requiredAwakeMs > 0) {
-    etaAdjustedMs = etaFromRequiredAwakeMsWithSkip(sentMs, requiredAwakeMs, offsetMin, bird, skipUntilMs);
+    etaAdjustedMs = etaFromRequiredAwakeMsWithSkip(sentMs, requiredAwakeMs, offsetMin, sleepCfg, skipUntilMs, rule.ignoresSleep);
   } else if (etaStoredMs != null) {
     etaAdjustedMs = etaStoredMs;
   }
@@ -203,12 +218,19 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
       ? false
       : inSkip
       ? false
-      : isSleepingAt(calcNowMs, offsetMin, rule.sleepCfg);
+      : isSleepingAt(calcNowMs, offsetMin, sleepCfg);
 
   // ✅ progress (sleep-aware + skip window)
   let traveledAwakeMs = 0;
   if (sentMs != null && calcNowMs > sentMs && requiredAwakeMs > 0) {
-    traveledAwakeMs = awakeMsBetweenWithSkip(sentMs, Math.min(calcNowMs, etaAdjustedMs), offsetMin, bird, skipUntilMs);
+    traveledAwakeMs = awakeMsBetweenWithSkip(
+      sentMs,
+      Math.min(calcNowMs, etaAdjustedMs),
+      offsetMin,
+      sleepCfg,
+      skipUntilMs,
+      rule.ignoresSleep
+    );
   }
 
   const progress = requiredAwakeMs > 0 ? clamp(traveledAwakeMs / requiredAwakeMs, 0, 1) : delivered ? 1 : 0;
@@ -303,11 +325,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
   }
 
-  // --- Sent letters ---
-  const { data: sentData, error: sentErr } = await supabaseServer
-    .from("letters")
-    .select(
-      `
+  const baseSelect = `
       id,
       public_token,
       from_name,
@@ -330,50 +348,60 @@ export async function GET(req: Request) {
       canceled_at,
       bird,
       recipient_archived_at
-    `
-    )
+    `;
+  const sleepSelect = `${baseSelect}, sleep_offset_min, sleep_start_hour, sleep_end_hour`;
+  const missingSleepColumns = (err: any) =>
+    !!err && (err.code === "42703" || /sleep_(offset|min|start|end)/i.test(err.message || ""));
+
+  // --- Sent letters ---
+  let { data: sentData, error: sentErr } = await supabaseServer
+    .from("letters")
+    .select(sleepSelect)
     .eq("from_email", email)
     .or("archived_at.is.null,canceled_at.not.is.null")
     .order("sent_at", { ascending: false })
     .limit(50);
+
+  if (sentErr && missingSleepColumns(sentErr)) {
+    if (!warnedMissingSleepColumns) {
+      console.warn("letters.sleep_* columns missing (api/dashboard/letters); falling back to legacy select.");
+      warnedMissingSleepColumns = true;
+    }
+    ({ data: sentData, error: sentErr } = await supabaseServer
+      .from("letters")
+      .select(baseSelect)
+      .eq("from_email", email)
+      .or("archived_at.is.null,canceled_at.not.is.null")
+      .order("sent_at", { ascending: false })
+      .limit(50));
+  }
 
   if (sentErr) {
     return NextResponse.json({ error: sentErr.message }, { status: 500 });
   }
 
   // --- Incoming letters ---
-  const { data: incomingData, error: incomingErr } = await supabaseServer
+  let { data: incomingData, error: incomingErr } = await supabaseServer
     .from("letters")
-    .select(
-      `
-      id,
-      public_token,
-      from_name,
-      from_email,
-      to_name,
-      to_email,
-      subject,
-      origin_name,
-      origin_lat,
-      origin_lon,
-      dest_name,
-      dest_lat,
-      dest_lon,
-      sent_at,
-      eta_at,
-      delivered_notified_at,
-      sender_receipt_sent_at,
-      distance_km,
-      archived_at,
-      canceled_at,
-      bird,
-      recipient_archived_at
-    `
-    )
+    .select(sleepSelect)
     .eq("to_email", email)
     .is("recipient_archived_at", null)
     .order("sent_at", { ascending: false })
     .limit(50);
+
+  if (incomingErr && missingSleepColumns(incomingErr)) {
+    if (!warnedMissingSleepColumns) {
+      console.warn("letters.sleep_* columns missing (api/dashboard/letters); falling back to legacy select.");
+      warnedMissingSleepColumns = true;
+    }
+    ({ data: incomingData, error: incomingErr } = await supabaseServer
+      .from("letters")
+      .select(baseSelect)
+      .eq("to_email", email)
+      .is("recipient_archived_at", null)
+      .order("sent_at", { ascending: false })
+      .limit(50));
+  }
 
   if (incomingErr) {
     return NextResponse.json({ error: incomingErr.message }, { status: 500 });

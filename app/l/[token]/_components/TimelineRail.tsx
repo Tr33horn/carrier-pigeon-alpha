@@ -119,7 +119,7 @@ export default function TimelineRail({
                 {isCurrent && (
                   <div className="pigeonTag livePulseRow" style={isSleep ? { background: "rgb(88,80,236)" } : undefined}>
                     <span className="livePulseDot" aria-hidden />
-                    <span>{isSleep ? `${birdName} is sleeping` : `${birdName} is here`}</span>
+                    <span>{isSleep ? it.name : `${birdName} is here`}</span>
                   </div>
                 )}
 

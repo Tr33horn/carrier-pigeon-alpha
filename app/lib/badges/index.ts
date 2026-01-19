@@ -5,6 +5,9 @@ export type BadgeId =
   | "crossed-appalachians"
   | "over-snake-river-plain"
   | "over-mount-rainier"
+  | "over-area-51-region"
+  | "over-devils-tower"
+  | "over-grand-canyon"
   | "delivered";
 
 export type BadgeDef = {
@@ -64,6 +67,27 @@ export const BADGES: Record<BadgeId, BadgeDef> = {
     rarity: "rare",
     iconSrc: "/badges/over-mount-rainier.svg",
   },
+  "over-area-51-region": {
+    id: "over-area-51-region",
+    title: "Over Area 51 Region",
+    subtitle: "The lights were probably normal.",
+    rarity: "rare",
+    iconSrc: "/badges/over-area-51-region.svg",
+  },
+  "over-devils-tower": {
+    id: "over-devils-tower",
+    title: "Over Devils Tower",
+    subtitle: "Stone column, sky long.",
+    rarity: "rare",
+    iconSrc: "/badges/over-devils-tower.svg",
+  },
+  "over-grand-canyon": {
+    id: "over-grand-canyon",
+    title: "Over the Grand Canyon",
+    subtitle: "Big enough to make time blink.",
+    rarity: "legendary",
+    iconSrc: "/badges/over-grand-canyon.svg",
+  },
   delivered: {
     id: "delivered",
     title: "Delivered",
@@ -115,6 +139,15 @@ export function computeBadgesFromRegions(args: {
   }
   if (has("mount-rainier")) {
     out.push({ id: "over-mount-rainier", meta: { region: "mount-rainier" } });
+  }
+  if (has("area-51-region")) {
+    out.push({ id: "over-area-51-region", meta: { region: "area-51-region" } });
+  }
+  if (has("devils-tower")) {
+    out.push({ id: "over-devils-tower", meta: { region: "devils-tower" } });
+  }
+  if (has("grand-canyon")) {
+    out.push({ id: "over-grand-canyon", meta: { region: "grand-canyon" } });
   }
   if (delivered) {
     out.push({ id: "delivered", meta: { delivered: true }, earnedAt: deliveredAtISO });
