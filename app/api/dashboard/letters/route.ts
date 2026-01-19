@@ -354,13 +354,15 @@ export async function GET(req: Request) {
     !!err && (err.code === "42703" || /sleep_(offset|min|start|end)/i.test(err.message || ""));
 
   // --- Sent letters ---
-  let { data: sentData, error: sentErr } = await supabaseServer
+  let sentData: any[] | null = null;
+  let sentErr: any = null;
+  ({ data: sentData, error: sentErr } = await supabaseServer
     .from("letters")
     .select(sleepSelect)
     .eq("from_email", email)
     .or("archived_at.is.null,canceled_at.not.is.null")
     .order("sent_at", { ascending: false })
-    .limit(50);
+    .limit(50));
 
   if (sentErr && missingSleepColumns(sentErr)) {
     if (!warnedMissingSleepColumns) {
@@ -381,13 +383,15 @@ export async function GET(req: Request) {
   }
 
   // --- Incoming letters ---
-  let { data: incomingData, error: incomingErr } = await supabaseServer
+  let incomingData: any[] | null = null;
+  let incomingErr: any = null;
+  ({ data: incomingData, error: incomingErr } = await supabaseServer
     .from("letters")
     .select(sleepSelect)
     .eq("to_email", email)
     .is("recipient_archived_at", null)
     .order("sent_at", { ascending: false })
-    .limit(50);
+    .limit(50));
 
   if (incomingErr && missingSleepColumns(incomingErr)) {
     if (!warnedMissingSleepColumns) {
