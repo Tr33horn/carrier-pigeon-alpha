@@ -46,6 +46,7 @@ export const US_REGIONS: GeoRegion[] = [
   R("olympic-peninsula", "Olympic Peninsula", [46.85, -124.80, 48.45, -122.55], "over"),
   R("san-juan-islands", "the San Juan Islands", [48.35, -123.35, 48.85, -122.65], "over"),
   R("mt-hood", "Mount Hood", [45.15, -121.95, 45.55, -121.40], "over"),
+  R("hawaiian-islands", "the Hawaiian Islands", [18.50, -161.10, 22.30, -154.60], "over"),
 
   // --- Puget Sound / I-5 corridor ---
   R("puget-sound", "Puget Sound", [47.0, -123.5, 48.6, -122.0], "over"),
@@ -64,6 +65,7 @@ export const US_REGIONS: GeoRegion[] = [
   R("sequoia-kings-canyon", "Sequoia and Kings Canyon", [36.25, -119.90, 37.25, -118.20], "over"),
   R("death-valley", "Death Valley", [35.50, -117.70, 37.50, -115.00], "over"),
   R("lake-tahoe", "Lake Tahoe", [38.80, -120.25, 39.35, -119.85], "over"),
+  R("pacific-ocean", "the Pacific Ocean", [0.00, -180.00, 50.00, -110.00], "over"),
 
   // --- WA interior specifics ---
   R("yakima", "the Yakima Valley", [46.20, -121.00, 47.20, -119.50], "over"),
