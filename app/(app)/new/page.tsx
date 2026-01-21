@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import { CITIES } from "../lib/cities";
 import { CityTypeahead } from "../components/CityTypeahead";
-import { replaceDraft, useLetterDraftStore, type LatLonCity } from "@/app/lib/letterDraftStore";
+import { clearDraft, setDraft, useLetterDraftStore, type LatLonCity, type LetterDraft } from "@/app/lib/letterDraftStore";
 
 /* ---------- helpers ---------- */
 function nearestCity(lat: number, lon: number, cities: { name: string; lat: number; lon: number }[]) {
@@ -57,6 +57,11 @@ export default function NewPage() {
 function ComposePage() {
   const router = useRouter();
   const draft = useLetterDraftStore();
+  const draftHydrated = useLetterDraftStore((d) => d.hydrated);
+  const draftUpdatedAt = useLetterDraftStore((d) => d.updatedAt);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didInitRef = useRef(false);
+  const [saving, setSaving] = useState(false);
 
   // Hydration-safe: only show invalid states after the user attempts to continue
   const [showErrors, setShowErrors] = useState(false);
@@ -87,6 +92,122 @@ function ComposePage() {
   const [error, setError] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(1);
 
+  function formatSavedTime(iso: string) {
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return "";
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+
+  function buildDraftSnapshot(overrides: Partial<LetterDraft> = {}) {
+    return {
+      ...draft,
+      fromName,
+      fromEmail,
+      toName,
+      toEmail,
+      subject,
+      message,
+      origin,
+      destination,
+      ...overrides,
+    };
+  }
+
+  function scheduleSave(overrides: Partial<LetterDraft> = {}) {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    setSaving(true);
+    const snapshot = buildDraftSnapshot(overrides);
+    saveTimerRef.current = window.setTimeout(() => {
+      setDraft(snapshot);
+      setSaving(false);
+      saveTimerRef.current = null;
+    }, 350);
+  }
+
+  function updateFromName(next: string) {
+    setFromName(next);
+    scheduleSave({ fromName: next });
+  }
+
+  function updateToName(next: string) {
+    setToName(next);
+    scheduleSave({ toName: next });
+  }
+
+  function updateFromEmail(next: string) {
+    setFromEmail(next);
+    scheduleSave({ fromEmail: next });
+  }
+
+  function updateToEmail(next: string) {
+    setToEmail(next);
+    scheduleSave({ toEmail: next });
+  }
+
+  function updateSubject(next: string) {
+    setSubject(next);
+    scheduleSave({ subject: next });
+  }
+
+  function updateMessage(next: string) {
+    setMessage(next);
+    scheduleSave({ message: next });
+  }
+
+  function updateOrigin(next: LatLonCity) {
+    setOrigin(next);
+    scheduleSave({ origin: next });
+  }
+
+  function updateDestination(next: LatLonCity) {
+    setDestination(next);
+    scheduleSave({ destination: next });
+  }
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!draftHydrated || didInitRef.current) return;
+    const isFreshDefaults =
+      (!fromEmail && !toEmail && !toName && !subject && !message && (fromName === "You" || !fromName)) &&
+      origin.name === defaultOrigin.name &&
+      destination.name === defaultDest.name;
+
+    if (isFreshDefaults) {
+      setFromName(draft.fromName || "You");
+      setFromEmail(draft.fromEmail || "");
+      setToName(draft.toName || "");
+      setToEmail(draft.toEmail || "");
+      setSubject(draft.subject || "");
+      setMessage(draft.message || "");
+      setOrigin(draft.origin?.name ? draft.origin : defaultOrigin);
+      setDestination(draft.destination?.name ? draft.destination : defaultDest);
+    }
+
+    didInitRef.current = true;
+  }, [
+    draftHydrated,
+    draft,
+    defaultOrigin,
+    defaultDest,
+    fromEmail,
+    toEmail,
+    toName,
+    subject,
+    message,
+    fromName,
+    origin,
+    destination,
+  ]);
+
   /* ---------- validation ---------- */
   const senderEmailOk = isEmailValid(fromEmail);
   const recipientEmailOk = isEmailValid(toEmail);
@@ -107,6 +228,38 @@ function ComposePage() {
     return { total: steps.length, label: current.label };
   }, [activeStep]);
 
+  const draftStatusText = !draftHydrated
+    ? "Draft: Loading..."
+    : saving
+    ? "Draft: Saving..."
+    : draftUpdatedAt
+    ? `Draft saved ${formatSavedTime(draftUpdatedAt)}`
+    : "Draft: Not saved yet";
+
+  function handleClearDraft() {
+    if (!confirm("Clear your saved draft?")) return;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    setSaving(false);
+    clearDraft();
+    setFromName("You");
+    setToName("");
+    setFromEmail("");
+    setToEmail("");
+    setSubject("");
+    setMessage("");
+    setOrigin(defaultOrigin);
+    setDestination(defaultDest);
+    setShowErrors(false);
+    setError(null);
+    setActiveStep(1);
+    setShowOriginPicker(false);
+    setLocError(null);
+    setShowPrompts(false);
+  }
+
   /* ---------- geolocation ---------- */
   function useMyLocationForOrigin() {
     setLocError(null);
@@ -122,7 +275,7 @@ function ComposePage() {
       (pos) => {
         const { latitude, longitude } = pos.coords;
         const city = nearestCity(latitude, longitude, CITIES);
-        setOrigin(city);
+        updateOrigin(city);
         setLocating(false);
       },
       (err) => {
@@ -135,8 +288,11 @@ function ComposePage() {
 
   function swapRoute() {
     setShowOriginPicker(false);
-    setOrigin(destination);
-    setDestination(origin);
+    const nextOrigin = destination;
+    const nextDestination = origin;
+    setOrigin(nextOrigin);
+    setDestination(nextDestination);
+    scheduleSave({ origin: nextOrigin, destination: nextDestination });
   }
 
   /* ---------- continue ---------- */
@@ -177,17 +333,23 @@ function ComposePage() {
       return;
     }
 
-    replaceDraft({
-      ...draft,
-      fromName: fromName.trim(),
-      fromEmail: fromEmail.trim(),
-      toName: toName.trim(),
-      toEmail: toEmail.trim(),
-      subject: subject.trim(),
-      message,
-      origin,
-      destination,
-    });
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    setSaving(false);
+    setDraft(
+      buildDraftSnapshot({
+        fromName: fromName.trim(),
+        fromEmail: fromEmail.trim(),
+        toName: toName.trim(),
+        toEmail: toEmail.trim(),
+        subject: subject.trim(),
+        message,
+        origin,
+        destination,
+      })
+    );
 
     router.push("/send");
   }
@@ -211,6 +373,13 @@ function ComposePage() {
 
             <div className="stepKicker">
               Step {activeStep} of {stepMeta.total} - {stepMeta.label}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+              <div className="metaPill faint">{draftStatusText}</div>
+              <button type="button" className="btnGhost" onClick={handleClearDraft}>
+                Clear draft
+              </button>
             </div>
           </div>
         </div>
@@ -236,7 +405,7 @@ function ComposePage() {
                   <input
                     className={`input ${showErrors && !fromNameOk ? "invalid" : ""}`}
                     value={fromName}
-                    onChange={(e) => setFromName(e.target.value)}
+                    onChange={(e) => updateFromName(e.target.value)}
                     placeholder="Your name"
                   />
                 </label>
@@ -249,7 +418,7 @@ function ComposePage() {
                     className={`input ${showErrors && fromEmail.trim() && !senderEmailOk ? "invalid" : ""}`}
                     type="email"
                     value={fromEmail}
-                    onChange={(e) => setFromEmail(e.target.value)}
+                    onChange={(e) => updateFromEmail(e.target.value)}
                     placeholder="you@email.com"
                   />
                   {showErrors && fromEmail.trim() && !senderEmailOk && (
@@ -264,7 +433,7 @@ function ComposePage() {
                   <input
                     className={`input ${showErrors && !toNameOk ? "invalid" : ""}`}
                     value={toName}
-                    onChange={(e) => setToName(e.target.value)}
+                    onChange={(e) => updateToName(e.target.value)}
                     placeholder="Recipient name"
                   />
                 </label>
@@ -277,7 +446,7 @@ function ComposePage() {
                     className={`input ${showErrors && toEmail.trim() && !recipientEmailOk ? "invalid" : ""}`}
                     type="email"
                     value={toEmail}
-                    onChange={(e) => setToEmail(e.target.value)}
+                    onChange={(e) => updateToEmail(e.target.value)}
                     placeholder="name@email.com"
                   />
                   {showErrors && toEmail.trim() && !recipientEmailOk && (
@@ -304,7 +473,7 @@ function ComposePage() {
                 <input
                   className="input"
                   value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
+                  onChange={(e) => updateSubject(e.target.value)}
                   placeholder="Optional subject..."
                 />
               </label>
@@ -314,7 +483,7 @@ function ComposePage() {
                 <textarea
                   className={`textarea ${showErrors && !messageOk ? "invalid" : ""}`}
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                  onChange={(e) => updateMessage(e.target.value)}
                   rows={7}
                   placeholder="Write something worth the flight..."
                 />
@@ -339,7 +508,10 @@ function ComposePage() {
                     key={text}
                     type="button"
                     className="ideaChip"
-                    onClick={() => setMessage((prev) => (prev.trim() ? `${prev}\n\n${text}` : text))}
+                  onClick={() => {
+                    const next = message.trim() ? `${message}\n\n${text}` : text;
+                    updateMessage(next);
+                  }}
                   >
                     {text}
                   </button>
@@ -396,7 +568,7 @@ function ComposePage() {
                       cities={CITIES}
                       value={origin}
                       onChange={(c) => {
-                        setOrigin(c);
+                        updateOrigin(c);
                         setShowOriginPicker(false);
                       }}
                       placeholder="Type a US city..."
@@ -412,7 +584,7 @@ function ComposePage() {
                   label="Destination"
                   cities={CITIES}
                   value={destination}
-                  onChange={setDestination}
+                  onChange={updateDestination}
                   placeholder="Type a US city..."
                 />
               </div>

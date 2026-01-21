@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 export default function Home() {
   const [status, setStatus] = useState("Checking Supabase connection...");
   const [ok, setOk] = useState<boolean | null>(null);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -37,6 +38,28 @@ export default function Home() {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadSession() {
+      try {
+        const res = await fetch("/api/auth/session", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!alive) return;
+        setSignedIn(!!data?.signedIn);
+      } catch {
+        if (!alive) return;
+        setSignedIn(false);
+      }
+    }
+    loadSession();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const inboxHref = signedIn ? "/inbox" : "/start";
+  const sentHref = signedIn ? "/sent" : "/start";
 
   return (
     <main className="pageBg">
@@ -138,6 +161,20 @@ export default function Home() {
               <Link href="/dashboard" className="btnGhost" style={{ textAlign: "center" }}>
                 Go to Dashboard
               </Link>
+
+              <Link href={inboxHref} className="btnGhost" style={{ textAlign: "center" }}>
+                Inbox
+              </Link>
+
+              <Link href={sentHref} className="btnGhost" style={{ textAlign: "center" }}>
+                Sent
+              </Link>
+
+              {signedIn === false ? (
+                <div className="muted" style={{ textAlign: "center" }}>
+                  Sign in to collect your letters.
+                </div>
+              ) : null}
 
               <Link href="/about" className="btnGhost" style={{ textAlign: "center" }}>
                 About FLOK

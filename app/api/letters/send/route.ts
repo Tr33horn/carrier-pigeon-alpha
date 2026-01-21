@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { createElement } from "react";
 import { supabaseServer } from "../../../lib/supabaseServer";
 import { sendEmail } from "../../../lib/email/send";
+import { createSupabaseServerReadClient } from "@/app/lib/supabase/server";
 
 // ✅ Geo label system
 import { ROUTE_TUNED_REGIONS } from "../../../lib/geo/geoRegions.routes";
@@ -261,6 +262,13 @@ function resolveSealId(opts: { bird: BirdType; requestedSealId: unknown }) {
 }
 
 export async function POST(req: Request) {
+  const authClient = await createSupabaseServerReadClient();
+  const { data: authData } = await authClient.auth.getUser();
+  const user = authData?.user ?? null;
+  if (!user) {
+    return NextResponse.json({ error: "auth required" }, { status: 401 });
+  }
+
   const body = await req.json();
 
   // ✅ NEW: accept seal_id from client
@@ -374,6 +382,7 @@ export async function POST(req: Request) {
       sleep_offset_min: offsetMin,
       sleep_start_hour: sleepCfg?.sleepStartHour ?? null,
       sleep_end_hour: sleepCfg?.sleepEndHour ?? null,
+      sender_user_id: user.id,
 
       from_name,
       from_email: normalizedFromEmail,

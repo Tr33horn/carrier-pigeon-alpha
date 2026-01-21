@@ -65,7 +65,7 @@ export const US_REGIONS: GeoRegion[] = [
   R("sequoia-kings-canyon", "Sequoia and Kings Canyon", [36.25, -119.90, 37.25, -118.20], "over"),
   R("death-valley", "Death Valley", [35.50, -117.70, 37.50, -115.00], "over"),
   R("lake-tahoe", "Lake Tahoe", [38.80, -120.25, 39.35, -119.85], "over"),
-  R("pacific-ocean", "the Pacific Ocean", [0.00, -180.00, 50.00, -110.00], "over"),
+  R("pacific-ocean", "the Pacific Ocean", [19.53, -154.07, 48.50, -122.29], "over"),
 
   // --- WA interior specifics ---
   R("yakima", "the Yakima Valley", [46.20, -121.00, 47.20, -119.50], "over"),

@@ -19,9 +19,12 @@ export type LetterDraft = {
   bird: BirdType | null;
   sealId: string | null;
   envelopeTint: EnvelopeTint;
+  updatedAt: string | null;
+  hydrated: boolean;
 };
 
-const STORAGE_KEY = "flok_letter_draft_v1";
+const STORAGE_KEY = "flok:letterDraft:v1";
+const LEGACY_STORAGE_KEY = "flok_letter_draft_v1";
 
 const defaultDraft: LetterDraft = {
   fromName: "",
@@ -35,6 +38,8 @@ const defaultDraft: LetterDraft = {
   bird: null,
   sealId: null,
   envelopeTint: "classic",
+  updatedAt: null,
+  hydrated: false,
 };
 
 let draftState: LetterDraft = { ...defaultDraft };
@@ -49,32 +54,55 @@ function emit() {
 function persist() {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(draftState));
+    const { hydrated, ...persisted } = draftState;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
   } catch {
     // ignore storage errors
   }
 }
 
-function hydrateFromSessionOnce() {
+function migrateLegacyIfNeeded() {
+  if (typeof window === "undefined") return null;
+  try {
+    const current = window.localStorage.getItem(STORAGE_KEY);
+    if (current) return current;
+
+    const legacy = window.sessionStorage.getItem(LEGACY_STORAGE_KEY);
+    if (!legacy) return null;
+
+    window.localStorage.setItem(STORAGE_KEY, legacy);
+    window.sessionStorage.removeItem(LEGACY_STORAGE_KEY);
+    return legacy;
+  } catch {
+    return null;
+  }
+}
+
+function hydrateFromStorageOnce() {
   if (isHydrated) return;
   isHydrated = true;
 
   if (typeof window === "undefined") return;
 
   try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
+    const raw = window.localStorage.getItem(STORAGE_KEY) ?? migrateLegacyIfNeeded();
+    if (!raw) {
+      draftState = { ...draftState, hydrated: true };
+      emit();
+      return;
+    }
 
     const parsed = JSON.parse(raw) as Partial<LetterDraft>;
     draftState = {
       ...defaultDraft,
       ...parsed,
       envelopeTint: normalizeEnvelopeTint(parsed.envelopeTint),
+      updatedAt: parsed.updatedAt ?? null,
+      hydrated: true,
     };
   } catch {
-    draftState = { ...defaultDraft };
+    draftState = { ...defaultDraft, hydrated: true };
   } finally {
-    // tell subscribers we may have new data
     emit();
   }
 }
@@ -84,6 +112,8 @@ export function replaceDraft(next: LetterDraft) {
     ...defaultDraft,
     ...next,
     envelopeTint: normalizeEnvelopeTint(next.envelopeTint),
+    updatedAt: new Date().toISOString(),
+    hydrated: true,
   };
   persist();
   emit();
@@ -94,16 +124,19 @@ export function setDraft(patch: Partial<LetterDraft>) {
     ...draftState,
     ...patch,
     envelopeTint: normalizeEnvelopeTint(patch.envelopeTint ?? draftState.envelopeTint),
+    updatedAt: new Date().toISOString(),
+    hydrated: true,
   };
   persist();
   emit();
 }
 
 export function clearDraft() {
-  draftState = { ...defaultDraft };
+  draftState = { ...defaultDraft, hydrated: true, updatedAt: null };
   if (typeof window !== "undefined") {
     try {
-      window.sessionStorage.removeItem(STORAGE_KEY);
+      window.localStorage.removeItem(STORAGE_KEY);
+      window.sessionStorage.removeItem(LEGACY_STORAGE_KEY);
     } catch {
       // ignore storage errors
     }
@@ -114,7 +147,7 @@ export function clearDraft() {
 /**
  * ✅ Hydration-safe external store hook:
  * - Server snapshot is ALWAYS defaultDraft
- * - Client hydrates from sessionStorage in useEffect AFTER mount
+ * - Client hydrates from localStorage in useEffect AFTER mount
  */
 export function useLetterDraftStore<T = LetterDraft>(selector?: (draft: LetterDraft) => T) {
   const getSnapshot = () => (selector ? selector(draftState) : (draftState as T));
@@ -131,7 +164,7 @@ export function useLetterDraftStore<T = LetterDraft>(selector?: (draft: LetterDr
 
   // hydrate after mount (never during render)
   useEffect(() => {
-    hydrateFromSessionOnce();
+    hydrateFromStorageOnce();
   }, []);
 
   return value;
