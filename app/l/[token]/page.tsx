@@ -24,6 +24,15 @@ type PreviewRow = {
   eta_at: string;
 };
 
+type StatusRow = {
+  bird_type: string | null;
+  dest_region_id: string | null;
+  eta_at: string | null;
+  sent_at: string | null;
+  opened_at: string | null;
+  canceled_at: string | null;
+};
+
 type LetterRow = {
   id: string;
   sender_user_id: string;
@@ -35,13 +44,13 @@ type LetterRow = {
   opened_at: string | null;
 };
 
-function PreviewCard({ preview }: { preview: PreviewRow }) {
+function StatusCard({ status, title }: { status: StatusRow; title?: string }) {
   return (
     <div className="card" style={{ maxWidth: 640 }}>
       <div className="cardHead">
         <div>
-          <div className="kicker">Letter preview</div>
-          <div className="h2">A letter is inbound</div>
+          <div className="kicker">Flight status</div>
+          <div className="h2">{title ?? "In transit"}</div>
         </div>
       </div>
 
@@ -50,21 +59,23 @@ function PreviewCard({ preview }: { preview: PreviewRow }) {
           <div className="muted" style={{ fontSize: 12 }}>
             Bird
           </div>
-          <div style={{ fontWeight: 700 }}>{preview.bird_type}</div>
+          <div style={{ fontWeight: 700 }}>{status.bird_type ?? "bird"}</div>
         </div>
 
         <div>
           <div className="muted" style={{ fontSize: 12 }}>
             Destination
           </div>
-          <div style={{ fontWeight: 700 }}>{regionLabelFor(preview.dest_region_id)}</div>
+          <div style={{ fontWeight: 700 }}>{regionLabelFor(status.dest_region_id)}</div>
         </div>
 
         <div>
           <div className="muted" style={{ fontSize: 12 }}>
             ETA
           </div>
-          <div style={{ fontWeight: 700 }}>{formatLocal(preview.eta_at)}</div>
+          <div style={{ fontWeight: 700 }}>
+            {status.eta_at ? formatLocal(status.eta_at) : "ETA unknown"}
+          </div>
         </div>
       </div>
     </div>
@@ -150,21 +161,24 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
   const { data: userData } = await supabase.auth.getUser();
   const user = userData?.user ?? null;
 
+  const { data: statusData } = await supabase.rpc("status_letter_by_token", { p_token: token });
+  const status = (Array.isArray(statusData) ? statusData[0] : statusData) as StatusRow | null | undefined;
+
+  const etaMs = status?.eta_at ? new Date(status.eta_at).getTime() : null;
+  const arrived = !!(etaMs && Date.now() >= etaMs);
+
   // Logged out: preview + OTP
   if (!user) {
-    const { data: previewData } = await supabase.rpc("preview_letter_by_token", { p_token: token });
-    const preview = (Array.isArray(previewData) ? previewData[0] : previewData) as PreviewRow | null | undefined;
-
     return (
       <main className="pageBg">
         <CleanAuthHash />
         <div className="wrap">
-          <h1 className="h1">Letter Preview</h1>
+          <h1 className="h1">Flight status</h1>
           <p className="muted" style={{ maxWidth: 720 }}>
-            Sign in to open the letter. This preview keeps the message sealed.
+            Sign in to open the letter. The message stays sealed until it arrives.
           </p>
 
-          {!preview ? <InvalidLinkCard /> : <PreviewCard preview={preview} />}
+          {!status ? <InvalidLinkCard /> : <StatusCard status={status} />}
 
           <div style={{ marginTop: 16 }}>
             <OtpForm />
@@ -178,12 +192,6 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
   const { data: openedData } = await supabase.rpc("read_opened_letter_by_token", { p_token: token });
   const openedRow = (Array.isArray(openedData) ? openedData[0] : openedData) as LetterRow | null | undefined;
   const isOpened = !!openedRow?.id;
-
-  let previewRow: PreviewRow | null | undefined = null;
-  if (!isOpened) {
-    const { data: previewData } = await supabase.rpc("preview_letter_by_token", { p_token: token });
-    previewRow = (Array.isArray(previewData) ? previewData[0] : previewData) as PreviewRow | null | undefined;
-  }
 
   if (isOpened) {
     return (
@@ -210,15 +218,22 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
     <main className="pageBg">
       <CleanAuthHash />
       <div className="wrap">
-        <h1 className="h1">Letter Preview</h1>
+        <h1 className="h1">Flight status</h1>
 
-        {!previewRow ? (
+        {!status ? (
           <InvalidLinkCard openedMessage />
         ) : (
           <>
-            <PreviewCard preview={previewRow} />
+            <StatusCard status={status} title="In transit" />
             <div style={{ marginTop: 16 }}>
-              <UnsealButton token={token} />
+              {arrived ? (
+                <UnsealButton token={token} />
+              ) : (
+                <div className="muted">
+                  Arrives at {status.eta_at ? formatLocal(status.eta_at) : "an unknown time"}. You
+                  can unseal when it lands.
+                </div>
+              )}
             </div>
           </>
         )}

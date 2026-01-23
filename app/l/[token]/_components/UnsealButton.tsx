@@ -24,7 +24,13 @@ export default function UnsealButton({ token }: Props) {
         body: JSON.stringify({ token }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error ?? "Could not unseal the letter.");
+      if (!res.ok) {
+        const msg = String(data?.error ?? "");
+        if (msg.includes("not_arrived")) {
+          throw new Error("Not yet — this letter has not arrived.");
+        }
+        throw new Error(msg || "Could not unseal the letter.");
+      }
       router.refresh();
     } catch (e: any) {
       setError(e?.message || "Could not unseal the letter.");
