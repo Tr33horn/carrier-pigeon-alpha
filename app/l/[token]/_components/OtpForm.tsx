@@ -9,10 +9,6 @@ import { safeJson } from "@/app/lib/http";
 
 type Step = "idle" | "sent" | "verifying" | "error";
 
-type Props = {
-  token: string;
-};
-
 function looksLikeEmail(value: string) {
   return value.includes("@");
 }
@@ -21,7 +17,7 @@ function normalizeInput(value: string) {
   return value.trim();
 }
 
-export default function OtpForm({ token }: Props) {
+export default function OtpForm() {
   const [contact, setContact] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<Step>("idle");
