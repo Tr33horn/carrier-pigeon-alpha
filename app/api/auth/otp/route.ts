@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createHash, randomUUID } from "crypto";
 import { sanitizeNext } from "@/app/lib/authRedirect";
-import { getCanonicalOrigin } from "@/app/lib/appOrigin";
+import { getCanonicalOrigin, isLocalOrigin } from "@/app/lib/appOrigin";
 import { createSupabaseRouteClient } from "@/app/lib/supabase/routeClient";
 
 function isEmailValid(email: string) {
@@ -54,6 +54,13 @@ export async function POST(req: Request) {
 
   const nextPath = sanitizeNext(nextRaw);
   const origin = getCanonicalOrigin(req.url);
+
+  if (process.env.NODE_ENV === "production" && isLocalOrigin(origin)) {
+    return NextResponse.json(
+      { error: "Auth redirect origin is misconfigured. Contact support." },
+      { status: 500 }
+    );
+  }
   const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
 
   if (process.env.NEXT_PUBLIC_APP_ENV === "dev") {

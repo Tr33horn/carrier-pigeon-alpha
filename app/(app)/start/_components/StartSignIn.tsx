@@ -66,6 +66,7 @@ export default function StartSignIn() {
       const res = await fetch("/api/auth/otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ email: value, next: nextPath }),
       });
 
