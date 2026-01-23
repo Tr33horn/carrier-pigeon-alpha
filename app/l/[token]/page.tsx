@@ -167,7 +167,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
           {!preview ? <InvalidLinkCard /> : <PreviewCard preview={preview} />}
 
           <div style={{ marginTop: 16 }}>
-            <OtpForm token={token} />
+            <OtpForm />
           </div>
         </div>
       </main>
