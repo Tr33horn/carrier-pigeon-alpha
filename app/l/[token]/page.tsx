@@ -5,7 +5,7 @@ import CleanAuthHash from "./_components/CleanAuthHash";
 import MapSectionClient from "./_components/MapSectionClient";
 import TimelineSection from "./_components/TimelineSection";
 import { birdDisplayLabel, normalizeBird } from "@/app/lib/birds";
-import { getEnvelopeTintColor } from "@/app/lib/envelopeTints";
+import { getEnvelopeTintColor, normalizeEnvelopeTint } from "@/app/lib/envelopeTints";
 import { getSealImgSrc } from "@/app/lib/seals";
 import styles from "./status.module.css";
 
@@ -121,7 +121,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
   const birdType = normalizeBird(letter.bird_type ?? letter.bird ?? "pigeon");
   const birdLabel = birdDisplayLabel(birdType);
   const sealImg = getSealImgSrc(letter.seal_id) || "/waxseal.png";
-  const envTint = getEnvelopeTintColor(letter.envelope_tint);
+  const envTint = getEnvelopeTintColor(normalizeEnvelopeTint(letter.envelope_tint));
 
   // Logged out: status + OTP
   if (!user) {
