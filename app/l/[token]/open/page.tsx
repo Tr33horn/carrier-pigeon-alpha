@@ -1,7 +1,10 @@
-import OtpForm from "./_components/OtpForm";
+import { redirect } from "next/navigation";
+
+import OtpForm from "../_components/OtpForm";
+import UnsealButton from "../_components/UnsealButton";
+import CleanAuthHash from "../_components/CleanAuthHash";
 import { createSupabaseServerReadClient } from "@/app/lib/supabase/server";
 import { US_REGIONS } from "@/app/lib/geo/usRegions";
-import CleanAuthHash from "./_components/CleanAuthHash";
 
 function formatLocal(iso?: string | null) {
   if (!iso) return "";
@@ -37,13 +40,13 @@ type LetterRow = {
   opened_at: string | null;
 };
 
-function StatusCard({ status, title }: { status: StatusRow; title?: string }) {
+function StatusCard({ status }: { status: StatusRow }) {
   return (
     <div className="card" style={{ maxWidth: 640 }}>
       <div className="cardHead">
         <div>
           <div className="kicker">Flight status</div>
-          <div className="h2">{title ?? "In transit"}</div>
+          <div className="h2">In transit</div>
         </div>
       </div>
 
@@ -93,7 +96,7 @@ function ReceiptCard({ bird_type, dest_region_id, eta_at }: StatusRow) {
           <div className="muted" style={{ fontSize: 12 }}>
             Bird
           </div>
-          <div style={{ fontWeight: 700 }}>{bird_type}</div>
+          <div style={{ fontWeight: 700 }}>{bird_type ?? "bird"}</div>
         </div>
 
         <div>
@@ -107,7 +110,7 @@ function ReceiptCard({ bird_type, dest_region_id, eta_at }: StatusRow) {
           <div className="muted" style={{ fontSize: 12 }}>
             ETA
           </div>
-          <div style={{ fontWeight: 700 }}>{formatLocal(eta_at)}</div>
+          <div style={{ fontWeight: 700 }}>{eta_at ? formatLocal(eta_at) : "ETA unknown"}</div>
         </div>
       </div>
     </div>
@@ -137,17 +140,15 @@ function LetterView({ letter }: { letter: LetterRow }) {
   );
 }
 
-function InvalidLinkCard({ openedMessage }: { openedMessage?: boolean }) {
+function InvalidLinkCard() {
   return (
     <div className="card" style={{ maxWidth: 640 }}>
-      <div className="err">
-        ❌ This link is {openedMessage ? "invalid, expired, or already used" : "invalid or expired"}.
-      </div>
+      <div className="err">❌ This link is invalid or expired.</div>
     </div>
   );
 }
 
-export default async function LetterTokenPage({ params }: { params: Promise<{ token: string }> }) {
+export default async function LetterOpenPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const supabase = await createSupabaseServerReadClient();
 
@@ -157,31 +158,32 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
   const { data: statusData } = await supabase.rpc("status_letter_by_token", { p_token: token });
   const status = (Array.isArray(statusData) ? statusData[0] : statusData) as StatusRow | null | undefined;
 
-  const etaMs = status?.eta_at ? new Date(status.eta_at).getTime() : null;
+  if (!status) {
+    return (
+      <main className="pageBg">
+        <CleanAuthHash />
+        <div className="wrap">
+          <h1 className="h1">Open letter</h1>
+          <InvalidLinkCard />
+        </div>
+      </main>
+    );
+  }
+
+  const etaMs = status.eta_at ? new Date(status.eta_at).getTime() : null;
   const arrived = !!(etaMs && Date.now() >= etaMs);
 
-  // Logged out: status + OTP
+  if (!arrived) {
+    redirect(`/l/${token}`);
+  }
+
   if (!user) {
     return (
       <main className="pageBg">
         <CleanAuthHash />
         <div className="wrap">
-          <h1 className="h1">Flight status</h1>
-          <p className="muted" style={{ maxWidth: 720 }}>
-            Track the flight here. Sign in to open once delivered.
-          </p>
-
-          {!status ? (
-            <InvalidLinkCard />
-          ) : (
-            <>
-              <StatusCard status={status} />
-              <div className="muted" style={{ marginTop: 12 }}>
-                This letter stays sealed until it arrives.
-              </div>
-            </>
-          )}
-
+          <h1 className="h1">Open letter</h1>
+          <StatusCard status={status} />
           <div style={{ marginTop: 16 }}>
             <OtpForm />
           </div>
@@ -190,59 +192,40 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
     );
   }
 
-  // Logged in: prefer opened, else show preview
   const { data: openedData } = await supabase.rpc("read_opened_letter_by_token", { p_token: token });
   const openedRow = (Array.isArray(openedData) ? openedData[0] : openedData) as LetterRow | null | undefined;
   const isOpened = !!openedRow?.id;
-
-  if (isOpened) {
-    return (
-      <main className="pageBg">
-        <CleanAuthHash />
-        <div className="wrap">
-          <h1 className="h1">Letter Delivered</h1>
-
-          <ReceiptCard
-            bird_type={openedRow!.bird_type}
-            dest_region_id={openedRow!.dest_region_id}
-            eta_at={openedRow!.eta_at}
-            sent_at={null}
-            opened_at={openedRow!.opened_at}
-            canceled_at={null}
-          />
-
-          <div style={{ marginTop: 16 }}>
-            <LetterView letter={openedRow as LetterRow} />
-          </div>
-        </div>
-      </main>
-    );
-  }
 
   return (
     <main className="pageBg">
       <CleanAuthHash />
       <div className="wrap">
-        <h1 className="h1">Flight status</h1>
+        <h1 className="h1">Open letter</h1>
 
-        {!status ? (
-          <InvalidLinkCard openedMessage />
-        ) : (
+        <div style={{ marginTop: 8 }}>
+          <a className="link" href={`/l/${token}`}>
+            View flight status
+          </a>
+        </div>
+
+        {isOpened ? (
           <>
-            <StatusCard status={status} title="In transit" />
+            <ReceiptCard
+              bird_type={openedRow!.bird_type}
+              dest_region_id={openedRow!.dest_region_id}
+              eta_at={openedRow!.eta_at}
+              sent_at={null}
+              opened_at={openedRow!.opened_at}
+              canceled_at={null}
+            />
             <div style={{ marginTop: 16 }}>
-              {arrived ? (
-                <a className="btnPrimary" href={`/l/${token}/open`}>
-                  Open letter
-                </a>
-              ) : (
-                <div className="muted">
-                  Arrives at {status.eta_at ? formatLocal(status.eta_at) : "an unknown time"}. You
-                  can open it once it lands.
-                </div>
-              )}
+              <LetterView letter={openedRow as LetterRow} />
             </div>
           </>
+        ) : (
+          <div style={{ marginTop: 16 }}>
+            <UnsealButton token={token} />
+          </div>
         )}
       </div>
     </main>
