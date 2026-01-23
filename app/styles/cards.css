@@ -367,6 +367,8 @@
   background:
     linear-gradient(135deg, var(--alp-blue-18), rgba(255,255,255,0) 55%),
     var(--card);
+  outline: 2px solid rgba(0,0,0,0.08);
+  outline-offset: 2px;
 }
 
 .birdRow{

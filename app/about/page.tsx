@@ -1,8 +1,12 @@
+import AppHeader from "@/app/_components/AppHeader";
+
 export default function AboutPage() {
   return (
-    <main className="pageBg">
-      <div className="wrap">
-        <div className="card">
+    <>
+      <AppHeader />
+      <main className="pageBg">
+        <div className="wrap">
+          <div className="card">
           {/* Header */}
           <div
             style={{
@@ -107,7 +111,8 @@ export default function AboutPage() {
             </a>
           </div>
         </div>
-      </div>
-    </main>
+        </div>
+      </main>
+    </>
   );
 }

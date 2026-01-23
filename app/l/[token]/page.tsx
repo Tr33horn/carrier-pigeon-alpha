@@ -28,14 +28,11 @@ type LetterRow = {
   id: string;
   sender_user_id: string;
   recipient_user_id: string | null;
-  recipient_email: string | null;
-  recipient_phone: string | null;
   bird_type: string;
   dest_region_id: string;
   eta_at: string;
   message: string;
   opened_at: string | null;
-  created_at: string;
 };
 
 function PreviewCard({ preview }: { preview: PreviewRow }) {

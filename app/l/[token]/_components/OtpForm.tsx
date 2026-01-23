@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
+
+import { sanitizeNext } from "@/app/lib/authRedirect";
 import { createSupabaseBrowserClient } from "@/app/lib/supabase/client";
+import { safeJson } from "@/app/lib/http";
 
 type Step = "idle" | "sent" | "verifying" | "error";
 
@@ -23,9 +27,11 @@ export default function OtpForm({ token }: Props) {
   const [step, setStep] = useState<Step>("idle");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const pathname = usePathname();
 
   const isEmail = useMemo(() => looksLikeEmail(contact), [contact]);
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const nextPath = useMemo(() => sanitizeNext(pathname), [pathname]);
 
   const sendOtp = async () => {
     setSending(true);
@@ -43,15 +49,15 @@ export default function OtpForm({ token }: Props) {
         // Send an email link that returns through our callback route,
         // which exchanges the code and sets the session cookie.
         // Supabase Auth Redirect URLs must include this URL for OTP to succeed.
-        const base = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
-        const redirectTo = `${base}/auth/callback?next=${encodeURIComponent(`/l/${token}`)}`;
-
-        const { error: otpErr } = await supabase.auth.signInWithOtp({
-          email: value,
-          options: { emailRedirectTo: redirectTo },
+        const res = await fetch("/api/auth/otp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ email: value, next: nextPath }),
         });
 
-        if (otpErr) throw otpErr;
+        const data = await safeJson(res);
+        if (!res.ok) throw new Error(data?.error ?? "Could not send OTP. Try again.");
         setStep("sent");
         return;
       }
@@ -140,6 +146,10 @@ export default function OtpForm({ token }: Props) {
         {step === "sent" && isEmail ? (
           <div className="muted">Check your email for a sign-in link.</div>
         ) : null}
+
+        <div className="muted" style={{ fontSize: 12, opacity: 0.75 }}>
+          After you click the link, you&apos;ll return to: {nextPath}
+        </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           {step === "verifying" && !isEmail ? (

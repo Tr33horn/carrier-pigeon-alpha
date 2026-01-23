@@ -61,6 +61,27 @@ function isEmailValid(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
+function titleCase(input: string) {
+  return input
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function deriveNameFromEmail(email: string) {
+  const local = email.split("@")[0] || "";
+  const cleaned = local.replace(/[._-]+/g, " ").replace(/\s+/g, " ").trim();
+  return cleaned ? titleCase(cleaned) : "You";
+}
+
+function normalizeFromName(input: unknown, fallback: string) {
+  if (typeof input !== "string") return fallback;
+  const cleaned = input.replace(/\s+/g, " ").trim();
+  if (!cleaned) return fallback;
+  return cleaned.slice(0, 80);
+}
+
 /** ✅ One true UTC formatter (match cron) */
 function formatUtc(iso: string) {
   const d = new Date(iso);
@@ -268,6 +289,10 @@ export async function POST(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "auth required" }, { status: 401 });
   }
+  const userEmail = user.email ? user.email.trim().toLowerCase() : "";
+  if (!userEmail || !isEmailValid(userEmail)) {
+    return NextResponse.json({ error: "Sender email missing or invalid." }, { status: 400 });
+  }
 
   const body = await req.json();
 
@@ -285,6 +310,7 @@ export async function POST(req: Request) {
     seal_id,
     envelope_tint,
   } = body;
+  const content = typeof message === "string" ? message : (typeof body?.body === "string" ? body.body : "");
 
   const bird: BirdType = normalizeBird(birdRaw);
   const birdCfg = BIRD_RULES[bird];
@@ -299,15 +325,20 @@ export async function POST(req: Request) {
   const normalizedFromEmail = typeof from_email === "string" ? from_email.trim().toLowerCase() : "";
   const normalizedToEmail = typeof to_email === "string" ? to_email.trim().toLowerCase() : "";
 
-  if (!normalizedFromEmail || !normalizedToEmail) {
-    return NextResponse.json({ error: "Sender and recipient email are required." }, { status: 400 });
+  if (process.env.NODE_ENV !== "production" && normalizedFromEmail && normalizedFromEmail !== userEmail) {
+    console.log("SEND EMAIL OVERRIDE:", { fromEmailClient: normalizedFromEmail ? "present" : "missing" });
   }
-  if (!isEmailValid(normalizedFromEmail)) {
-    return NextResponse.json({ error: "Sender email looks invalid." }, { status: 400 });
+  if (!normalizedToEmail) {
+    return NextResponse.json({ error: "Recipient email is required." }, { status: 400 });
   }
   if (!isEmailValid(normalizedToEmail)) {
     return NextResponse.json({ error: "Recipient email looks invalid." }, { status: 400 });
   }
+
+  const meta = (user.user_metadata as Record<string, string> | null) ?? null;
+  const metaName = meta?.full_name || meta?.name || "";
+  const derivedName = metaName?.trim() || deriveNameFromEmail(userEmail);
+  const normalizedFromName = normalizeFromName(from_name, derivedName);
 
   if (
     !origin ||
@@ -357,6 +388,11 @@ export async function POST(req: Request) {
 
   const publicToken = crypto.randomBytes(16).toString("hex");
 
+  console.log("SEND STORE:", {
+    bodyLen: content?.length ?? 0,
+    messageLen: content?.length ?? 0,
+  });
+
   console.log("SEND DEBUG:", {
     token: publicToken.slice(0, 8),
     bird,
@@ -384,14 +420,15 @@ export async function POST(req: Request) {
       sleep_end_hour: sleepCfg?.sleepEndHour ?? null,
       sender_user_id: user.id,
 
-      from_name,
-      from_email: normalizedFromEmail,
+      from_name: normalizedFromName,
+      from_email: userEmail,
       sender_receipt_sent_at: null,
       to_name,
       to_email: normalizedToEmail,
       delivered_notified_at: null,
       subject,
-      body: message,
+      body: content,
+      message: content,
       origin_name: origin.name,
       origin_lat: origin.lat,
       origin_lon: origin.lon,

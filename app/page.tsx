@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+
+import { safeJson } from "@/app/lib/http";
 
 export default function Home() {
   const [status, setStatus] = useState("Checking Supabase connection...");
   const [ok, setOk] = useState<boolean | null>(null);
-  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     let alive = true;
@@ -14,7 +17,7 @@ export default function Home() {
     async function run() {
       try {
         const res = await fetch("/api/health/supabase", { cache: "no-store" });
-        const data = await res.json().catch(() => ({}));
+        const data = await safeJson(res);
 
         if (!alive) return;
 
@@ -40,26 +43,14 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    let alive = true;
-    async function loadSession() {
-      try {
-        const res = await fetch("/api/auth/session", { cache: "no-store" });
-        const data = await res.json().catch(() => ({}));
-        if (!alive) return;
-        setSignedIn(!!data?.signedIn);
-      } catch {
-        if (!alive) return;
-        setSignedIn(false);
-      }
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    if (code) {
+      const next = "/inbox";
+      const target = `/auth/callback?code=${encodeURIComponent(code)}&next=${encodeURIComponent(next)}`;
+      router.replace(target);
     }
-    loadSession();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const inboxHref = signedIn ? "/inbox" : "/start";
-  const sentHref = signedIn ? "/sent" : "/start";
+  }, [router]);
 
   return (
     <main className="pageBg">
@@ -161,20 +152,6 @@ export default function Home() {
               <Link href="/dashboard" className="btnGhost" style={{ textAlign: "center" }}>
                 Go to Dashboard
               </Link>
-
-              <Link href={inboxHref} className="btnGhost" style={{ textAlign: "center" }}>
-                Inbox
-              </Link>
-
-              <Link href={sentHref} className="btnGhost" style={{ textAlign: "center" }}>
-                Sent
-              </Link>
-
-              {signedIn === false ? (
-                <div className="muted" style={{ textAlign: "center" }}>
-                  Sign in to collect your letters.
-                </div>
-              ) : null}
 
               <Link href="/about" className="btnGhost" style={{ textAlign: "center" }}>
                 About FLOK

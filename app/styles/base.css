@@ -155,6 +155,57 @@ img, svg, video, canvas {
   background-size: 6px 6px;
 }
 
+.topBar {
+  position: relative;
+  z-index: 40;
+  backdrop-filter: blur(8px);
+  background: var(--bg);
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+.appHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+}
+
+.appHeaderRight {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+}
+
+.topBarInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.appBrand {
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  color: inherit;
+}
+
+.appLogo {
+  width: 100px;
+  height: auto;
+  display: block;
+}
+
+.authPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
 .wrap {
   padding: var(--space-6);
   max-width: 1050px;

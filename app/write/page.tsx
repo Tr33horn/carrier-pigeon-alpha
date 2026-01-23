@@ -12,6 +12,7 @@ import { normalizeBird, type BirdType } from "@/app/lib/birds";
 // ✅ Seals catalog + helpers
 import { getSeal, getSealImgSrc, getSelectableSeals } from "@/app/lib/seals";
 import { ENVELOPE_TINTS, getEnvelopeTintColor, type EnvelopeTint } from "@/app/lib/envelopeTints";
+import { safeJson } from "@/app/lib/http";
 
 /* ---------- helpers ---------- */
 function nearestCity(lat: number, lon: number, cities: { name: string; lat: number; lon: number }[]) {
@@ -350,7 +351,7 @@ function WritePageInner() {
         }),
       });
 
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data?.error ?? "Send failed");
 
       const successLines = ["Bird accepted the letter.", "The bird takes off.", "Bird clocked in."];

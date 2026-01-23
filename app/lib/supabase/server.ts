@@ -17,6 +17,7 @@ export async function createSupabaseServerReadClient() {
       get(name) {
         return cookieStore.get(name)?.value;
       },
+      // RSC cannot set cookies; route/actions handle it.
       set() {},
       remove() {},
     },
@@ -34,10 +35,20 @@ export async function createSupabaseServerActionClient() {
         return cookieStore.get(name)?.value;
       },
       set(name, value, options) {
-        cookieStore.set({ name, value, ...options });
+        try {
+          cookieStore.set({ name, value, ...options });
+        } catch {
+          if (process.env.NODE_ENV === "production") throw new Error("Failed to set cookie");
+          // ignore if called outside a writable context
+        }
       },
       remove(name, options) {
-        cookieStore.set({ name, value: "", ...options, maxAge: 0 });
+        try {
+          cookieStore.set({ name, value: "", ...options, maxAge: 0 });
+        } catch {
+          if (process.env.NODE_ENV === "production") throw new Error("Failed to remove cookie");
+          // ignore if called outside a writable context
+        }
       },
     },
   });

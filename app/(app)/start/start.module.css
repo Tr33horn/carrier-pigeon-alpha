@@ -1,0 +1,32 @@
+.startPage {
+  min-height: 100svh;
+  padding: 32px 16px 48px;
+}
+
+.startStack {
+  width: 100%;
+  max-width: 680px;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.backHomeWrap {
+  width: 100%;
+  max-width: 680px;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 18px;
+  display: flex;
+  justify-content: center;
+}
+
+.startCard {
+  width: 100%;
+  max-width: 560px;
+  margin-left: auto;
+  margin-right: auto;
+}

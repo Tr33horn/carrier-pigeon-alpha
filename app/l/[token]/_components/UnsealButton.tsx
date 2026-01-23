@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createSupabaseBrowserClient } from "@/app/lib/supabase/client";
 
 type Props = {
   token: string;
@@ -18,9 +17,14 @@ export default function UnsealButton({ token }: Props) {
     setError(null);
 
     try {
-      const supabase = createSupabaseBrowserClient();
-      const { error: openErr } = await supabase.rpc("open_letter_by_token", { p_token: token });
-      if (openErr) throw openErr;
+      const res = await fetch("/api/letters/unseal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error ?? "Could not unseal the letter.");
       router.refresh();
     } catch (e: any) {
       setError(e?.message || "Could not unseal the letter.");

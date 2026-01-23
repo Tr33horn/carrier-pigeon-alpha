@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getEnabledBirdTypes, type BirdType } from "@/app/lib/birds";
 import { BIRD_CATALOG, enabledBirdCatalog, type BirdCatalogRow } from "@/app/lib/birdsCatalog";
 import { ENVELOPE_TINTS, getEnvelopeTintColor, type EnvelopeTint } from "@/app/lib/envelopeTints";
+import { safeJson } from "@/app/lib/http";
 import { clearDraft, setDraft, useLetterDraftStore } from "@/app/lib/letterDraftStore";
 import { getSeal, getSealImgSrc, getSelectableSeals } from "@/app/lib/seals";
 
@@ -22,7 +23,7 @@ function getBirdSealConfig(row: BirdCatalogRow | null) {
   const sealPolicy = row?.sealPolicy ?? "selectable";
   const defaultSealId = row?.defaultSealId ?? null;
   const fixedSealId = row?.fixedSealId ?? null;
-  const allowedSealIds = Array.isArray(row?.allowedSealIds) ? row.allowedSealIds : [];
+  const allowedSealIds = Array.isArray(row?.allowedSealIds) ? row.allowedSealIds : null;
   return { sealPolicy, defaultSealId, fixedSealId, allowedSealIds };
 }
 
@@ -97,6 +98,8 @@ export default function SendPage() {
       }));
   }, [enabledCatalog, enabledTypes]);
 
+  const hasPigeon = useMemo(() => options.some((opt) => opt.id === "pigeon"), [options]);
+
   // Bird entry for seal policy
   const birdEntry = useMemo(() => {
     if (!bird) return null;
@@ -107,14 +110,18 @@ export default function SendPage() {
   const { sealPolicy, defaultSealId, fixedSealId, allowedSealIds } = sealCfg;
 
   const sealOptions = useMemo(() => {
-    if (sealPolicy === "selectable" && allowedSealIds.length > 0) {
+    if (sealPolicy !== "selectable") return [];
+    if (allowedSealIds && allowedSealIds.length > 0) {
       return allowedSealIds
         .map((id) => getSeal(id))
         .filter(Boolean)
         .map((s) => s!);
     }
+    if (allowedSealIds && allowedSealIds.length === 0) return [];
     return getSelectableSeals();
   }, [sealPolicy, allowedSealIds]);
+
+  const showSealPicker = sealPolicy === "selectable" && sealOptions.length > 0;
 
   // Sync local selections into store (after mount)
   useEffect(() => {
@@ -131,6 +138,13 @@ export default function SendPage() {
     if (!mounted) return;
     setDraft({ sealId });
   }, [mounted, sealId]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (!draft.hydrated) return;
+    if (bird || draft.bird) return;
+    if (hasPigeon) setBird("pigeon");
+  }, [mounted, draft.hydrated, bird, draft.bird, hasPigeon]);
 
   // Enforce seal policy when bird/policy changes
   useEffect(() => {
@@ -153,10 +167,15 @@ export default function SendPage() {
     }
 
     // selectable
+    if (sealOptions.length === 0) {
+      if (sealId !== null) setSealId(null);
+      return;
+    }
+
     const allowed = sealOptions.map((s) => s.id);
     if (sealId && allowed.includes(sealId)) return;
 
-    const preferred = defaultSealId || sealOptions[0]?.id || null;
+    const preferred = (defaultSealId && allowed.includes(defaultSealId) ? defaultSealId : null) || sealOptions[0]?.id || null;
     if (sealId !== preferred) setSealId(preferred);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, bird, sealPolicy, fixedSealId, defaultSealId, sealOptions]);
@@ -171,7 +190,7 @@ export default function SendPage() {
     return getSeal(sealId)?.label ?? sealId;
   }, [sealId]);
 
-  const sealOk = sealPolicy === "none" ? true : !!sealId;
+  const sealOk = sealPolicy === "none" || (sealPolicy === "selectable" && !showSealPicker) ? true : !!sealId;
 
   async function sendNow() {
     setSending(true);
@@ -212,7 +231,7 @@ export default function SendPage() {
         }),
       });
 
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data?.error ?? "Send failed");
 
       setResult({
@@ -335,7 +354,7 @@ export default function SendPage() {
                       </div>
                     </div>
                   </div>
-                ) : (
+                ) : showSealPicker ? (
                   <>
                     <div className="sealGrid">
                       {sealOptions.map((s) => {
@@ -367,6 +386,8 @@ export default function SendPage() {
                       </div>
                     )}
                   </>
+                ) : (
+                  <div className="muted">This bird doesn&apos;t accept seals.</div>
                 )}
               </div>
             )}
