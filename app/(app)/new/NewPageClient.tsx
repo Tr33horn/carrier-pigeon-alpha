@@ -64,7 +64,7 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
   const draft = useLetterDraftStore();
   const draftHydrated = useLetterDraftStore((d) => d.hydrated);
   const draftUpdatedAt = useLetterDraftStore((d) => d.updatedAt);
-  const saveTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
   const didInitRef = useRef(false);
   const [saving, setSaving] = useState(false);
 
