@@ -1,140 +1,19 @@
 import OtpForm from "./_components/OtpForm";
+import { headers } from "next/headers";
 import { createSupabaseServerReadClient } from "@/app/lib/supabase/server";
-import { US_REGIONS } from "@/app/lib/geo/usRegions";
 import CleanAuthHash from "./_components/CleanAuthHash";
+import MapSectionClient from "./_components/MapSectionClient";
+import TimelineSection from "./_components/TimelineSection";
+import { birdDisplayLabel, normalizeBird } from "@/app/lib/birds";
+import { getEnvelopeTintColor } from "@/app/lib/envelopeTints";
+import { getSealImgSrc } from "@/app/lib/seals";
+import styles from "./status.module.css";
 
 function formatLocal(iso?: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return "";
   return d.toLocaleString();
-}
-
-const REGION_LABELS = new Map<string, string>(US_REGIONS.map((r) => [r.id, r.label]));
-
-function regionLabelFor(id?: string | null) {
-  if (!id) return "somewhere over the map";
-  return REGION_LABELS.get(id) || id;
-}
-
-type StatusRow = {
-  bird_type: string | null;
-  dest_region_id: string | null;
-  eta_at: string | null;
-  sent_at: string | null;
-  opened_at: string | null;
-  canceled_at: string | null;
-};
-
-type LetterRow = {
-  id: string;
-  sender_user_id: string;
-  recipient_user_id: string | null;
-  bird_type: string;
-  dest_region_id: string;
-  eta_at: string;
-  message: string;
-  opened_at: string | null;
-};
-
-function StatusCard({ status, title }: { status: StatusRow; title?: string }) {
-  return (
-    <div className="card" style={{ maxWidth: 640 }}>
-      <div className="cardHead">
-        <div>
-          <div className="kicker">Flight status</div>
-          <div className="h2">{title ?? "In transit"}</div>
-        </div>
-      </div>
-
-      <div className="stack" style={{ gap: 8 }}>
-        <div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            Bird
-          </div>
-          <div style={{ fontWeight: 700 }}>{status.bird_type ?? "bird"}</div>
-        </div>
-
-        <div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            Destination
-          </div>
-          <div style={{ fontWeight: 700 }}>{regionLabelFor(status.dest_region_id)}</div>
-        </div>
-
-        <div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            ETA
-          </div>
-          <div style={{ fontWeight: 700 }}>
-            {status.eta_at ? formatLocal(status.eta_at) : "ETA unknown"}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ReceiptCard({ bird_type, dest_region_id, eta_at }: StatusRow) {
-  return (
-    <div className="card" style={{ maxWidth: 640 }}>
-      <div className="cardHead">
-        <div>
-          <div className="kicker">Delivery receipt</div>
-          <div className="h2">Arrived safely</div>
-          <div className="muted" style={{ marginTop: 6, maxWidth: 560 }}>
-            The seal is broken. This letter is now yours to keep.
-          </div>
-        </div>
-      </div>
-
-      <div className="stack" style={{ gap: 8 }}>
-        <div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            Bird
-          </div>
-          <div style={{ fontWeight: 700 }}>{bird_type}</div>
-        </div>
-
-        <div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            Destination
-          </div>
-          <div style={{ fontWeight: 700 }}>{regionLabelFor(dest_region_id)}</div>
-        </div>
-
-        <div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            ETA
-          </div>
-          <div style={{ fontWeight: 700 }}>{formatLocal(eta_at)}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LetterView({ letter }: { letter: LetterRow }) {
-  return (
-    <div className="card" style={{ maxWidth: 740 }}>
-      <div className="cardHead">
-        <div>
-          <div className="kicker">Opened letter</div>
-          <div className="h2">Delivered to you</div>
-        </div>
-      </div>
-
-      <div className="stack" style={{ gap: 12 }}>
-        <div className="soft" style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-          {letter.message}
-        </div>
-
-        <button type="button" className="btnPrimary" disabled>
-          Claim bundle (soon)
-        </button>
-      </div>
-    </div>
-  );
 }
 
 function InvalidLinkCard({ openedMessage }: { openedMessage?: boolean }) {
@@ -147,6 +26,69 @@ function InvalidLinkCard({ openedMessage }: { openedMessage?: boolean }) {
   );
 }
 
+type StatusApi = {
+  archived: boolean;
+  archived_at: string | null;
+  canceled: boolean;
+  canceled_at: string | null;
+  server_now_iso?: string | null;
+  letter: {
+    id: string;
+    public_token: string;
+    from_name: string | null;
+    to_name: string | null;
+    subject: string | null;
+    origin_name: string | null;
+    origin_lat: number;
+    origin_lon: number;
+    dest_name: string | null;
+    dest_lat: number;
+    dest_lon: number;
+    sent_at: string | null;
+    eta_at: string | null;
+    eta_at_adjusted?: string | null;
+    eta_utc_text?: string | null;
+    bird?: string | null;
+    bird_type?: string | null;
+    seal_id?: string | null;
+    envelope_tint?: string | null;
+    distance_km?: number | null;
+    speed_kmh?: number | null;
+  };
+  checkpoints: any[];
+  delivered: boolean;
+  current_over_text: string;
+  flight: {
+    progress: number;
+    sleeping: boolean;
+    sleep_until_iso?: string | null;
+    sleep_local_text?: string | null;
+    tooltip_text: string;
+    marker_mode: "flying" | "sleeping" | "delivered" | "canceled";
+    current_speed_kmh?: number | null;
+  };
+  items: {
+    badges: Array<{
+      id: string;
+      code: string;
+      title: string;
+      subtitle?: string | null;
+      iconSrc?: string | null;
+      rarity?: string | null;
+      earned_at?: string | null;
+    }>;
+  };
+};
+
+async function getRequestOrigin() {
+  const hdrs = await headers();
+  const proto = hdrs.get("x-forwarded-proto") || "https";
+  const host = hdrs.get("x-forwarded-host") || hdrs.get("host");
+  if (host) return `${proto}://${host}`;
+  const env = (process.env.NEXT_PUBLIC_APP_URL || "").trim();
+  return env.endsWith("/") ? env.slice(0, -1) : env;
+}
+
 export default async function LetterTokenPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const supabase = await createSupabaseServerReadClient();
@@ -154,11 +96,32 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
   const { data: userData } = await supabase.auth.getUser();
   const user = userData?.user ?? null;
 
-  const { data: statusData } = await supabase.rpc("status_letter_by_token", { p_token: token });
-  const status = (Array.isArray(statusData) ? statusData[0] : statusData) as StatusRow | null | undefined;
+  const origin = await getRequestOrigin();
+  const res = await fetch(`${origin}/api/letters/${token}`, { cache: "no-store" });
+  if (!res.ok) {
+    return (
+      <main className="pageBg">
+        <CleanAuthHash />
+        <div className="wrap">
+          <h1 className="h1">Flight status</h1>
+          <InvalidLinkCard />
+        </div>
+      </main>
+    );
+  }
 
-  const etaMs = status?.eta_at ? new Date(status.eta_at).getTime() : null;
-  const arrived = !!(etaMs && Date.now() >= etaMs);
+  const data = (await res.json()) as StatusApi;
+  const letter = data.letter;
+  const flight = data.flight;
+
+  const etaIso = letter.eta_at_adjusted ?? letter.eta_at;
+  const etaMs = etaIso ? new Date(etaIso).getTime() : null;
+  const arrived = data.delivered || !!(etaMs && Date.now() >= etaMs);
+
+  const birdType = normalizeBird(letter.bird_type ?? letter.bird ?? "pigeon");
+  const birdLabel = birdDisplayLabel(birdType);
+  const sealImg = getSealImgSrc(letter.seal_id) || "/waxseal.png";
+  const envTint = getEnvelopeTintColor(letter.envelope_tint);
 
   // Logged out: status + OTP
   if (!user) {
@@ -166,53 +129,127 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
       <main className="pageBg">
         <CleanAuthHash />
         <div className="wrap">
-          <h1 className="h1">Flight status</h1>
-          <p className="muted" style={{ maxWidth: 720 }}>
-            Track the flight here. Sign in to open once delivered.
-          </p>
-
-          {!status ? (
-            <InvalidLinkCard />
-          ) : (
-            <>
-              <StatusCard status={status} />
-              <div className="muted" style={{ marginTop: 12 }}>
-                This letter stays sealed until it arrives.
+          <div className={styles.statusHero}>
+            <div className="card">
+              <div className="kicker">Flight status</div>
+              <div className="h1">
+                {letter.origin_name ?? "Unknown origin"} → {letter.dest_name ?? "Unknown destination"}
               </div>
-            </>
-          )}
+              <div className="muted" style={{ marginTop: 6 }}>
+                Bird: <strong>{birdLabel}</strong>
+              </div>
+
+              <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <div className="metaPill faint">
+                  ETA: <strong>{etaIso ? formatLocal(etaIso) : "ETA unknown"}</strong>
+                </div>
+                {letter.eta_utc_text ? <div className="metaPill faint">{letter.eta_utc_text}</div> : null}
+                <div className="metaPill faint">
+                  Progress: <strong>{Math.floor((flight.progress ?? 0) * 100)}%</strong>
+                </div>
+                {letter.opened_at ? (
+                  <div className="metaPill faint">Opened: {formatLocal(letter.opened_at)}</div>
+                ) : null}
+                {flight.sleeping && flight.sleep_local_text ? (
+                  <div className="metaPill faint">Sleeping · {flight.sleep_local_text}</div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.statusGrid}>
+            <div className={`${styles.statusCol} ${styles.gridLetter}`}>
+              <div className="card letterCard">
+                <div className="cardHead">
+                  <div>
+                    <div className="kicker">Letter</div>
+                    <div className="h2">
+                      {letter.from_name ? `From ${letter.from_name}` : "From someone"}
+                    </div>
+                    {letter.subject ? <div className="muted">{letter.subject}</div> : null}
+                  </div>
+                </div>
+
+                <div className="soft envelope" style={{ marginTop: 14, ["--env-tint" as any]: envTint }}>
+                  <div className="sealCard">
+                    <div className="sealRow">
+                      <button type="button" className="waxBtn" aria-label="Wax seal preview" disabled>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={sealImg} alt="" className="waxImg" />
+                      </button>
+
+                      <div>
+                        <div className="sealTitle">Sealed letter</div>
+                        <div className="sealSub">Sign in to open once delivered.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className={`${styles.statusCol} ${styles.gridMap}`}>
+              <MapSectionClient
+                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+                progress={flight.progress ?? 0}
+                progressPctFloor={Math.floor((flight.progress ?? 0) * 100)}
+                tooltipText={flight.tooltip_text}
+                markerMode={flight.marker_mode}
+                showLive={!data.delivered && !data.canceled}
+                sentAtISO={letter.sent_at ?? undefined}
+                etaAtISO={etaIso ?? undefined}
+                currentlyOver={data.current_over_text}
+                cardClassName="mapShell"
+              />
+            </div>
+
+            <div className={`${styles.statusFull} ${styles.gridTimeline}`}>
+              <div className="card">
+                <div className="kicker">Flight log</div>
+                <TimelineSection
+                  letter={{ sent_at: letter.sent_at ?? "", origin_name: letter.origin_name }}
+                  checkpoints={data.checkpoints ?? []}
+                  delivered={data.delivered}
+                  canceled={data.canceled}
+                  sleeping={flight.sleeping}
+                  effectiveEtaISO={etaIso ?? ""}
+                  birdName={birdLabel}
+                  nowISO={data.server_now_iso ?? undefined}
+                />
+              </div>
+            </div>
+
+            <div className={`${styles.statusFull} ${styles.gridBadges}`}>
+              <div className="card">
+                <div className="kicker">Badges</div>
+                <div className="h2">Earned on this flight</div>
+                {data.items?.badges?.length ? (
+                  <div className="stack" style={{ gap: 10, marginTop: 10 }}>
+                    {data.items.badges.map((b) => (
+                      <div key={b.id} className="soft" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                        {b.iconSrc ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={b.iconSrc} alt={b.title} style={{ width: 28, height: 28 }} />
+                        ) : null}
+                        <div>
+                          <div style={{ fontWeight: 800 }}>{b.title}</div>
+                          {b.subtitle ? <div className="muted">{b.subtitle}</div> : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="muted" style={{ marginTop: 8 }}>
+                    No badges yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
           <div style={{ marginTop: 16 }}>
             <OtpForm />
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  // Logged in: prefer opened, else show preview
-  const { data: openedData } = await supabase.rpc("read_opened_letter_by_token", { p_token: token });
-  const openedRow = (Array.isArray(openedData) ? openedData[0] : openedData) as LetterRow | null | undefined;
-  const isOpened = !!openedRow?.id;
-
-  if (isOpened) {
-    return (
-      <main className="pageBg">
-        <CleanAuthHash />
-        <div className="wrap">
-          <h1 className="h1">Letter Delivered</h1>
-
-          <ReceiptCard
-            bird_type={openedRow!.bird_type}
-            dest_region_id={openedRow!.dest_region_id}
-            eta_at={openedRow!.eta_at}
-            sent_at={null}
-            opened_at={openedRow!.opened_at}
-            canceled_at={null}
-          />
-
-          <div style={{ marginTop: 16 }}>
-            <LetterView letter={openedRow as LetterRow} />
           </div>
         </div>
       </main>
@@ -223,27 +260,139 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
     <main className="pageBg">
       <CleanAuthHash />
       <div className="wrap">
-        <h1 className="h1">Flight status</h1>
+        <div className={styles.statusHero}>
+          <div className="card">
+            <div className="kicker">Flight status</div>
+            <div className="h1">
+              {letter.origin_name ?? "Unknown origin"} → {letter.dest_name ?? "Unknown destination"}
+            </div>
+            <div className="muted" style={{ marginTop: 6 }}>
+              Bird: <strong>{birdLabel}</strong>
+            </div>
 
-        {!status ? (
-          <InvalidLinkCard openedMessage />
-        ) : (
-          <>
-            <StatusCard status={status} title="In transit" />
-            <div style={{ marginTop: 16 }}>
-              {arrived ? (
-                <a className="btnPrimary" href={`/l/${token}/open`}>
-                  Open letter
-                </a>
+            <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <div className="metaPill faint">
+                ETA: <strong>{etaIso ? formatLocal(etaIso) : "ETA unknown"}</strong>
+              </div>
+              {letter.eta_utc_text ? <div className="metaPill faint">{letter.eta_utc_text}</div> : null}
+              <div className="metaPill faint">
+                Progress: <strong>{Math.floor((flight.progress ?? 0) * 100)}%</strong>
+              </div>
+              {letter.opened_at ? (
+                <div className="metaPill faint">Opened: {formatLocal(letter.opened_at)}</div>
+              ) : null}
+              {flight.sleeping && flight.sleep_local_text ? (
+                <div className="metaPill faint">Sleeping · {flight.sleep_local_text}</div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.statusGrid}>
+          <div className={`${styles.statusCol} ${styles.gridLetter}`}>
+            <div className="card letterCard">
+              <div className="cardHead">
+                <div>
+                  <div className="kicker">Letter</div>
+                  <div className="h2">
+                    {letter.from_name ? `From ${letter.from_name}` : "From someone"}
+                  </div>
+                  {letter.subject ? <div className="muted">{letter.subject}</div> : null}
+                </div>
+              </div>
+
+              <div className="soft envelope" style={{ marginTop: 14, ["--env-tint" as any]: envTint }}>
+                <div className="sealCard">
+                  <div className="sealRow">
+                    <button type="button" className="waxBtn" aria-label="Wax seal preview" disabled>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={sealImg} alt="" className="waxImg" />
+                    </button>
+
+                    <div>
+                      <div className="sealTitle">Sealed letter</div>
+                      <div className="sealSub">
+                        {arrived ? "Ready to open." : "Sealed until delivery."}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 12 }}>
+                {arrived ? (
+                  <a className="btnPrimary" href={`/l/${token}/open`}>
+                    Open letter
+                  </a>
+                ) : (
+                  <div className="muted">
+                    Arrives at {etaIso ? formatLocal(etaIso) : "an unknown time"}. You can open it once it
+                    lands.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className={`${styles.statusCol} ${styles.gridMap}`}>
+            <MapSectionClient
+              origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+              dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+              progress={flight.progress ?? 0}
+              progressPctFloor={Math.floor((flight.progress ?? 0) * 100)}
+              tooltipText={flight.tooltip_text}
+              markerMode={flight.marker_mode}
+              showLive={!data.delivered && !data.canceled}
+              sentAtISO={letter.sent_at ?? undefined}
+              etaAtISO={etaIso ?? undefined}
+              currentlyOver={data.current_over_text}
+              cardClassName="mapShell"
+            />
+          </div>
+
+          <div className={`${styles.statusFull} ${styles.gridTimeline}`}>
+            <div className="card">
+              <div className="kicker">Flight log</div>
+              <TimelineSection
+                letter={{ sent_at: letter.sent_at ?? "", origin_name: letter.origin_name }}
+                checkpoints={data.checkpoints ?? []}
+                delivered={data.delivered}
+                canceled={data.canceled}
+                sleeping={flight.sleeping}
+                effectiveEtaISO={etaIso ?? ""}
+                birdName={birdLabel}
+                nowISO={data.server_now_iso ?? undefined}
+              />
+            </div>
+          </div>
+
+          <div className={`${styles.statusFull} ${styles.gridBadges}`}>
+            <div className="card">
+              <div className="kicker">Badges</div>
+              <div className="h2">Earned on this flight</div>
+              {data.items?.badges?.length ? (
+                <div className="stack" style={{ gap: 10, marginTop: 10 }}>
+                  {data.items.badges.map((b) => (
+                    <div key={b.id} className="soft" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                      {b.iconSrc ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={b.iconSrc} alt={b.title} style={{ width: 28, height: 28 }} />
+                      ) : null}
+                      <div>
+                        <div style={{ fontWeight: 800 }}>{b.title}</div>
+                        {b.subtitle ? <div className="muted">{b.subtitle}</div> : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : (
-                <div className="muted">
-                  Arrives at {status.eta_at ? formatLocal(status.eta_at) : "an unknown time"}. You
-                  can open it once it lands.
+                <div className="muted" style={{ marginTop: 8 }}>
+                  No badges yet.
                 </div>
               )}
             </div>
-          </>
-        )}
+          </div>
+        </div>
       </div>
     </main>
   );

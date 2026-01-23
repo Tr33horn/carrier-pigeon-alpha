@@ -1,0 +1,44 @@
+.statusHero {
+  margin-bottom: 14px;
+}
+
+.statusGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr;
+}
+
+.statusCol,
+.statusFull {
+  min-width: 0;
+}
+
+.statusFull {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 980px) {
+  .statusGrid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "letter map"
+      "timeline timeline"
+      "badges badges";
+  }
+
+  .gridLetter {
+    grid-area: letter;
+  }
+
+  .gridMap {
+    grid-area: map;
+  }
+
+  .gridTimeline {
+    grid-area: timeline;
+  }
+
+  .gridBadges {
+    grid-area: badges;
+  }
+}
