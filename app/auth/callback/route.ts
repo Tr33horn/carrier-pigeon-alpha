@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sanitizeNext } from "@/app/lib/authRedirect";
 import { getCanonicalOrigin } from "@/app/lib/appOrigin";
-import { createSupabaseRouteClient } from "@/app/lib/supabase/route";
+import { createSupabaseRouteClient } from "@/app/lib/supabase/routeClient";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);

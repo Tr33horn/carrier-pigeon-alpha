@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createHash, randomUUID } from "crypto";
 import { sanitizeNext } from "@/app/lib/authRedirect";
 import { getCanonicalOrigin } from "@/app/lib/appOrigin";
-import { createSupabaseRouteClient } from "@/app/lib/supabase/route";
+import { createSupabaseRouteClient } from "@/app/lib/supabase/routeClient";
 
 function isEmailValid(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
