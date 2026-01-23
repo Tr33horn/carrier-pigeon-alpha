@@ -124,7 +124,7 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
 
   function scheduleSave(overrides: Partial<LetterDraft> = {}) {
     if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
+      window.clearTimeout(saveTimerRef.current);
     }
     setSaving(true);
     const snapshot = buildDraftSnapshot(overrides);
@@ -180,7 +180,7 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
+        window.clearTimeout(saveTimerRef.current);
       }
     };
   }, []);
@@ -257,7 +257,7 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
   function handleClearDraft() {
     if (!confirm("Clear your saved draft?")) return;
     if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
+      window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
     setSaving(false);
@@ -355,7 +355,7 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
     }
 
     if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
+      window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
     setSaving(false);
