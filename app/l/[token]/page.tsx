@@ -45,6 +45,7 @@ type StatusApi = {
     dest_lat: number;
     dest_lon: number;
     sent_at: string | null;
+    opened_at?: string | null;
     eta_at: string | null;
     eta_at_adjusted?: string | null;
     eta_utc_text?: string | null;
