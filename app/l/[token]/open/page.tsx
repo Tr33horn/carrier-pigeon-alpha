@@ -86,7 +86,17 @@ function StatusCard({ status }: { status: StatusRow }) {
   );
 }
 
-function ReceiptCard({ bird_type, dest_region_id, eta_at, opened_at }: StatusRow) {
+function ReceiptCard({
+  bird_type,
+  dest_region_id,
+  eta_at,
+  opened_at,
+}: {
+  bird_type: string | null;
+  dest_region_id: string | null;
+  eta_at: string | null;
+  opened_at: string | null;
+}) {
   return (
     <div className="card">
       <div className="cardHead">
