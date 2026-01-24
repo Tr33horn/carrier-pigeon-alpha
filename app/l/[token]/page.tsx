@@ -55,6 +55,7 @@ type StatusApi = {
     bird_type?: string | null;
     seal_id?: string | null;
     envelope_tint?: string | null;
+    body?: string | null;
     distance_km?: number | null;
     speed_kmh?: number | null;
   };
