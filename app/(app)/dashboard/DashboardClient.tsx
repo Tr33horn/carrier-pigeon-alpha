@@ -29,6 +29,7 @@ type DashboardLetter = {
 
   sent_at: string;
   eta_at: string;
+  opened_at?: string | null;
 
   delivered: boolean;
   progress: number; // ✅ server truth (sleep-aware)
@@ -527,7 +528,7 @@ export default function DashboardClient({ initialEmail }: Props) {
               <div className="kicker">Mailbox</div>
               <h1 className="h1">Dashboard</h1>
               <p className="muted" style={{ marginTop: 6 }}>
-                Load your mailbox by entering your email. Sent + Incoming are separate tabs now (no more déjà vu).
+              Sent + Inbox are separate tabs now (no more déjà vu).
               </p>
 
               <div className="dashWriteMobile">
@@ -560,7 +561,7 @@ export default function DashboardClient({ initialEmail }: Props) {
                   onClick={() => switchTab("incoming")}
                   aria-pressed={tab === "incoming"}
                 >
-                  Incoming <span className="tabCount">({counts.incoming.total})</span>
+                  Inbox <span className="tabCount">({counts.incoming.total})</span>
                 </button>
 
                 <button
@@ -622,31 +623,40 @@ export default function DashboardClient({ initialEmail }: Props) {
         <div className="card" style={{ marginTop: 14 }}>
           <div className="cardHead" style={{ marginBottom: 10 }}>
             <div>
-              <div className="kicker">Lookup</div>
-              <div className="h2">Load your mailbox</div>
+              <div className="kicker">Search</div>
             </div>
-            <div className="metaPill faint">Uses local storage</div>
+            <div className="metaPill faint" style={{ display: "none" }}>
+              Uses local storage
+            </div>
           </div>
 
           <div className="stack">
-            <label className="field">
-              <span className="fieldLabel">Email</span>
-              <input
-                className={`input ${email.trim() && !emailLooksValid(email) ? "invalid" : ""}`}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={onLookupKeyDown}
-                placeholder="you@email.com"
-                inputMode="email"
-                autoCapitalize="none"
-                autoCorrect="off"
-                disabled={!!initialEmail}
-              />
-              {initialEmail ? <div className="muted">Prefilled from your account.</div> : null}
-            </label>
+            {initialEmail ? (
+              <input type="hidden" value={email} readOnly />
+            ) : (
+              <label className="field" style={{ display: "none" }}>
+                <span className="fieldLabel">Email</span>
+                <input
+                  className={`input ${email.trim() && !emailLooksValid(email) ? "invalid" : ""}`}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={onLookupKeyDown}
+                  placeholder="you@email.com"
+                  inputMode="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  disabled={!!initialEmail}
+                />
+                {initialEmail ? (
+                  <div className="muted" style={{ display: "none" }}>
+                    Prefilled from your account.
+                  </div>
+                ) : null}
+              </label>
+            )}
 
             <label className="field">
-              <span className="fieldLabel">Search</span>
+              <span className="fieldLabel" style={{ display: "none" }}>Search</span>
               <input
                 className="input"
                 value={q}
@@ -658,7 +668,7 @@ export default function DashboardClient({ initialEmail }: Props) {
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
               <button onClick={() => load()} disabled={loading} className="btnPrimary">
-                {loading ? "Loading…" : "Load letters"}
+                {loading ? "Searching…" : "Search"}
               </button>
 
               <button
@@ -779,6 +789,7 @@ export default function DashboardClient({ initialEmail }: Props) {
                 const badgeCount = Math.max(0, Number(l.badges_count ?? 0));
                 const isArchivingThis = archivingId === l.id;
                 const isCancelingThis = cancelingId === l.id;
+                const isOpened = !!l.opened_at;
 
                 const disableActions = isArchivingThis || isCancelingThis;
 
@@ -790,6 +801,9 @@ export default function DashboardClient({ initialEmail }: Props) {
                     : (tab as any);
 
                 const dirLabel = dirTag === "incoming" ? "INCOMING" : dirTag === "both" ? "SENT + INCOMING" : "SENT";
+                const topLabel =
+                  isOpened ? "UNSEALED" : dirTag === "incoming" && l.delivered ? "ARRIVED" : dirLabel;
+                const hideHeavy = isOpened || l.delivered;
                 const shouldPulseBadge = badgePulseKey === l.public_token;
 
                 const birdName = birdLabel(l.bird);
@@ -802,7 +816,14 @@ export default function DashboardClient({ initialEmail }: Props) {
                   <div key={`${l.public_token}-${l.direction ?? "x"}`} className="card">
                     <div className="dashRowTop" style={{ marginBottom: 10 }}>
                       <div className="dashRowMain">
-                        <div className="kicker">{dirLabel}</div>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                          <div className="kicker">{topLabel}</div>
+                          {isOpened && l.opened_at ? (
+                            <div className="muted" style={{ color: "#E53935", fontWeight: 700 }}>
+                              Opened {new Date(l.opened_at).toLocaleString()}
+                            </div>
+                          ) : null}
+                        </div>
                         <div className="h2">{l.subject?.trim() ? l.subject : "(No subject)"}</div>
 
                         <div className="muted" style={{ marginTop: 6 }}>
@@ -818,14 +839,24 @@ export default function DashboardClient({ initialEmail }: Props) {
                           <span style={{ opacity: 0.65 }}>
                             • {l.origin_name} → {l.dest_name}
                           </span>
+                          {l.delivered && l.sent_at ? (
+                            <span style={{ color: "#E53935", fontWeight: 700, marginLeft: 10 }}>
+                              Sent {new Date(l.sent_at).toLocaleString()}
+                            </span>
+                          ) : null}
                         </div>
 
                         <div className="muted" style={{ marginTop: 6 }}>
                           ✔️ <strong>{geoText}</strong>
+                          {l.delivered && etaIsoResolved ? (
+                            <span style={{ color: "#E53935", fontWeight: 700, marginLeft: 10 }}>
+                              Delivered {new Date(etaIsoResolved).toLocaleString()}
+                            </span>
+                          ) : null}
                         </div>
                       </div>
 
-                      {canThumb ? (
+                      {!hideHeavy && canThumb ? (
                         <RouteThumb
                           origin={{ lat: l.origin_lat, lon: l.origin_lon }}
                           dest={{ lat: l.dest_lat, lon: l.dest_lon }}
@@ -840,14 +871,20 @@ export default function DashboardClient({ initialEmail }: Props) {
                         🐦 <strong>{birdName}</strong>
                       </div>
 
-                      {speedShown != null && (
+                      {!hideHeavy && speedShown != null && (
                         <div className="metaPill" title="Current speed">
                           ⚡ <strong>{speedShown}</strong> km/h
                         </div>
                       )}
 
+                      {!hideHeavy ? (
+                        <div className="metaPill">
+                          {statusEmoji} <strong>{statusLabel}</strong>
+                        </div>
+                      ) : null}
+
                       <div className="metaPill">
-                        {statusEmoji} <strong>{statusLabel}</strong>
+                        {isOpened ? "📬" : "🔒"} <strong>{isOpened ? "Opened" : "Sealed"}</strong>
                       </div>
 
                       <div className={`metaPill ${shouldPulseBadge ? "badgePop" : ""}`} title="Badges earned so far">
@@ -892,30 +929,34 @@ export default function DashboardClient({ initialEmail }: Props) {
                       )}
                     </div>
 
-                    <div className="muted" style={{ marginTop: 10 }}>
-                      Sent (UTC): {sentUtc} • <strong>ETA (UTC):</strong> {etaUtc}
-                      {!l.delivered && <> • (T-minus {countdown})</>}
-                    </div>
-
-                    <div style={{ marginTop: 12 }}>
-                      <div className="bar">
-                        <div className="barFill" style={{ width: `${pct}%` }} />
-                        {[25, 50, 75].map((p) => (
-                          <span key={p} className="barTick" style={{ left: `${p}%` }} />
-                        ))}
-                      </div>
-
-                      <div className="barMeta">
-                        <div className="mutedStrong">
-                          Progress: <strong>{pct}%</strong>
+                    {!hideHeavy ? (
+                      <>
+                        <div className="muted" style={{ marginTop: 10 }}>
+                          Sent (UTC): {sentUtc} • <strong>ETA (UTC):</strong> {etaUtc}
+                          {!l.delivered && <> • (T-minus {countdown})</>}
                         </div>
-                        <div className="muted">Token: {l.public_token.slice(0, 8)}…</div>
-                      </div>
-                    </div>
+
+                        <div style={{ marginTop: 12 }}>
+                          <div className="bar">
+                            <div className="barFill" style={{ width: `${pct}%` }} />
+                            {[25, 50, 75].map((p) => (
+                              <span key={p} className="barTick" style={{ left: `${p}%` }} />
+                            ))}
+                          </div>
+
+                          <div className="barMeta">
+                            <div className="mutedStrong">
+                              Progress: <strong>{pct}%</strong>
+                            </div>
+                            <div className="muted">Token: {l.public_token.slice(0, 8)}…</div>
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
 
                     <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
                       <a href={statusPath} className="link">
-                        View status
+                        {isOpened ? "Open" : l.delivered ? "Unseal" : "View status"}
                       </a>
                       <a href="/new" className="link">
                         Write another

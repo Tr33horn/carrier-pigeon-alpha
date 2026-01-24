@@ -37,6 +37,7 @@ export default function MapSection(props: {
   currentlyOver: string;
   cardClassName?: string;
   cardStyle?: CSSProperties;
+  wrapCard?: boolean;
 }) {
   const {
     mapStyle,
@@ -57,8 +58,8 @@ export default function MapSection(props: {
 
   const showProgressBar = markerMode !== "delivered";
 
-  return (
-    <div className={`card mapCard ${cardClassName || ""}`.trim()} style={cardStyle}>
+  const body = (
+    <>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
         <div className="kicker">Map</div>
 
@@ -134,6 +135,16 @@ export default function MapSection(props: {
           <div className="muted">{`Current: ${currentlyOver}`}</div>
         </div>
       </div>
+    </>
+  );
+
+  if (props.wrapCard === false) {
+    return body;
+  }
+
+  return (
+    <div className={`card mapCard ${cardClassName || ""}`.trim()} style={cardStyle}>
+      {body}
     </div>
   );
 }

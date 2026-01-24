@@ -246,6 +246,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
       speed_kmh,
       sent_at,
       eta_at,
+      opened_at,
       archived_at,
       canceled_at,
       bird,

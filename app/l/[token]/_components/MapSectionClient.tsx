@@ -18,6 +18,7 @@ export default function MapSectionClient(props: {
   etaAtISO?: string;
   currentlyOver: string;
   cardClassName?: string;
+  wrapCard?: boolean;
 }) {
   const [mapStyle, setMapStyle] = useState<MapStyle>("carto-positron");
 
@@ -36,6 +37,7 @@ export default function MapSectionClient(props: {
       etaAtISO={props.etaAtISO}
       currentlyOver={props.currentlyOver}
       cardClassName={props.cardClassName}
+      wrapCard={props.wrapCard}
     />
   );
 }

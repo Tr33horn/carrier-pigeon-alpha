@@ -341,6 +341,7 @@ export async function GET(req: Request) {
       dest_lon,
       sent_at,
       eta_at,
+      opened_at,
       delivered_notified_at,
       sender_receipt_sent_at,
       distance_km,

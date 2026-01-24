@@ -5,6 +5,10 @@ import UnsealButton from "../_components/UnsealButton";
 import CleanAuthHash from "../_components/CleanAuthHash";
 import { createSupabaseServerReadClient } from "@/app/lib/supabase/server";
 import { US_REGIONS } from "@/app/lib/geo/usRegions";
+import AppHeader from "@/app/_components/AppHeader";
+import { getSealImgSrc } from "@/app/lib/seals";
+import { getEnvelopeTintColor, normalizeEnvelopeTint } from "@/app/lib/envelopeTints";
+import styles from "../status.module.css";
 
 function formatLocal(iso?: string | null) {
   if (!iso) return "";
@@ -22,6 +26,10 @@ function regionLabelFor(id?: string | null) {
 
 type StatusRow = {
   bird_type: string | null;
+  from_name: string | null;
+  subject: string | null;
+  seal_id: string | null;
+  envelope_tint: string | null;
   dest_region_id: string | null;
   eta_at: string | null;
   sent_at: string | null;
@@ -78,52 +86,39 @@ function StatusCard({ status }: { status: StatusRow }) {
   );
 }
 
-function ReceiptCard({ bird_type, dest_region_id, eta_at }: StatusRow) {
+function ReceiptCard({ bird_type, dest_region_id, eta_at, opened_at }: StatusRow) {
   return (
-    <div className="card" style={{ maxWidth: 640 }}>
+    <div className="card">
       <div className="cardHead">
         <div>
           <div className="kicker">Delivery receipt</div>
-          <div className="h2">Arrived safely</div>
-          <div className="muted" style={{ marginTop: 6, maxWidth: 560 }}>
-            The seal is broken. This letter is now yours to keep.
-          </div>
         </div>
       </div>
 
-      <div className="stack" style={{ gap: 8 }}>
-        <div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            Bird
-          </div>
-          <div style={{ fontWeight: 700 }}>{bird_type ?? "bird"}</div>
+      <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="metaPill">
+          Delivered: <strong>{eta_at ? formatLocal(eta_at) : "Unknown"}</strong>
         </div>
+        <div className="metaPill">
+          Opened: <strong>{opened_at ? formatLocal(opened_at) : "Unknown"}</strong>
+        </div>
+      </div>
 
-        <div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            Destination
-          </div>
-          <div style={{ fontWeight: 700 }}>{regionLabelFor(dest_region_id)}</div>
-        </div>
-
-        <div>
-          <div className="muted" style={{ fontSize: 12 }}>
-            ETA
-          </div>
-          <div style={{ fontWeight: 700 }}>{eta_at ? formatLocal(eta_at) : "ETA unknown"}</div>
-        </div>
+      <div className="muted" style={{ marginTop: 10 }}>
+        Bird: <strong>{bird_type ?? "bird"}</strong> • Destination:{" "}
+        <strong>{regionLabelFor(dest_region_id)}</strong>
       </div>
     </div>
   );
 }
 
-function LetterView({ letter }: { letter: LetterRow }) {
+function LetterView({ letter, title }: { letter: LetterRow; title: string }) {
   return (
-    <div className="card" style={{ maxWidth: 740 }}>
+    <div className="card">
       <div className="cardHead">
         <div>
           <div className="kicker">Opened letter</div>
-          <div className="h2">Delivered to you</div>
+          <div className="h2">{title}</div>
         </div>
       </div>
 
@@ -160,13 +155,18 @@ export default async function LetterOpenPage({ params }: { params: Promise<{ tok
 
   if (!status) {
     return (
-      <main className="pageBg">
-        <CleanAuthHash />
-        <div className="wrap">
-          <h1 className="h1">Open letter</h1>
-          <InvalidLinkCard />
-        </div>
-      </main>
+      <>
+        <AppHeader />
+        <main className="pageBg">
+          <CleanAuthHash />
+          <div className="wrap">
+            <div style={{ maxWidth: 820, margin: "0 auto", textAlign: "center" }}>
+              <h1 className="h1">Open letter</h1>
+              <InvalidLinkCard />
+            </div>
+          </div>
+        </main>
+      </>
     );
   }
 
@@ -177,57 +177,148 @@ export default async function LetterOpenPage({ params }: { params: Promise<{ tok
     redirect(`/l/${token}`);
   }
 
+  const sealImg = getSealImgSrc(status?.seal_id) || "/waxseal.png";
+  const envTint = getEnvelopeTintColor(normalizeEnvelopeTint(status?.envelope_tint));
+
   if (!user) {
     return (
-      <main className="pageBg">
-        <CleanAuthHash />
-        <div className="wrap">
-          <h1 className="h1">Open letter</h1>
-          <StatusCard status={status} />
-          <div style={{ marginTop: 16 }}>
-            <OtpForm />
+      <>
+        <AppHeader />
+        <main className="pageBg">
+          <CleanAuthHash />
+          <div className="wrap">
+            <div>
+              <div style={{ textAlign: "center" }}>
+                <h1 className="h1">Open letter</h1>
+              </div>
+              <StatusCard status={status} />
+              <div className={`card letterCard ${styles.statusLetterCard}`} style={{ marginTop: 16 }}>
+                <div className="cardHead" style={{ textAlign: "center", justifyContent: "center" }}>
+                  <div>
+                    <div className="kicker">Letter</div>
+                    <div className="h2">{status?.from_name ? `From ${status.from_name}` : "From someone"}</div>
+                    {status?.subject ? <div className="muted">{status.subject}</div> : null}
+                  </div>
+                </div>
+
+                <div className="soft envelope" style={{ marginTop: 14, ["--env-tint" as any]: envTint }}>
+                  <div className="sealCard">
+                    <div className="sealRow">
+                      <button type="button" className="waxBtn" aria-label="Sealed letter" disabled>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={sealImg} alt="" className="waxImg" />
+                      </button>
+
+                      <div>
+                        <div className="sealTitle">Sealed letter</div>
+                        <div className="sealSub">Sign in to open.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <OtpForm />
+              </div>
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
+      </>
     );
   }
 
-  const { data: openedData } = await supabase.rpc("read_opened_letter_by_token", { p_token: token });
+  const { data: openedData } = await supabase.rpc("read_opened_letter_by_public_token", { p_token: token });
   const openedRow = (Array.isArray(openedData) ? openedData[0] : openedData) as LetterRow | null | undefined;
   const isOpened = !!openedRow?.id;
 
   return (
-    <main className="pageBg">
-      <CleanAuthHash />
-      <div className="wrap">
-        <h1 className="h1">Open letter</h1>
-
-        <div style={{ marginTop: 8 }}>
-          <a className="link" href={`/l/${token}`}>
-            View flight status
-          </a>
-        </div>
+    <>
+      <AppHeader />
+      <main className="pageBg">
+        <CleanAuthHash />
+        <div className="wrap">
+          <div>
+          <div style={{ textAlign: "center" }}>
+            <h1 className="h1">{isOpened ? "Seal broken" : "Open letter"}</h1>
+            {isOpened ? (
+              <div
+                className="muted"
+                style={{
+                  marginTop: 8,
+                  maxWidth: 640,
+                  marginLeft: "auto",
+                  marginRight: "auto",
+                  textAlign: "center",
+                }}
+              >
+                The seal is broken. This letter is now yours to keep.
+              </div>
+            ) : (
+              <div style={{ marginTop: 8 }}>
+                <a className="link" href={`/l/${token}`}>
+                  View flight status
+                </a>
+              </div>
+            )}
+          </div>
 
         {isOpened ? (
           <>
-            <ReceiptCard
-              bird_type={openedRow!.bird_type}
-              dest_region_id={openedRow!.dest_region_id}
-              eta_at={openedRow!.eta_at}
-              sent_at={null}
-              opened_at={openedRow!.opened_at}
-              canceled_at={null}
-            />
+            <div>
+              <ReceiptCard
+                bird_type={openedRow!.bird_type}
+                dest_region_id={openedRow!.dest_region_id}
+                eta_at={openedRow!.eta_at}
+                opened_at={openedRow!.opened_at}
+                sent_at={null}
+                canceled_at={null}
+              />
+            </div>
             <div style={{ marginTop: 16 }}>
-              <LetterView letter={openedRow as LetterRow} />
+              <LetterView
+                letter={openedRow as LetterRow}
+                title={status?.subject ? status.subject : "(No subject)"}
+              />
             </div>
           </>
         ) : (
-          <div style={{ marginTop: 16 }}>
-            <UnsealButton token={token} />
-          </div>
+          <>
+            <div className={`card letterCard ${styles.statusLetterCard}`} style={{ marginTop: 16 }}>
+              <div className="cardHead" style={{ textAlign: "center", justifyContent: "center" }}>
+                <div>
+                  <div className="kicker">Letter</div>
+                  <div className="h2">{status?.from_name ? `From ${status.from_name}` : "From someone"}</div>
+                  {status?.subject ? <div className="muted">{status.subject}</div> : null}
+                </div>
+              </div>
+
+              <div className="soft envelope" style={{ marginTop: 14, ["--env-tint" as any]: envTint }}>
+                <div className="sealCard">
+                  <div className="sealRow">
+                    <UnsealButton
+                      token={token}
+                      variant="seal"
+                      className="waxBtn"
+                      buttonProps={{ "aria-label": "Unseal letter", title: "Unseal letter" }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={sealImg} alt="" className="waxImg" />
+                    </UnsealButton>
+
+                    <div>
+                      <div className="sealTitle">Sealed letter</div>
+                      <div className="sealSub">Ready to open.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </>
         )}
-      </div>
-    </main>
+        </div>
+        </div>
+      </main>
+    </>
   );
 }

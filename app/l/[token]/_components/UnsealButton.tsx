@@ -1,13 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 type Props = {
   token: string;
+  variant?: "card" | "seal";
+  className?: string;
+  children?: ReactNode;
+  buttonProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
 };
 
-export default function UnsealButton({ token }: Props) {
+export default function UnsealButton({
+  token,
+  variant = "card",
+  className,
+  children,
+  buttonProps,
+}: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +48,27 @@ export default function UnsealButton({ token }: Props) {
       setLoading(false);
     }
   };
+
+  if (variant === "seal") {
+    return (
+      <div>
+        <button
+          type="button"
+          className={className || "waxBtn"}
+          onClick={onUnseal}
+          disabled={loading || buttonProps?.disabled}
+          {...buttonProps}
+        >
+          {children ?? (loading ? "Unsealing…" : "Unseal letter")}
+        </button>
+        {error ? (
+          <div className="err" style={{ marginTop: 8 }}>
+            ❌ {error}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="card" style={{ maxWidth: 640 }}>

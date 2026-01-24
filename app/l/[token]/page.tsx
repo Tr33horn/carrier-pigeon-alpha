@@ -4,10 +4,12 @@ import { createSupabaseServerReadClient } from "@/app/lib/supabase/server";
 import CleanAuthHash from "./_components/CleanAuthHash";
 import MapSectionClient from "./_components/MapSectionClient";
 import TimelineSection from "./_components/TimelineSection";
+import StatusAutoRefresh from "./_components/StatusAutoRefresh";
 import { birdDisplayLabel, normalizeBird } from "@/app/lib/birds";
 import { getEnvelopeTintColor, normalizeEnvelopeTint } from "@/app/lib/envelopeTints";
 import { getSealImgSrc } from "@/app/lib/seals";
 import styles from "./status.module.css";
+import AppHeader from "@/app/_components/AppHeader";
 
 function formatLocal(iso?: string | null) {
   if (!iso) return "";
@@ -123,13 +125,17 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
   const birdLabel = birdDisplayLabel(birdType);
   const sealImg = getSealImgSrc(letter.seal_id) || "/waxseal.png";
   const envTint = getEnvelopeTintColor(normalizeEnvelopeTint(letter.envelope_tint));
+  const isOpened = !!letter.opened_at;
 
   // Logged out: status + OTP
   if (!user) {
     return (
-      <main className="pageBg">
-        <CleanAuthHash />
-        <div className="wrap">
+      <>
+        <AppHeader />
+        <main className="pageBg">
+          <CleanAuthHash />
+          <StatusAutoRefresh enabled={!data.delivered && !data.canceled} />
+          <div className="wrap">
           <div className={styles.statusHero}>
             <div className="card">
               <div className="kicker">Flight status</div>
@@ -141,26 +147,41 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
               </div>
 
               <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
-                <div className="metaPill faint">
-                  ETA: <strong>{etaIso ? formatLocal(etaIso) : "ETA unknown"}</strong>
-                </div>
-                {letter.eta_utc_text ? <div className="metaPill faint">{letter.eta_utc_text}</div> : null}
-                <div className="metaPill faint">
-                  Progress: <strong>{Math.floor((flight.progress ?? 0) * 100)}%</strong>
-                </div>
-                {letter.opened_at ? (
+                {data.delivered ? (
+                  <>
+                    <div className="metaPill faint">
+                      Sent: <strong>{letter.sent_at ? formatLocal(letter.sent_at) : "Unknown"}</strong>
+                    </div>
+                    <div className="metaPill faint">
+                      Delivered: <strong>{etaIso ? formatLocal(etaIso) : "Unknown"}</strong>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="metaPill faint">
+                      ETA: <strong>{etaIso ? formatLocal(etaIso) : "ETA unknown"}</strong>
+                    </div>
+                    {letter.eta_utc_text ? <div className="metaPill faint">{letter.eta_utc_text}</div> : null}
+                    <div className="metaPill faint">
+                      Progress: <strong>{Math.floor((flight.progress ?? 0) * 100)}%</strong>
+                    </div>
+                    {flight.sleeping && flight.sleep_local_text ? (
+                      <div className="metaPill faint">Sleeping · {flight.sleep_local_text}</div>
+                    ) : null}
+                  </>
+                )}
+                {isOpened ? (
                   <div className="metaPill faint">Opened: {formatLocal(letter.opened_at)}</div>
-                ) : null}
-                {flight.sleeping && flight.sleep_local_text ? (
-                  <div className="metaPill faint">Sleeping · {flight.sleep_local_text}</div>
                 ) : null}
               </div>
             </div>
           </div>
 
-          <div className={styles.statusGrid}>
+          <div
+            className={`${styles.statusGrid} ${data.delivered ? styles.deliveredStack : styles.incomingWide}`}
+          >
             <div className={`${styles.statusCol} ${styles.gridLetter}`}>
-              <div className="card letterCard">
+              <div className={`card letterCard ${styles.statusLetterCard}`}>
                 <div className="cardHead">
                   <div>
                     <div className="kicker">Letter</div>
@@ -180,8 +201,8 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                       </button>
 
                       <div>
-                        <div className="sealTitle">Sealed letter</div>
-                        <div className="sealSub">Sign in to open once delivered.</div>
+                        <div className="sealTitle">{isOpened ? "Opened letter" : "Sealed letter"}</div>
+                        <div className="sealSub">{isOpened ? "Opened by recipient." : "Sign in to open once delivered."}</div>
                       </div>
                     </div>
                   </div>
@@ -201,7 +222,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                 sentAtISO={letter.sent_at ?? undefined}
                 etaAtISO={etaIso ?? undefined}
                 currentlyOver={data.current_over_text}
-                cardClassName="mapShell"
+                cardClassName={styles.statusMapCard}
               />
             </div>
 
@@ -253,14 +274,18 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
             <OtpForm />
           </div>
         </div>
-      </main>
+        </main>
+      </>
     );
   }
 
   return (
-    <main className="pageBg">
-      <CleanAuthHash />
-      <div className="wrap">
+    <>
+      <AppHeader />
+      <main className="pageBg">
+        <CleanAuthHash />
+        <StatusAutoRefresh enabled={!data.delivered && !data.canceled} />
+        <div className="wrap">
         <div className={styles.statusHero}>
           <div className="card">
             <div className="kicker">Flight status</div>
@@ -272,99 +297,192 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
             </div>
 
             <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <div className="metaPill faint">
-                ETA: <strong>{etaIso ? formatLocal(etaIso) : "ETA unknown"}</strong>
-              </div>
-              {letter.eta_utc_text ? <div className="metaPill faint">{letter.eta_utc_text}</div> : null}
-              <div className="metaPill faint">
-                Progress: <strong>{Math.floor((flight.progress ?? 0) * 100)}%</strong>
-              </div>
-              {letter.opened_at ? (
+              {data.delivered ? (
+                <>
+                  <div className="metaPill faint">
+                    Sent: <strong>{letter.sent_at ? formatLocal(letter.sent_at) : "Unknown"}</strong>
+                  </div>
+                  <div className="metaPill faint">
+                    Delivered: <strong>{etaIso ? formatLocal(etaIso) : "Unknown"}</strong>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="metaPill faint">
+                    ETA: <strong>{etaIso ? formatLocal(etaIso) : "ETA unknown"}</strong>
+                  </div>
+                  {letter.eta_utc_text ? <div className="metaPill faint">{letter.eta_utc_text}</div> : null}
+                  <div className="metaPill faint">
+                    Progress: <strong>{Math.floor((flight.progress ?? 0) * 100)}%</strong>
+                  </div>
+                  {flight.sleeping && flight.sleep_local_text ? (
+                    <div className="metaPill faint">Sleeping · {flight.sleep_local_text}</div>
+                  ) : null}
+                </>
+              )}
+              {isOpened ? (
                 <div className="metaPill faint">Opened: {formatLocal(letter.opened_at)}</div>
-              ) : null}
-              {flight.sleeping && flight.sleep_local_text ? (
-                <div className="metaPill faint">Sleeping · {flight.sleep_local_text}</div>
               ) : null}
             </div>
           </div>
         </div>
 
-        <div className={styles.statusGrid}>
-          <div className={`${styles.statusCol} ${styles.gridLetter}`}>
-            <div className="card letterCard">
-              <div className="cardHead">
-                <div>
-                  <div className="kicker">Letter</div>
-                  <div className="h2">
-                    {letter.from_name ? `From ${letter.from_name}` : "From someone"}
+        <div
+          className={`${styles.statusGrid} ${data.delivered ? styles.deliveredStack : styles.incomingWide}`}
+        >
+          {!isOpened ? (
+            <div className={`${styles.statusCol} ${styles.gridLetter}`}>
+              <div className={`card letterCard ${styles.statusLetterCard}`}>
+                <div className="cardHead">
+                  <div>
+                    <div className="kicker">Letter</div>
+                    <div className="h2">
+                      {letter.from_name ? `From ${letter.from_name}` : "From someone"}
+                    </div>
+                    {letter.subject ? <div className="muted">{letter.subject}</div> : null}
                   </div>
-                  {letter.subject ? <div className="muted">{letter.subject}</div> : null}
                 </div>
-              </div>
 
-              <div className="soft envelope" style={{ marginTop: 14, ["--env-tint" as any]: envTint }}>
+                <div className="soft envelope" style={{ marginTop: 14, ["--env-tint" as any]: envTint }}>
                 <div className="sealCard">
                   <div className="sealRow">
-                    <button type="button" className="waxBtn" aria-label="Wax seal preview" disabled>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={sealImg} alt="" className="waxImg" />
-                    </button>
+                    {arrived && !isOpened ? (
+                      <a
+                        href={`/l/${token}/open`}
+                        className="waxBtn"
+                        aria-label="Open letter"
+                        title="Open letter"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={sealImg} alt="" className="waxImg" />
+                      </a>
+                    ) : (
+                      <button type="button" className="waxBtn" aria-label="Wax seal preview" disabled>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={sealImg} alt="" className="waxImg" />
+                      </button>
+                    )}
 
                     <div>
-                      <div className="sealTitle">Sealed letter</div>
+                      <div className="sealTitle">{isOpened ? "Opened letter" : "Sealed letter"}</div>
                       <div className="sealSub">
-                        {arrived ? "Ready to open." : "Sealed until delivery."}
+                        {isOpened
+                          ? "Opened by recipient."
+                          : arrived
+                          ? "Ready to open."
+                          : "Sealed until delivery."}
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
+                </div>
 
-              <div style={{ marginTop: 12 }}>
-                {arrived ? (
-                  <a className="btnPrimary" href={`/l/${token}/open`}>
-                    Open letter
-                  </a>
-                ) : (
-                  <div className="muted">
-                    Arrives at {etaIso ? formatLocal(etaIso) : "an unknown time"}. You can open it once it
-                    lands.
-                  </div>
-                )}
+                <div style={{ marginTop: 12 }}>
+                  {isOpened ? (
+                    <div className="muted">Opened by recipient.</div>
+                  ) : arrived ? (
+                    <div className="muted">Tap the seal to open.</div>
+                  ) : (
+                    <div className="muted">
+                      Arrives at {etaIso ? formatLocal(etaIso) : "an unknown time"}. You can open it once it
+                      lands.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          ) : null}
+
+          {isOpened && letter.body ? (
+            <div className={`${styles.statusFull} ${styles.gridOpen}`}>
+              <div className="card">
+                <div className="kicker">
+                  OPENED LETTER FROM{" "}
+                  {letter.from_name ? letter.from_name.toUpperCase() : "SOMEONE"}
+                </div>
+                <div className="h2">Message</div>
+                <div className="muted" style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>
+                  {letter.body}
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div className={`${styles.statusCol} ${styles.gridMap}`}>
-            <MapSectionClient
-              origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
-              dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
-              progress={flight.progress ?? 0}
-              progressPctFloor={Math.floor((flight.progress ?? 0) * 100)}
-              tooltipText={flight.tooltip_text}
-              markerMode={flight.marker_mode}
-              showLive={!data.delivered && !data.canceled}
-              sentAtISO={letter.sent_at ?? undefined}
-              etaAtISO={etaIso ?? undefined}
-              currentlyOver={data.current_over_text}
-              cardClassName="mapShell"
-            />
+            {isOpened ? (
+              <details className="card">
+                <summary className={`cardHead ${styles.collapseSummary}`}>
+                  <div className="kicker">Map</div>
+                  <div className="muted">Collapsed</div>
+                </summary>
+                <div className={styles.statusMapCard} style={{ marginTop: 10 }}>
+                  <MapSectionClient
+                    origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+                    dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+                    progress={flight.progress ?? 0}
+                    progressPctFloor={Math.floor((flight.progress ?? 0) * 100)}
+                    tooltipText={flight.tooltip_text}
+                    markerMode={flight.marker_mode}
+                    showLive={!data.delivered && !data.canceled}
+                    sentAtISO={letter.sent_at ?? undefined}
+                    etaAtISO={etaIso ?? undefined}
+                    currentlyOver={data.current_over_text}
+                    wrapCard={false}
+                  />
+                </div>
+              </details>
+            ) : (
+              <MapSectionClient
+                origin={{ lat: letter.origin_lat, lon: letter.origin_lon }}
+                dest={{ lat: letter.dest_lat, lon: letter.dest_lon }}
+                progress={flight.progress ?? 0}
+                progressPctFloor={Math.floor((flight.progress ?? 0) * 100)}
+                tooltipText={flight.tooltip_text}
+                markerMode={flight.marker_mode}
+                showLive={!data.delivered && !data.canceled}
+                sentAtISO={letter.sent_at ?? undefined}
+                etaAtISO={etaIso ?? undefined}
+                currentlyOver={data.current_over_text}
+                cardClassName={styles.statusMapCard}
+              />
+            )}
           </div>
 
           <div className={`${styles.statusFull} ${styles.gridTimeline}`}>
-            <div className="card">
-              <div className="kicker">Flight log</div>
-              <TimelineSection
-                letter={{ sent_at: letter.sent_at ?? "", origin_name: letter.origin_name }}
-                checkpoints={data.checkpoints ?? []}
-                delivered={data.delivered}
-                canceled={data.canceled}
-                sleeping={flight.sleeping}
-                effectiveEtaISO={etaIso ?? ""}
-                birdName={birdLabel}
-                nowISO={data.server_now_iso ?? undefined}
-              />
-            </div>
+            {isOpened ? (
+              <details className="card">
+                <summary className={`cardHead ${styles.collapseSummary}`}>
+                  <div className="kicker">Flight log</div>
+                  <div className="muted">Collapsed</div>
+                </summary>
+                <div style={{ marginTop: 10 }}>
+                  <TimelineSection
+                    letter={{ sent_at: letter.sent_at ?? "", origin_name: letter.origin_name }}
+                    checkpoints={data.checkpoints ?? []}
+                    delivered={data.delivered}
+                    canceled={data.canceled}
+                    sleeping={flight.sleeping}
+                    effectiveEtaISO={etaIso ?? ""}
+                    birdName={birdLabel}
+                    nowISO={data.server_now_iso ?? undefined}
+                  />
+                </div>
+              </details>
+            ) : (
+              <div className="card">
+                <div className="kicker">Flight log</div>
+                <TimelineSection
+                  letter={{ sent_at: letter.sent_at ?? "", origin_name: letter.origin_name }}
+                  checkpoints={data.checkpoints ?? []}
+                  delivered={data.delivered}
+                  canceled={data.canceled}
+                  sleeping={flight.sleeping}
+                  effectiveEtaISO={etaIso ?? ""}
+                  birdName={birdLabel}
+                  nowISO={data.server_now_iso ?? undefined}
+                />
+              </div>
+            )}
           </div>
 
           <div className={`${styles.statusFull} ${styles.gridBadges}`}>
@@ -394,7 +512,8 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
             </div>
           </div>
         </div>
-      </div>
-    </main>
+        </div>
+      </main>
+    </>
   );
 }

@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "auth_required" }, { status: 401 });
   }
 
-  const { error } = await supabase.rpc("open_letter_by_token", { p_token: token });
+  const { error } = await supabase.rpc("open_letter_by_public_token", { p_token: token });
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
