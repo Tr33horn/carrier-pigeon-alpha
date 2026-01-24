@@ -275,14 +275,12 @@ export default async function LetterOpenPage({ params }: { params: Promise<{ tok
         {isOpened ? (
           <>
             <div>
-              <ReceiptCard
-                bird_type={openedRow!.bird_type}
-                dest_region_id={openedRow!.dest_region_id}
-                eta_at={openedRow!.eta_at}
-                opened_at={openedRow!.opened_at}
-                sent_at={null}
-                canceled_at={null}
-              />
+            <ReceiptCard
+              bird_type={openedRow!.bird_type}
+              dest_region_id={openedRow!.dest_region_id}
+              eta_at={openedRow!.eta_at}
+              opened_at={openedRow!.opened_at}
+            />
             </div>
             <div style={{ marginTop: 16 }}>
               <LetterView
