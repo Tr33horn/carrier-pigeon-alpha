@@ -8,7 +8,13 @@ const MapView = dynamic(() => import("../MapView"), {
   ssr: false,
 });
 
-export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels" | "ink-sketch";
+export type MapStyle =
+  | "carto-positron"
+  | "carto-voyager"
+  | "carto-positron-nolabels"
+  | "ink-sketch"
+  | "osm-default"
+  | "topplus-grey";
 export type MarkerMode = "flying" | "sleeping" | "delivered" | "canceled";
 
 type LatLon = { lat: number; lon: number };
