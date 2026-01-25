@@ -129,12 +129,6 @@ function isCanceledLetter(l: DashboardLetter | null | undefined) {
   return false;
 }
 
-function birdLabel(bird?: DashboardLetter["bird"]) {
-  if (bird === "snipe") return "Great Snipe";
-  if (bird === "goose") return "Canada Goose";
-  return "Homing Pigeon";
-}
-
 /* ---------- Mini route thumbnail (no Leaflet) ---------- */
 function RouteThumb(props: {
   origin: { lat: number; lon: number };
