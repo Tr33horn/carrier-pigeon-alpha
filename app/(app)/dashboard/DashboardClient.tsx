@@ -754,9 +754,6 @@ export default function DashboardClient({ initialEmail }: Props) {
                 const msLeft = etaAbsMs == null ? null : etaAbsMs - now.getTime();
                 const countdown = formatCountdown(msLeft);
 
-                const isSleeping = !!l.sleeping && !l.delivered && !isCanceled;
-
-                // priority order: canceled -> delivered -> sleeping -> flying
                 const statusPath = `/l/${l.public_token}`;
                 const statusUrl = typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
 
