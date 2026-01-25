@@ -20,7 +20,7 @@ export default function MapSectionClient(props: {
   cardClassName?: string;
   wrapCard?: boolean;
 }) {
-  const [mapStyle, setMapStyle] = useState<MapStyle>("carto-positron");
+  const [mapStyle, setMapStyle] = useState<MapStyle>("topplus-grey");
 
   return (
     <MapSection

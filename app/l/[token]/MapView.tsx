@@ -8,7 +8,13 @@ import L from "leaflet";
 import { isSleepingAt, offsetMinutesFromLon, initialSleepSkipUntilUtcMs } from "@/app/lib/flightSleep";
 
 // ✅ Match the LetterStatusPage values
-export type MapStyle = "carto-positron" | "carto-voyager" | "carto-positron-nolabels" | "ink-sketch";
+export type MapStyle =
+  | "carto-positron"
+  | "carto-voyager"
+  | "carto-positron-nolabels"
+  | "ink-sketch"
+  | "osm-default"
+  | "topplus-grey";
 export type MarkerMode = "flying" | "sleeping" | "delivered" | "canceled";
 
 type LatLon = { lat: number; lon: number };
@@ -67,6 +73,20 @@ function getCarto(style: MapStyle) {
     };
   }
 
+  if (style === "osm-default") {
+    return {
+      url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      attribution: "&copy; OpenStreetMap contributors",
+    };
+  }
+
+  if (style === "topplus-grey") {
+    return {
+      url: "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web_grau/default/WEBMERCATOR/{z}/{y}/{x}.png",
+      attribution: "&copy; GeoBasis-DE / BKG &copy; OpenStreetMap contributors",
+    };
+  }
+
   return {
     url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
@@ -100,13 +120,21 @@ function FitBoundsOnRouteChange({ origin, dest }: { origin: LatLon; dest: LatLon
   return null;
 }
 
+function MapReady({ onReady }: { onReady: (map: L.Map) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    onReady(map);
+  }, [map, onReady]);
+  return null;
+}
+
 /** Keep tooltips sane + always include "Location:" */
 function normalizeTooltip(text?: string) {
   let t = (text || "").trim();
   if (!t) return "Location: Somewhere over the U.S.";
 
   t = t.replace(/^currently over:\s*/i, "").trim();
-  if (!/^location:\s*/i.test(t)) t = `Location: ${t}`;
+  t = t.replace(/^location:\s*/i, "").trim();
   return t;
 }
 
@@ -252,6 +280,8 @@ export default function MapView(props: {
 
   const mapStyle: MapStyle = props.mapStyle ?? "carto-positron";
   const tile = useMemo(() => getCarto(mapStyle), [mapStyle]);
+  const mapRef = useRef<L.Map | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   // ✅ smooth progress display with RAF (race-proof)
   const [displayProgress, setDisplayProgress] = useState(() => clamp01(props.progress));
@@ -405,13 +435,20 @@ export default function MapView(props: {
 
   // ✅ CSS-variable based colors
   const idealColor = "var(--route-ideal, rgba(18,18,18,0.35))";
-  const flownColor = "var(--route-flown, rgba(22,163,74,0.85))";
+  const flownColor = "var(--route-flown, #ac2522)";
   const sleepColor = "var(--route-sleep, rgba(88,80,236,0.85))";
 
   return (
     <div className="mapShell">
       <MapContainer zoom={4} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
         <TileLayer attribution={tile.attribution} url={tile.url} />
+
+        <MapReady
+          onReady={(map) => {
+            mapRef.current = map;
+            setMapReady(true);
+          }}
+        />
 
         <FitBoundsOnRouteChange origin={origin} dest={dest} />
 
@@ -449,30 +486,62 @@ export default function MapView(props: {
         <Marker position={[dest.lat, dest.lon]} icon={destIcon} />
 
         <Marker position={[current.lat, current.lon]} icon={liveIcon}>
-        <Tooltip
-  direction="top"
-  offset={[0, isSleeping ? -30 : -26]}
-  opacity={1}
-  permanent
-  interactive={false}
-  className={`pigeonTooltip ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} ${isDelivered ? "delivered" : ""} ${
-    isCanceled ? "canceled" : ""
-  }`}
->
-  <span className="pigeonTooltipRow">
-    {isCanceled ? (
-      <span className="pigeonStatusGlyph" aria-hidden>
-        💀
-      </span>
-    ) : !isDelivered ? (
-      <span className={`pigeonLiveDot ${isSleeping ? "sleep" : ""}`} />
-    ) : null}
+          <Tooltip
+            direction="top"
+            offset={[0, isSleeping ? -30 : -26]}
+            opacity={1}
+            permanent
+            interactive={false}
+            className={`pigeonTooltip ${isFlying ? "live" : ""} ${isSleeping ? "sleep" : ""} ${
+              isDelivered ? "delivered" : ""
+            } ${isCanceled ? "canceled" : ""}`}
+          >
+            <span className="pigeonTooltipRow">
+              {isCanceled ? (
+                <span className="pigeonStatusGlyph" aria-hidden>
+                  💀
+                </span>
+              ) : !isDelivered ? (
+                <span className={`pigeonLiveDot ${isSleeping ? "sleep" : ""}`} />
+              ) : null}
 
-    <span className="pigeonTooltipText">{tooltip}</span>
-  </span>
-</Tooltip>
+              <span className="pigeonTooltipText">{tooltip}</span>
+            </span>
+          </Tooltip>
         </Marker>
       </MapContainer>
+      <div className="mapControls">
+        <button
+          type="button"
+          className="mapCtrlBtn"
+          onClick={() => {
+            const map = mapRef.current;
+            if (!map) return;
+            const maxZoom = map.getMaxZoom() || 16;
+            const zoom = Math.min(maxZoom, 14);
+            map.setView([current.lat, current.lon], zoom, { animate: true });
+          }}
+          disabled={!mapReady}
+        >
+          Bird
+        </button>
+        <button
+          type="button"
+          className="mapCtrlBtn"
+          onClick={() => {
+            const map = mapRef.current;
+            if (!map) return;
+            const bounds: [number, number][] = [
+              [origin.lat, origin.lon],
+              [dest.lat, dest.lon],
+            ];
+            map.fitBounds(bounds as any, { padding: [40, 40] });
+          }}
+          disabled={!mapReady}
+        >
+          Route
+        </button>
+      </div>
     </div>
   );
 }

@@ -12,6 +12,11 @@
 /* -------------------------------------------------
    Map (Leaflet)
 ------------------------------------------------- */
+:root{
+  --route-ideal: #00cdff;
+  --route-flown: #ff0000;
+}
+
 .mapShell{
   position: relative;
   height: 340px;
@@ -25,6 +30,39 @@
 }
 
 .map{ height: 100%; width: 100%; }
+
+.mapControls{
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+  z-index: 650;
+}
+
+.mapCtrlBtn{
+  background: rgba(255,255,255,0.92);
+  border: 1px solid rgba(0,0,0,0.16);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 10px;
+  cursor: pointer;
+  box-shadow: 0 6px 12px rgba(0,0,0,0.10);
+  transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+}
+
+.mapCtrlBtn:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.14);
+}
+
+.mapCtrlBtn:disabled{
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+  transform: none;
+}
 
 /* Decorative overlay (grain / texture)
    Safety: keep pointer-events none so it never blocks map interactions. */
@@ -66,7 +104,7 @@
   width: 14px;
   height: 14px;
   border-radius: 999px;
-  background: #111;
+  background: #ff0000;
   border: 2px solid #fff;
   box-shadow: 0 6px 14px rgba(0,0,0,0.18);
   z-index: 3;
@@ -78,7 +116,7 @@
   position: absolute;
   inset: 0;
   border-radius: 999px;
-  border: 2px solid rgba(17,17,17,0.65);
+  border: 2px solid rgba(255, 0, 0, 0.65);
   transform: scale(0.35);
   opacity: 0;
   animation: pigeon-pulse 1.6s var(--ease-out, cubic-bezier(.2,.85,.2,1)) infinite;
@@ -192,13 +230,14 @@
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: #111;
+  background: #000000;
+  border: 2px solid #fff;
   box-shadow: 0 4px 10px rgba(0,0,0,0.25);
 }
 
 .destPin {
   position: relative;
-  color: #111;
+  color: #000000;
   filter: drop-shadow(0 6px 10px rgba(0,0,0,0.25));
 }
 .destPin svg {
@@ -220,12 +259,12 @@
    Tooltip
 ------------------------------------------------- */
 .pigeonTooltip.leaflet-tooltip {
-  background: rgba(204, 239, 253, 0.30);
+  background: rgba(255, 255, 255, 0.3);
   border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 999px;
   padding: 8px 12px;
   box-shadow: 0 12px 18px rgba(0, 0, 0, 0.14);
-  color: #121212;
+  color: #000000;
   font-family: "Bricolage Grotesque", system-ui, -apple-system, Segoe UI, Roboto, Arial;
   font-weight: 900;
   font-size: 12px;
@@ -274,7 +313,7 @@
 }
 
 @keyframes pulseBlue {
-  0%   { box-shadow: 0 0 0 0 rgba(204, 239, 253, 0.75); transform: scale(1); }
+  0%   { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.75); transform: scale(1); }
   70%  { box-shadow: 0 0 0 10px rgba(204, 239, 253, 0); transform: scale(1.05); }
   100% { box-shadow: 0 0 0 0 rgba(204, 239, 253, 0); transform: scale(1); }
 }

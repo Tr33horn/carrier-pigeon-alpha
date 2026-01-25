@@ -47,7 +47,19 @@ function resolveAppUrlLenient() {
 
   const normalized = withProto ? withProto.replace(/\/$/, "") : "";
 
-  if (normalized) return normalized;
+  if (normalized) {
+    if (process.env.NODE_ENV !== "development") {
+      const isLocal =
+        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(normalized) ||
+        normalized.includes("://localhost:") ||
+        normalized.includes("://127.0.0.1:");
+      if (isLocal) {
+        console.warn("APP_URL points to localhost in production. Fix APP_URL / APP_BASE_URL / NEXT_PUBLIC_APP_URL.");
+        return "";
+      }
+    }
+    return normalized;
+  }
 
   // Dev fallback only
   if (process.env.NODE_ENV === "development") return "http://localhost:3000";
@@ -80,8 +92,9 @@ export function getMailFrom() {
 export function getAppUrl() {
   const url = resolveAppUrlLenient();
   if (!url && process.env.NODE_ENV !== "development") {
-    // Not throwing here keeps builds stable; email templates can hard-fallback.
-    console.warn("APP_URL is not set (APP_URL / APP_BASE_URL / NEXT_PUBLIC_APP_URL). Email links may be wrong.");
+    throw new Error(
+      "APP_URL is not set or invalid for production. Set APP_URL / APP_BASE_URL / NEXT_PUBLIC_APP_URL to your production domain."
+    );
   }
   return url;
 }
