@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { safeJson } from "@/app/lib/http";
+import { getBirdCatalog } from "@/app/lib/birdsCatalog";
 
 type Direction = "sent" | "incoming" | "both";
 
@@ -48,6 +49,7 @@ type DashboardLetter = {
   eta_utc_iso: string | null;
 
   badges_count?: number;
+  badges?: { iconSrc: string; title: string }[];
 
   canceled_at?: string | null;
   canceled?: boolean;
@@ -761,9 +763,6 @@ export default function DashboardClient({ initialEmail }: Props) {
                 const isSleeping = !!l.sleeping && !l.delivered && !isCanceled;
 
                 // priority order: canceled -> delivered -> sleeping -> flying
-                const statusLabel = isCanceled ? "Canceled" : l.delivered ? "Delivered" : isSleeping ? "Sleeping" : "In Flight";
-                const statusEmoji = isCanceled ? "🛑" : l.delivered ? "✅" : isSleeping ? "😴" : "🕊️";
-
                 const statusPath = `/l/${l.public_token}`;
                 const statusUrl = typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
 
@@ -786,7 +785,6 @@ export default function DashboardClient({ initialEmail }: Props) {
                 const sentUtc = (l.sent_utc_text && l.sent_utc_text.trim()) || formatUtcFallback(l.sent_at);
                 const etaUtc = (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(etaIsoResolved);
 
-                const badgeCount = Math.max(0, Number(l.badges_count ?? 0));
                 const isArchivingThis = archivingId === l.id;
                 const isCancelingThis = cancelingId === l.id;
                 const isOpened = !!l.opened_at;
@@ -805,8 +803,10 @@ export default function DashboardClient({ initialEmail }: Props) {
                   isOpened ? "UNSEALED" : dirTag === "incoming" && l.delivered ? "ARRIVED" : dirLabel;
                 const hideHeavy = isOpened || l.delivered;
                 const shouldPulseBadge = badgePulseKey === l.public_token;
+                const badgeIcons = (l.badges ?? []).filter((b) => b.iconSrc).slice(0, 6);
+                const hasBadgeIcons = badgeIcons.length > 0;
 
-                const birdName = birdLabel(l.bird);
+                const birdImg = getBirdCatalog(l.bird || "")?.imgSrc || "/birds/homing-pigeon.gif";
                 const speedShown =
                   typeof l.current_speed_kmh === "number" && Number.isFinite(l.current_speed_kmh)
                     ? Math.max(0, Math.round(l.current_speed_kmh))
@@ -815,15 +815,11 @@ export default function DashboardClient({ initialEmail }: Props) {
                 return (
                   <div key={`${l.public_token}-${l.direction ?? "x"}`} className="card">
                     <div className="dashRowTop" style={{ marginBottom: 10 }}>
+                      <div className="birdThumb" aria-hidden>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={birdImg} alt="" />
+                      </div>
                       <div className="dashRowMain">
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-                          <div className="kicker">{topLabel}</div>
-                          {isOpened && l.opened_at ? (
-                            <div className="muted" style={{ color: "#E53935", fontWeight: 700 }}>
-                              Opened {new Date(l.opened_at).toLocaleString()}
-                            </div>
-                          ) : null}
-                        </div>
                         <div className="h2">{l.subject?.trim() ? l.subject : "(No subject)"}</div>
 
                         <div className="muted" style={{ marginTop: 6 }}>
@@ -846,6 +842,15 @@ export default function DashboardClient({ initialEmail }: Props) {
                           ) : null}
                         </div>
 
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
+                          <div className="kicker">{topLabel}</div>
+                          {isOpened && l.opened_at ? (
+                            <div className="muted" style={{ color: "#E53935", fontWeight: 700 }}>
+                              Opened {new Date(l.opened_at).toLocaleString()}
+                            </div>
+                          ) : null}
+                        </div>
+
                         <div className="muted" style={{ marginTop: 6 }}>
                           ✔️ <strong>{geoText}</strong>
                           {l.delivered && etaIsoResolved ? (
@@ -856,40 +861,35 @@ export default function DashboardClient({ initialEmail }: Props) {
                         </div>
                       </div>
 
-                      {!hideHeavy && canThumb ? (
-                        <RouteThumb
-                          origin={{ lat: l.origin_lat, lon: l.origin_lon }}
-                          dest={{ lat: l.dest_lat, lon: l.dest_lon }}
-                          current={current}
-                          progress={derivedProgress}
-                        />
-                      ) : null}
+                      <div className="dashRowSide">
+                        {hasBadgeIcons ? (
+                          <div className={`badgeIconRow ${shouldPulseBadge ? "badgePop" : ""}`} title="Badges earned">
+                            {badgeIcons.map((b, idx) => (
+                              <div key={`${l.id}-badge-${idx}`} className="badgeIconTiny" title={b.title}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={b.iconSrc} alt={b.title} />
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        {!hideHeavy && canThumb ? (
+                          <RouteThumb
+                            origin={{ lat: l.origin_lat, lon: l.origin_lon }}
+                            dest={{ lat: l.dest_lat, lon: l.dest_lon }}
+                            current={current}
+                            progress={derivedProgress}
+                          />
+                        ) : null}
+                      </div>
                     </div>
 
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                      <div className="metaPill" title={birdName}>
-                        🐦 <strong>{birdName}</strong>
-                      </div>
-
                       {!hideHeavy && speedShown != null && (
                         <div className="metaPill" title="Current speed">
                           ⚡ <strong>{speedShown}</strong> km/h
                         </div>
                       )}
-
-                      {!hideHeavy ? (
-                        <div className="metaPill">
-                          {statusEmoji} <strong>{statusLabel}</strong>
-                        </div>
-                      ) : null}
-
-                      <div className="metaPill">
-                        {isOpened ? "📬" : "🔒"} <strong>{isOpened ? "Opened" : "Sealed"}</strong>
-                      </div>
-
-                      <div className={`metaPill ${shouldPulseBadge ? "badgePop" : ""}`} title="Badges earned so far">
-                        🏅 <strong>{badgeCount}</strong>&nbsp;{badgeCount === 1 ? "Badge" : "Badges"}
-                      </div>
 
                       <button
                         type="button"

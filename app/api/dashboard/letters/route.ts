@@ -14,6 +14,7 @@ import {
 
 // ✅ Single source of truth for bird rules
 import { BIRD_RULES, normalizeBird, type BirdType } from "@/app/lib/birds";
+import { BADGES } from "@/app/lib/badges";
 
 let warnedMissingSleepColumns = false;
 
@@ -451,21 +452,36 @@ export async function GET(req: Request) {
     computeViewModel(l, checkpointsByLetter.get(l.id) ?? [], realNowMs, "incoming")
   );
 
-  // Badge counts (cheap) for BOTH sets
+  // Badge counts + icons for BOTH sets
   if (letterIds.length) {
     const { data: badgeRows, error: badgeErr } = await supabaseServer
       .from("letter_items")
-      .select("letter_id")
+      .select("letter_id, code")
       .in("letter_id", letterIds)
       .eq("kind", "badge");
 
     if (!badgeErr && badgeRows?.length) {
       const counts = new Map<string, number>();
+      const icons = new Map<string, { iconSrc: string; title: string }[]>();
       for (const r of badgeRows as any[]) {
         counts.set(r.letter_id, (counts.get(r.letter_id) ?? 0) + 1);
+        const def = BADGES[r.code as keyof typeof BADGES];
+        if (def?.iconSrc) {
+          const arr = icons.get(r.letter_id) ?? [];
+          arr.push({ iconSrc: def.iconSrc, title: def.title });
+          icons.set(r.letter_id, arr);
+        }
       }
-      sentOut = sentOut.map((l: any) => ({ ...l, badges_count: counts.get(l.id) ?? 0 }));
-      incomingOut = incomingOut.map((l: any) => ({ ...l, badges_count: counts.get(l.id) ?? 0 }));
+      sentOut = sentOut.map((l: any) => ({
+        ...l,
+        badges_count: counts.get(l.id) ?? 0,
+        badges: icons.get(l.id) ?? [],
+      }));
+      incomingOut = incomingOut.map((l: any) => ({
+        ...l,
+        badges_count: counts.get(l.id) ?? 0,
+        badges: icons.get(l.id) ?? [],
+      }));
     }
   }
 

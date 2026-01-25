@@ -498,6 +498,55 @@
   flex: 1 1 auto;
 }
 
+.birdThumb{
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  border: 1px solid rgba(0,0,0,0.08);
+  background: rgba(0,0,0,0.03);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.08);
+  overflow: hidden;
+}
+
+.birdThumb img{
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
+.dashRowSide{
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3, 12px);
+}
+
+.badgeIconRow{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.badgeIconTiny{
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.9);
+  border: 1px solid rgba(0,0,0,0.10);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 6px 12px rgba(0,0,0,0.08);
+}
+
+.badgeIconTiny img{
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
 .routeThumb{
   width: 160px;
   height: 74px;
@@ -552,6 +601,9 @@
 
 @media (max-width: 680px){
   .dashRowTop{ flex-direction: column; }
+  .birdThumb{ width: 60px; height: 60px; }
+  .birdThumb img{ width: 48px; height: 48px; }
+  .dashRowSide{ width: 100%; justify-content: flex-end; }
   .routeThumb{ width: 100%; height: 86px; }
 }
 
