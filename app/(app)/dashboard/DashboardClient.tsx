@@ -835,6 +835,11 @@ export default function DashboardClient({ initialEmail }: Props) {
 
                         <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
                           <div className="kicker">{topLabel}</div>
+                          {dirTag !== "incoming" && l.sent_at ? (
+                            <div className="muted" style={{ color: "#E53935", fontWeight: 700 }}>
+                              Sent {new Date(l.sent_at).toLocaleString()}
+                            </div>
+                          ) : null}
                           {isOpened && l.opened_at ? (
                             <div className="muted" style={{ color: "#E53935", fontWeight: 700 }}>
                               Opened {new Date(l.opened_at).toLocaleString()}
