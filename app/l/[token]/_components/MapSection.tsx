@@ -69,6 +69,19 @@ export default function MapSection(props: {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
         <div className="kicker">Map</div>
 
+        <label className="mapDetailsToggle">
+          <span>Details</span>
+          <input
+            type="checkbox"
+            checked={mapStyle === "carto-voyager"}
+            onChange={() => setMapStyle(mapStyle === "carto-voyager" ? "topplus-grey" : "carto-voyager")}
+            aria-label="Toggle map details"
+          />
+          <span className={`mapDetailsSwitch ${mapStyle === "carto-voyager" ? "on" : ""}`}>
+            <span className="mapDetailsThumb" />
+          </span>
+        </label>
+
         {SHOW_MAP_STYLE_PICKER ? (
           <div className="mapStyleRow" role="group" aria-label="Map style">
             <button
