@@ -779,6 +779,8 @@ export default function DashboardClient({ initialEmail }: Props) {
                 const isArchivingThis = archivingId === l.id;
                 const isCancelingThis = cancelingId === l.id;
                 const isOpened = !!l.opened_at;
+                const showUnsealedStatusStack = l.delivered && isOpened;
+                const showDeliveredStatusStack = l.delivered && !isOpened;
 
                 const disableActions = isArchivingThis || isCancelingThis;
 
@@ -826,35 +828,73 @@ export default function DashboardClient({ initialEmail }: Props) {
                           <span style={{ opacity: 0.65 }}>
                             • {l.origin_name} → {l.dest_name}
                           </span>
-                          {l.delivered && l.sent_at ? (
+                          {l.delivered && l.sent_at && !showUnsealedStatusStack && !showDeliveredStatusStack ? (
                             <span style={{ color: "#E53935", fontWeight: 700, marginLeft: 10 }}>
                               Sent {new Date(l.sent_at).toLocaleString()}
                             </span>
                           ) : null}
                         </div>
 
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
-                          <div className="kicker">{topLabel}</div>
-                          {dirTag !== "incoming" && l.sent_at ? (
-                            <div className="muted" style={{ color: "#E53935", fontWeight: 700 }}>
-                              Sent {new Date(l.sent_at).toLocaleString()}
-                            </div>
-                          ) : null}
-                          {isOpened && l.opened_at ? (
-                            <div className="muted" style={{ color: "#E53935", fontWeight: 700 }}>
-                              Opened {new Date(l.opened_at).toLocaleString()}
-                            </div>
-                          ) : null}
-                        </div>
+                        {showUnsealedStatusStack ? (
+                          <div
+                            className="muted"
+                            style={{
+                              marginTop: 6,
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 4,
+                              color: "#E53935",
+                              fontWeight: 700,
+                            }}
+                          >
+                            <div>Sent {l.sent_at ? new Date(l.sent_at).toLocaleString() : "Unknown"}</div>
+                            <div>Delivered {etaIsoResolved ? new Date(etaIsoResolved).toLocaleString() : "Unknown"}</div>
+                            <div>Opened {l.opened_at ? new Date(l.opened_at).toLocaleString() : "Unknown"}</div>
+                          </div>
+                        ) : null}
+                        {showDeliveredStatusStack ? (
+                          <div
+                            className="muted"
+                            style={{
+                              marginTop: 6,
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 4,
+                              color: "#E53935",
+                              fontWeight: 700,
+                            }}
+                          >
+                            <div>Sent {l.sent_at ? new Date(l.sent_at).toLocaleString() : "Unknown"}</div>
+                            <div>Delivered {etaIsoResolved ? new Date(etaIsoResolved).toLocaleString() : "Unknown"}</div>
+                          </div>
+                        ) : null}
 
-                        <div className="muted" style={{ marginTop: 6 }}>
-                          ✔️ <strong>{geoText}</strong>
-                          {l.delivered && etaIsoResolved ? (
-                            <span style={{ color: "#E53935", fontWeight: 700, marginLeft: 10 }}>
-                              Delivered {new Date(etaIsoResolved).toLocaleString()}
-                            </span>
-                          ) : null}
-                        </div>
+                        {!showUnsealedStatusStack && !showDeliveredStatusStack ? (
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
+                            <div className="kicker">{topLabel}</div>
+                            {dirTag !== "incoming" && l.sent_at ? (
+                              <div className="muted" style={{ color: "#E53935", fontWeight: 700 }}>
+                                Sent {new Date(l.sent_at).toLocaleString()}
+                              </div>
+                            ) : null}
+                            {isOpened && l.opened_at ? (
+                              <div className="muted" style={{ color: "#E53935", fontWeight: 700 }}>
+                                Opened {new Date(l.opened_at).toLocaleString()}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {!showUnsealedStatusStack && !showDeliveredStatusStack ? (
+                          <div className="muted" style={{ marginTop: 6 }}>
+                            ✔️ <strong>{geoText}</strong>
+                            {l.delivered && etaIsoResolved ? (
+                              <span style={{ color: "#E53935", fontWeight: 700, marginLeft: 10 }}>
+                                Delivered {new Date(etaIsoResolved).toLocaleString()}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="dashRowSide">
