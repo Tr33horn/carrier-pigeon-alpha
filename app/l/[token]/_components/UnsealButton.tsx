@@ -41,7 +41,7 @@ export default function UnsealButton({
         }
         throw new Error(msg || "Could not unseal the letter.");
       }
-      router.refresh();
+      router.replace(`/l/${token}/open?celebrate=1`);
     } catch (e: any) {
       setError(e?.message || "Could not unseal the letter.");
     } finally {

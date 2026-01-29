@@ -142,6 +142,7 @@ export default function MapSection(props: {
           tooltipText={tooltipText}
           mapStyle={mapStyle}
           markerMode={markerMode}
+          onDetailToggle={(on) => setMapStyle(on ? "carto-voyager" : "topplus-grey")}
           // ✅ Dev-only sleep overlay inputs only when live (prevents weird overlays in terminal states)
           sentAtISO={showLive ? sentAtISO : undefined}
           etaAtISO={showLive ? etaAtISO : undefined}

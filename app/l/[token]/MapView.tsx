@@ -257,6 +257,7 @@ export default function MapView(props: {
   tooltipText?: string;
   mapStyle?: MapStyle;
   markerMode?: MarkerMode;
+  onDetailToggle?: (on: boolean) => void;
 
   // ✅ optional dev-only overlay inputs
   sentAtISO?: string;
@@ -518,8 +519,8 @@ export default function MapView(props: {
             const map = mapRef.current;
             if (!map) return;
             const maxZoom = map.getMaxZoom() || 16;
-            const zoom = Math.min(maxZoom, 14);
-            map.setView([current.lat, current.lon], zoom, { animate: true });
+            map.setView([current.lat, current.lon], maxZoom, { animate: true });
+            props.onDetailToggle?.(true);
           }}
           disabled={!mapReady}
         >
@@ -536,6 +537,7 @@ export default function MapView(props: {
               [dest.lat, dest.lon],
             ];
             map.fitBounds(bounds as any, { padding: [40, 40] });
+            props.onDetailToggle?.(false);
           }}
           disabled={!mapReady}
         >

@@ -2,8 +2,9 @@ import { redirect } from "next/navigation";
 
 import OtpForm from "../_components/OtpForm";
 import UnsealButton from "../_components/UnsealButton";
+import ConfettiBurst from "../_components/ConfettiBurst";
 import CleanAuthHash from "../_components/CleanAuthHash";
-import { createSupabaseServerReadClient } from "@/app/lib/supabase/server";
+import { createSupabaseServerReadClient, createSupabaseServerActionClient } from "@/app/lib/supabase/server";
 import { US_REGIONS } from "@/app/lib/geo/usRegions";
 import AppHeader from "@/app/_components/AppHeader";
 import { getSealImgSrc } from "@/app/lib/seals";
@@ -153,8 +154,17 @@ function InvalidLinkCard() {
   );
 }
 
-export default async function LetterOpenPage({ params }: { params: Promise<{ token: string }> }) {
+export default async function LetterOpenPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { token } = await params;
+  const sp = (await searchParams) ?? {};
+  const auto = Array.isArray(sp.auto) ? sp.auto[0] : sp.auto;
+  const celebrate = Array.isArray(sp.celebrate) ? sp.celebrate[0] : sp.celebrate;
   const supabase = await createSupabaseServerReadClient();
 
   const { data: userData } = await supabase.auth.getUser();
@@ -237,6 +247,14 @@ export default async function LetterOpenPage({ params }: { params: Promise<{ tok
     );
   }
 
+  if (auto === "1") {
+    const supabaseAction = await createSupabaseServerActionClient();
+    const { error: openErr } = await supabaseAction.rpc("open_letter_by_public_token", { p_token: token });
+    if (!openErr) {
+      redirect(`/l/${token}/open?celebrate=1`);
+    }
+  }
+
   const { data: openedData } = await supabase.rpc("read_opened_letter_by_public_token", { p_token: token });
   const openedRow = (Array.isArray(openedData) ? openedData[0] : openedData) as LetterRow | null | undefined;
   const isOpened = !!openedRow?.id;
@@ -274,19 +292,25 @@ export default async function LetterOpenPage({ params }: { params: Promise<{ tok
 
         {isOpened ? (
           <>
-            <div>
-            <ReceiptCard
-              bird_type={openedRow!.bird_type}
-              dest_region_id={openedRow!.dest_region_id}
-              eta_at={openedRow!.eta_at}
-              opened_at={openedRow!.opened_at}
-            />
+            <div style={{ position: "relative", overflow: "hidden" }}>
+              <ConfettiBurst active={celebrate === "1"} />
+              <ReceiptCard
+                bird_type={openedRow!.bird_type}
+                dest_region_id={openedRow!.dest_region_id}
+                eta_at={openedRow!.eta_at}
+                opened_at={openedRow!.opened_at}
+              />
             </div>
             <div style={{ marginTop: 16 }}>
               <LetterView
                 letter={openedRow as LetterRow}
                 title={status?.subject ? status.subject : "(No subject)"}
               />
+            </div>
+            <div style={{ marginTop: 16, textAlign: "center" }}>
+              <a href="/dashboard?tab=incoming" className="link">
+                Back to inbox
+              </a>
             </div>
           </>
         ) : (
@@ -324,6 +348,11 @@ export default async function LetterOpenPage({ params }: { params: Promise<{ tok
 
           </>
         )}
+        <div style={{ marginTop: 16, textAlign: "center" }}>
+          <a href="/dashboard?tab=incoming" className="link">
+            Back to inbox
+          </a>
+        </div>
         </div>
         </div>
       </main>

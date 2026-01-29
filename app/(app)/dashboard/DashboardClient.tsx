@@ -1008,7 +1008,7 @@ export default function DashboardClient({ initialEmail }: Props) {
 
                     <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
                       <a href={statusPath} className="link">
-                        {isOpened ? "Open" : l.delivered ? "Unseal" : "View status"}
+                        {dirTag === "incoming" ? (isOpened ? "Open" : l.delivered ? "Unseal" : "View status") : "View status"}
                       </a>
                       <a href="/new" className="link">
                         Write another

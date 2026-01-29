@@ -127,6 +127,16 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
   const sealImg = getSealImgSrc(letter.seal_id) || "/waxseal.png";
   const envTint = getEnvelopeTintColor(normalizeEnvelopeTint(letter.envelope_tint));
   const isOpened = !!letter.opened_at;
+  let isSender = false;
+
+  if (user) {
+    const { data: roleLetter, error: roleErr } = await supabase
+      .from("letters")
+      .select("sender_user_id")
+      .eq("public_token", token)
+      .maybeSingle();
+    if (!roleErr && roleLetter?.sender_user_id === user.id) isSender = true;
+  }
 
   // Logged out: status + OTP
   if (!user) {
@@ -347,9 +357,9 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                 <div className="soft envelope" style={{ marginTop: 14, ["--env-tint" as any]: envTint }}>
                 <div className="sealCard">
                   <div className="sealRow">
-                    {arrived && !isOpened ? (
+                    {arrived && !isOpened && !isSender ? (
                       <a
-                        href={`/l/${token}/open`}
+                        href={`/l/${token}/open?auto=1`}
                         className="waxBtn"
                         aria-label="Open letter"
                         title="Open letter"
@@ -358,7 +368,13 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                         <img src={sealImg} alt="" className="waxImg" />
                       </a>
                     ) : (
-                      <button type="button" className="waxBtn" aria-label="Wax seal preview" disabled>
+                      <button
+                        type="button"
+                        className="waxBtn"
+                        aria-label="Wax seal preview"
+                        title={isSender && arrived ? "Only the recipient can open this letter." : "Wax seal preview"}
+                        disabled
+                      >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={sealImg} alt="" className="waxImg" />
                       </button>
@@ -370,7 +386,9 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                         {isOpened
                           ? "Opened by recipient."
                           : arrived
-                          ? "Ready to open."
+                          ? isSender
+                            ? "Delivered to recipient."
+                            : "Ready to open."
                           : "Sealed until delivery."}
                       </div>
                     </div>
@@ -382,7 +400,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                   {isOpened ? (
                     <div className="muted">Opened by recipient.</div>
                   ) : arrived ? (
-                    <div className="muted">Tap the seal to open.</div>
+                    <div className="muted">{isSender ? "Delivered to recipient." : "Tap the seal to open."}</div>
                   ) : (
                     <div className="muted">
                       Arrives at {etaIso ? formatLocal(etaIso) : "an unknown time"}. You can open it once it
