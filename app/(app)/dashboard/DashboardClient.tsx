@@ -772,6 +772,7 @@ export default function DashboardClient({ initialEmail }: Props) {
                     : l.delivered
                     ? "Delivered"
                     : (l.current_over_text && l.current_over_text.trim()) || "somewhere over the U.S.";
+                const geoTextDisplay = geoText.replace(/sleeping/gi, "Resting");
 
                 const sentUtc = (l.sent_utc_text && l.sent_utc_text.trim()) || formatUtcFallback(l.sent_at);
                 const etaUtc = (l.eta_utc_text && l.eta_utc_text.trim()) || formatUtcFallback(etaIsoResolved);
@@ -880,10 +881,10 @@ export default function DashboardClient({ initialEmail }: Props) {
                               fontWeight: 700,
                             }}
                           >
-                            <div>Sent {l.sent_at ? new Date(l.sent_at).toLocaleString() : "Unknown"}</div>
-                            <div>Status {geoText}</div>
-                          </div>
-                        ) : null}
+                          <div>Sent {l.sent_at ? new Date(l.sent_at).toLocaleString() : "Unknown"}</div>
+                          <div>Status {geoTextDisplay}</div>
+                        </div>
+                      ) : null}
 
                         {!showUnsealedStatusStack && !showDeliveredStatusStack && !showSentStatusStack ? (
                           <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
@@ -903,7 +904,7 @@ export default function DashboardClient({ initialEmail }: Props) {
 
                         {!showUnsealedStatusStack && !showDeliveredStatusStack && !showSentStatusStack ? (
                           <div className="muted" style={{ marginTop: 6 }}>
-                            ✔️ <strong>{geoText}</strong>
+                            ✔️ <strong>{geoTextDisplay}</strong>
                             {l.delivered && etaIsoResolved ? (
                               <span style={{ color: "#E53935", fontWeight: 700, marginLeft: 10 }}>
                                 Delivered {new Date(etaIsoResolved).toLocaleString()}

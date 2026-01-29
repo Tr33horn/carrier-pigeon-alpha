@@ -135,6 +135,7 @@ function normalizeTooltip(text?: string) {
 
   t = t.replace(/^currently over:\s*/i, "").trim();
   t = t.replace(/^location:\s*/i, "").trim();
+  t = t.replace(/sleeping/gi, "Resting");
   return t;
 }
 

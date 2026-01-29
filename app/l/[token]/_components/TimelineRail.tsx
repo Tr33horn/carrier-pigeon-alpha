@@ -76,6 +76,9 @@ export default function TimelineRail({
 
           const isDeliveredRow = it.kind === "delivered";
           const isSleep = it.kind === "sleep";
+          const title = isSleep
+            ? it.name.replace(/sleeping/gi, "Resting").replace(/\s*—\s*wakes at/gi, " until")
+            : it.name;
 
           const isPast = final || isDeliveredRow || new Date(it.at).getTime() <= now.getTime();
           const shouldPop = popped[it.key] && isPast;
@@ -124,7 +127,7 @@ export default function TimelineRail({
                 )}
 
                 <div className="railTitleRow">
-                  <div className="railTitle">{it.name}</div>
+                  <div className="railTitle">{title}</div>
                   <div className="railTime">{timeLabelLocal(it.at)}</div>
                 </div>
                 {it.subtitle ? <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>{it.subtitle}</div> : null}

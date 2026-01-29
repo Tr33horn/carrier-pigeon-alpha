@@ -307,11 +307,6 @@ export default async function LetterOpenPage({
                 title={status?.subject ? status.subject : "(No subject)"}
               />
             </div>
-            <div style={{ marginTop: 16, textAlign: "center" }}>
-              <a href="/dashboard?tab=incoming" className="link">
-                Back to inbox
-              </a>
-            </div>
           </>
         ) : (
           <>

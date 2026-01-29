@@ -177,7 +177,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                       Progress: <strong>{Math.floor((flight.progress ?? 0) * 100)}%</strong>
                     </div>
                     {flight.sleeping && flight.sleep_local_text ? (
-                      <div className="metaPill faint">Sleeping · {flight.sleep_local_text}</div>
+                      <div className="metaPill faint">Resting · {flight.sleep_local_text}</div>
                     ) : null}
                   </>
                 )}
@@ -327,7 +327,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                     Progress: <strong>{Math.floor((flight.progress ?? 0) * 100)}%</strong>
                   </div>
                   {flight.sleeping && flight.sleep_local_text ? (
-                    <div className="metaPill faint">Sleeping · {flight.sleep_local_text}</div>
+                    <div className="metaPill faint">Resting · {flight.sleep_local_text}</div>
                   ) : null}
                 </>
               )}
