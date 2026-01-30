@@ -27,6 +27,7 @@ export function buildTimelineItems(args: {
 }): TimelineItem[] {
   const { now, letter, checkpointsByTime, timelineFinal, uiDelivered, canceled, effectiveEtaISO, showNightFlightNote } = args;
   const nowT = now.getTime();
+  const deliveredMs = Number.isFinite(Date.parse(effectiveEtaISO)) ? Date.parse(effectiveEtaISO) : null;
 
   const safeSentAt = letter?.sent_at && String(letter.sent_at).trim() ? String(letter.sent_at) : null;
 
@@ -64,6 +65,9 @@ export function buildTimelineItems(args: {
     const isPastOrCurrent = Number.isFinite(t) ? t <= nowT : true;
 
     if (!timelineFinal && !isPastOrCurrent) continue;
+    if (uiDelivered && !canceled && Number.isFinite(deliveredMs) && Number.isFinite(t) && t > (deliveredMs as number)) {
+      continue;
+    }
 
     base.push({
       key: `${cp.kind || "checkpoint"}-${cp.id}`,
