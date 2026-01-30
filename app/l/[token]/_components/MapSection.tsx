@@ -71,18 +71,8 @@ export default function MapSection(props: {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
         <div className="kicker">Map</div>
 
-        <label className="mapDetailsToggle">
-          <span>{mapStyle === "alidade-satellite" ? "Sattelite on" : "Sattelite off"}</span>
-          <input
-            type="checkbox"
-            checked={mapStyle === "alidade-satellite"}
-            onChange={() => setMapStyle(mapStyle === "alidade-satellite" ? "alidade-smooth" : "alidade-satellite")}
-            aria-label="Toggle map details"
-          />
-          <span className={`mapDetailsSwitch ${mapStyle === "alidade-satellite" ? "on" : ""}`}>
-            <span className="mapDetailsThumb" />
-          </span>
-        </label>
+        {/* Toggle hidden for now */}
+        {null}
 
         {SHOW_MAP_STYLE_PICKER ? (
           <div className="mapStyleRow" role="group" aria-label="Map style">
