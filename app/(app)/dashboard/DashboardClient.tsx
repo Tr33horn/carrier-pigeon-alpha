@@ -169,7 +169,7 @@ function RouteThumb(props: {
     };
   }, [props.origin, props.dest, props.current]);
 
-  const pct = Math.round(clamp01(props.progress ?? 0) * 100);
+  const pct = Math.floor(clamp01(props.progress ?? 0) * 100);
 
   return (
     <div className="routeThumb" aria-hidden>
@@ -748,7 +748,7 @@ export default function DashboardClient({ initialEmail }: Props) {
                 })();
 
                 const derivedProgress = serverProgress ?? fallbackProgress;
-                const pct = Math.round(derivedProgress * 100);
+                const pct = Math.floor(derivedProgress * 100);
 
                 const etaAbsMs = parseMs(etaIsoResolved);
                 const msLeft = etaAbsMs == null ? null : etaAbsMs - now.getTime();

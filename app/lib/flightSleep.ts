@@ -173,6 +173,7 @@ export function etaFromRequiredAwakeMs(
 export function sleepUntilLocalText(sleepUntilUtcMs: number, offsetMin: number) {
   const localMs = toLocalMs(sleepUntilUtcMs, offsetMin);
   return new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(localMs));

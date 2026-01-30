@@ -183,15 +183,25 @@ function computeAdjustedEtaAndPct(args: {
   const destLon = Number(args.dest_lon);
 
   const midLon = midpointLon(originLon, destLon);
-  const storedOffsetMin = Number(args.sleep_offset_min);
-  const offsetMin = Number.isFinite(storedOffsetMin)
-    ? Math.max(-12 * 60, Math.min(14 * 60, storedOffsetMin))
-    : offsetMinutesFromLon(midLon ?? 0);
+  const storedOffsetRaw = args.sleep_offset_min;
+  const storedOffsetMin = storedOffsetRaw == null ? NaN : Number(storedOffsetRaw);
+  const computedOffsetMin = offsetMinutesFromLon(midLon ?? 0);
+  const shouldIgnoreStoredZero = storedOffsetMin === 0 && Math.abs(computedOffsetMin) >= 60;
+  const storedSeemsOff =
+    Number.isFinite(storedOffsetMin) && Number.isFinite(computedOffsetMin)
+      ? Math.abs(storedOffsetMin - computedOffsetMin) >= 120
+      : false;
+  const offsetMin =
+    Number.isFinite(storedOffsetMin) && !shouldIgnoreStoredZero && !storedSeemsOff
+      ? Math.max(-12 * 60, Math.min(14 * 60, storedOffsetMin))
+      : computedOffsetMin;
 
   const birdRule = BIRD_RULES[args.bird];
   const ignoresSleep = birdRule.ignoresSleep;
-  const sleepStartStored = Number(args.sleep_start_hour);
-  const sleepEndStored = Number(args.sleep_end_hour);
+  const sleepStartRaw = args.sleep_start_hour;
+  const sleepEndRaw = args.sleep_end_hour;
+  const sleepStartStored = sleepStartRaw == null ? NaN : Number(sleepStartRaw);
+  const sleepEndStored = sleepEndRaw == null ? NaN : Number(sleepEndRaw);
   const sleepCfg =
     Number.isFinite(sleepStartStored) && Number.isFinite(sleepEndStored)
       ? {

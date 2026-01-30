@@ -196,9 +196,11 @@ function buildSleepEvents(args: {
       const wake = sleepEndUtc;
 
       if (started <= nowMs) {
+        const startText = sleepUntilLocalText(started, offsetMin);
         const wakeText = sleepUntilLocalText(wake, offsetMin);
+        const isPast = wake <= nowMs;
 
-        events.push({
+        const item = {
           id: `sleep-${y}-${m + 1}-${d}`,
           idx: 10_000 + events.length,
           kind: "sleep",
@@ -208,8 +210,10 @@ function buildSleepEvents(args: {
           geo_text: "Resting",
           region_id: null,
           region_label: null,
-          name: `Resting — wakes at ${wakeText}`,
-        });
+          name: isPast ? `Rested from ${startText} to ${wakeText}` : `Resting — wakes at ${wakeText}`,
+        };
+
+        events.push(item);
       }
     }
 
@@ -293,8 +297,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const bird: BirdType = normalizeBird((meta as any).bird);
   const birdRule = BIRD_RULES[bird];
   const ignoresSleep = birdRule.ignoresSleep;
-  const sleepStartStored = Number((meta as any).sleep_start_hour);
-  const sleepEndStored = Number((meta as any).sleep_end_hour);
+  const sleepStartRaw = (meta as any).sleep_start_hour;
+  const sleepEndRaw = (meta as any).sleep_end_hour;
+  const sleepStartStored = sleepStartRaw == null ? NaN : Number(sleepStartRaw);
+  const sleepEndStored = sleepEndRaw == null ? NaN : Number(sleepEndRaw);
   const sleepCfg =
     Number.isFinite(sleepStartStored) && Number.isFinite(sleepEndStored)
       ? {
@@ -341,11 +347,26 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   // ✅ Flight "timezone": midpoint longitude (matches send route)
   const hasOLon = Number.isFinite(originLon);
   const hasDLon = Number.isFinite(destLon);
-  const midLon = hasOLon && hasDLon ? (originLon + destLon) / 2 : hasOLon ? originLon : hasDLon ? destLon : 0;
-  const storedOffsetMin = Number((meta as any).sleep_offset_min);
-  const offsetMin = Number.isFinite(storedOffsetMin)
-    ? clamp(storedOffsetMin, -12 * 60, 14 * 60)
-    : offsetMinutesFromLon(midLon);
+  const cpsWithLon = (checkpoints ?? []).filter((cp: any) => Number.isFinite(cp?.lon));
+  const midLonFromCps =
+    cpsWithLon.length >= 2
+      ? (Number(cpsWithLon[0].lon) + Number(cpsWithLon[cpsWithLon.length - 1].lon)) / 2
+      : cpsWithLon.length === 1
+      ? Number(cpsWithLon[0].lon)
+      : 0;
+  const midLon = hasOLon && hasDLon ? (originLon + destLon) / 2 : hasOLon ? originLon : hasDLon ? destLon : midLonFromCps;
+  const storedOffsetRaw = (meta as any).sleep_offset_min;
+  const storedOffsetMin = storedOffsetRaw == null ? NaN : Number(storedOffsetRaw);
+  const computedOffsetMin = offsetMinutesFromLon(midLon);
+  const shouldIgnoreStoredZero = storedOffsetMin === 0 && Math.abs(computedOffsetMin) >= 60;
+  const storedSeemsOff =
+    Number.isFinite(storedOffsetMin) && Number.isFinite(computedOffsetMin)
+      ? Math.abs(storedOffsetMin - computedOffsetMin) >= 120
+      : false;
+  const offsetMin =
+    Number.isFinite(storedOffsetMin) && !shouldIgnoreStoredZero && !storedSeemsOff
+      ? clamp(storedOffsetMin, -12 * 60, 14 * 60)
+      : computedOffsetMin;
 
   // ✅ Required awake ms MUST match send route: km/speed * inefficiency
   const requiredAwakeMs =

@@ -16,6 +16,9 @@ import {
 import { BIRD_RULES, normalizeBird, type BirdType } from "@/app/lib/birds";
 import { BADGES } from "@/app/lib/badges";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 let warnedMissingSleepColumns = false;
 
 /* -------------------------------------------------
@@ -162,10 +165,18 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
   const hasOLon = Number.isFinite(oLon);
   const hasDLon = Number.isFinite(dLon);
   const midLon = hasOLon && hasDLon ? (oLon + dLon) / 2 : hasOLon ? oLon : hasDLon ? dLon : 0;
-  const storedOffsetMin = Number(l.sleep_offset_min);
-  const offsetMin = Number.isFinite(storedOffsetMin)
-    ? clamp(storedOffsetMin, -12 * 60, 14 * 60)
-    : offsetMinutesFromLon(midLon);
+  const storedOffsetRaw = (l as any).sleep_offset_min;
+  const storedOffsetMin = storedOffsetRaw == null ? NaN : Number(storedOffsetRaw);
+  const computedOffsetMin = offsetMinutesFromLon(midLon);
+  const shouldIgnoreStoredZero = storedOffsetMin === 0 && Math.abs(computedOffsetMin) >= 60;
+  const storedSeemsOff =
+    Number.isFinite(storedOffsetMin) && Number.isFinite(computedOffsetMin)
+      ? Math.abs(storedOffsetMin - computedOffsetMin) >= 120
+      : false;
+  const offsetMin =
+    Number.isFinite(storedOffsetMin) && !shouldIgnoreStoredZero && !storedSeemsOff
+      ? clamp(storedOffsetMin, -12 * 60, 14 * 60)
+      : computedOffsetMin;
 
   const distanceKm = Number(l.distance_km);
   const hasDistance = Number.isFinite(distanceKm) && distanceKm > 0;
@@ -178,8 +189,10 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
 
   const requiredAwakeMs = hasFlightInputs ? (distanceKm / speedKmhEffective) * ineff * 3600_000 : 0;
 
-  const sleepStartStored = Number(l.sleep_start_hour);
-  const sleepEndStored = Number(l.sleep_end_hour);
+  const sleepStartRaw = (l as any).sleep_start_hour;
+  const sleepEndRaw = (l as any).sleep_end_hour;
+  const sleepStartStored = sleepStartRaw == null ? NaN : Number(sleepStartRaw);
+  const sleepEndStored = sleepEndRaw == null ? NaN : Number(sleepEndRaw);
   const sleepCfg =
     Number.isFinite(sleepStartStored) && Number.isFinite(sleepEndStored)
       ? {
@@ -236,17 +249,30 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
 
   const progress = requiredAwakeMs > 0 ? clamp(traveledAwakeMs / requiredAwakeMs, 0, 1) : delivered ? 1 : 0;
 
+  // Retimed checkpoints (sleep-aware) for consistent "current over" with status API
+  const cpsAdjusted = (cps ?? []).map((cp: any, i: number, arr: any[]) => {
+    const frac = arr.length <= 1 ? 1 : i / (arr.length - 1);
+    const atMs =
+      sentMs != null && requiredAwakeMs > 0 && Number.isFinite(etaAdjustedMs)
+        ? etaFromRequiredAwakeMsWithSkip(sentMs, requiredAwakeMs * frac, offsetMin, sleepCfg, skipUntilMs, rule.ignoresSleep)
+        : safeParseMs(cp.at);
+    return {
+      ...cp,
+      _atAdj: Number.isFinite(atMs) ? new Date(atMs as number).toISOString() : cp.at,
+    };
+  });
+
   // Current label: last checkpoint whose time has passed
   let current_over_text = delivered ? "Delivered" : "somewhere over the U.S.";
 
   if (canceled) {
     current_over_text = "Canceled";
-  } else if (!delivered && cps.length) {
-    let best = cps[0];
+  } else if (!delivered && cpsAdjusted.length) {
+    let best = cpsAdjusted[0];
     let bestT = -Infinity;
 
-    for (const cp of cps) {
-      const t = safeParseMs(cp.at);
+    for (const cp of cpsAdjusted) {
+      const t = safeParseMs(cp._atAdj || cp.at);
       if (t != null && t <= calcNowMs && t >= bestT) {
         bestT = t;
         best = cp;
