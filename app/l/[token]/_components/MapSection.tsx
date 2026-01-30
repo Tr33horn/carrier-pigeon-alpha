@@ -9,6 +9,8 @@ const MapView = dynamic(() => import("../MapView"), {
 });
 
 export type MapStyle =
+  | "alidade-smooth"
+  | "alidade-satellite"
   | "carto-positron"
   | "carto-voyager"
   | "carto-positron-nolabels"
@@ -70,14 +72,14 @@ export default function MapSection(props: {
         <div className="kicker">Map</div>
 
         <label className="mapDetailsToggle">
-          <span>Details</span>
+          <span>{mapStyle === "alidade-satellite" ? "Sattelite on" : "Sattelite off"}</span>
           <input
             type="checkbox"
-            checked={mapStyle === "carto-voyager"}
-            onChange={() => setMapStyle(mapStyle === "carto-voyager" ? "topplus-grey" : "carto-voyager")}
+            checked={mapStyle === "alidade-satellite"}
+            onChange={() => setMapStyle(mapStyle === "alidade-satellite" ? "alidade-smooth" : "alidade-satellite")}
             aria-label="Toggle map details"
           />
-          <span className={`mapDetailsSwitch ${mapStyle === "carto-voyager" ? "on" : ""}`}>
+          <span className={`mapDetailsSwitch ${mapStyle === "alidade-satellite" ? "on" : ""}`}>
             <span className="mapDetailsThumb" />
           </span>
         </label>
@@ -142,7 +144,7 @@ export default function MapSection(props: {
           tooltipText={tooltipText}
           mapStyle={mapStyle}
           markerMode={markerMode}
-          onDetailToggle={(on) => setMapStyle(on ? "carto-voyager" : "topplus-grey")}
+          onDetailToggle={(on) => setMapStyle(on ? "alidade-satellite" : "alidade-smooth")}
           // ✅ Dev-only sleep overlay inputs only when live (prevents weird overlays in terminal states)
           sentAtISO={showLive ? sentAtISO : undefined}
           etaAtISO={showLive ? etaAtISO : undefined}

@@ -33,6 +33,38 @@ export default function TimelineRail({
 }) {
   const [popped, setPopped] = useState<Record<string, boolean>>({});
 
+  function pastTenseTitle(title: string) {
+    let t = title.trim();
+    if (!t) return t;
+    if (/^final descent\b/i.test(t)) {
+      t = t.replace(/^final descent\b/i, "Descended");
+      t = t.replace(/\s*—\s*/g, " ");
+      t = t.replace(/\bOver\b/g, "over");
+      t = t.replace(/\b(Crossing|Approaching|Along|Over)\s+/gi, "");
+      t = t.replace(/\s{2,}/g, " ").trim();
+      if (/^Descended\s+/i.test(t)) {
+        t = t.replace(/^Descended\s+/i, "Descended over ");
+        t = t.replace(/^Descended over\s+the\s+/i, "Descended over the ");
+        t = t.replace(/^Descended over\s+(?!the\s+)/i, "Descended over the ");
+      }
+    }
+    if (/^somewhere over the u\.s\.$/i.test(t)) return "Flew somewhere over the U.S.";
+    if (/^crossing\s+/i.test(t)) return t.replace(/^crossing\s+/i, "Crossed ");
+    if (/^approaching\s+/i.test(t)) return t.replace(/^approaching\s+/i, "Approached ");
+    if (/^along\s+/i.test(t)) return t.replace(/^along\s+/i, "Flew along ");
+    if (/^over\s+/i.test(t)) {
+      let s = t.replace(/^over\s+/i, "Flew over ");
+      if (!/^Flew over the\s+/i.test(s)) {
+        s = s.replace(/^Flew over\s+/i, "Flew over the ");
+      }
+      return s;
+    }
+    if (/^crossing the plains$/i.test(t)) return "Crossed the plains";
+    if (/^over the mountains$/i.test(t)) return "Flew over the mountains";
+    if (/^approaching destination$/i.test(t)) return "Approached destination";
+    return t;
+  }
+
   useEffect(() => {
     const updates: Record<string, boolean> = {};
     let changed = false;
@@ -76,13 +108,13 @@ export default function TimelineRail({
 
           const isDeliveredRow = it.kind === "delivered";
           const isSleep = it.kind === "sleep";
-          const title = isSleep
-            ? it.name.replace(/sleeping/gi, "Resting").replace(/\s*—\s*wakes at/gi, " until")
-            : it.name;
-
           const isPast = final || isDeliveredRow || new Date(it.at).getTime() <= now.getTime();
           const shouldPop = popped[it.key] && isPast;
           const isCurrent = currentKey === it.key;
+          const baseTitle = isSleep
+            ? it.name.replace(/sleeping/gi, "Resting").replace(/\s*—\s*wakes at/gi, " until")
+            : it.name;
+          const title = !isSleep && !isDeliveredRow && isPast && !isCurrent ? pastTenseTitle(baseTitle) : baseTitle;
 
           return (
             <div key={it.key} className="railItem">

@@ -35,7 +35,7 @@ export function buildTimelineItems(args: {
   const firstCpAt: string | null = firstCp ? String(firstCp._atAdj || firstCp.at || "").trim() : null;
 
   const departedAt = safeSentAt || firstCpAt || new Date().toISOString();
-  const departedName = letter?.origin_name ? `Departed · ${letter.origin_name}` : "Departed";
+  const departedName = letter?.origin_name ? `Departed roost · ${letter.origin_name}` : "Departed roost";
 
   const base: TimelineItem[] = [];
 
@@ -65,6 +65,7 @@ export function buildTimelineItems(args: {
     const isPastOrCurrent = Number.isFinite(t) ? t <= nowT : true;
 
     if (!timelineFinal && !isPastOrCurrent) continue;
+    if (typeof cp?.name === "string" && /^departed roost\b/i.test(cp.name)) continue;
     if (uiDelivered && !canceled && Number.isFinite(deliveredMs) && Number.isFinite(t) && t > (deliveredMs as number)) {
       continue;
     }

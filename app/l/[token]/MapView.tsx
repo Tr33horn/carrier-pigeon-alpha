@@ -9,6 +9,8 @@ import { isSleepingAt, offsetMinutesFromLon, initialSleepSkipUntilUtcMs } from "
 
 // ✅ Match the LetterStatusPage values
 export type MapStyle =
+  | "alidade-smooth"
+  | "alidade-satellite"
   | "carto-positron"
   | "carto-voyager"
   | "carto-positron-nolabels"
@@ -46,6 +48,26 @@ function getCarto(style: MapStyle) {
       ? (process.env.NEXT_PUBLIC_STADIA_MAPS_KEY || "").trim()
       : "";
   const q = key ? `?api_key=${encodeURIComponent(key)}` : "";
+
+  if (style === "alidade-smooth") {
+    return {
+      url: `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png${q}`,
+      attribution:
+        '&copy; <a href="https://stadiamaps.com/" target="_blank" rel="noreferrer">Stadia Maps</a> ' +
+        '&copy; <a href="https://openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a> ' +
+        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
+    };
+  }
+
+  if (style === "alidade-satellite") {
+    return {
+      url: `https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.jpg${q}`,
+      attribution:
+        '&copy; <a href="https://stadiamaps.com/" target="_blank" rel="noreferrer">Stadia Maps</a> ' +
+        '&copy; <a href="https://openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a> ' +
+        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
+    };
+  }
 
   // 🖋️ Crisp pen & ink vibe (Stamen Toner Lite via Stadia Maps)
   if (style === "ink-sketch") {
@@ -280,7 +302,7 @@ export default function MapView(props: {
   const origin = props.origin;
   const dest = props.dest;
 
-  const mapStyle: MapStyle = props.mapStyle ?? "carto-positron";
+  const mapStyle: MapStyle = props.mapStyle ?? "alidade-smooth";
   const tile = useMemo(() => getCarto(mapStyle), [mapStyle]);
   const mapRef = useRef<L.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -521,7 +543,6 @@ export default function MapView(props: {
             if (!map) return;
             const maxZoom = map.getMaxZoom() || 16;
             map.setView([current.lat, current.lon], maxZoom, { animate: true });
-            props.onDetailToggle?.(true);
           }}
           disabled={!mapReady}
         >
@@ -538,7 +559,6 @@ export default function MapView(props: {
               [dest.lat, dest.lon],
             ];
             map.fitBounds(bounds as any, { padding: [40, 40] });
-            props.onDetailToggle?.(false);
           }}
           disabled={!mapReady}
         >
