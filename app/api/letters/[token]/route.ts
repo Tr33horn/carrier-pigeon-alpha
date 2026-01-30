@@ -205,10 +205,10 @@ function buildSleepEvents(args: {
           at: new Date(started).toISOString(),
           lat: null,
           lon: null,
-          geo_text: "Sleeping",
+          geo_text: "Resting",
           region_id: null,
           region_label: null,
-          name: `Sleeping — wakes at ${wakeText}`,
+          name: `Resting — wakes at ${wakeText}`,
         });
       }
     }
@@ -481,7 +481,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
     : delivered
     ? `Location: Delivered`
     : sleeping
-    ? `Location: Sleeping — ${geoBase || "somewhere over the U.S."}`
+    ? `Location: Resting — ${geoBase || "somewhere over the U.S."}`
     : `Location: ${geoBase || "somewhere over the U.S."}`;
 
   // ✅ Award badges (past checkpoints only — NOT sleep events) — never while canceled

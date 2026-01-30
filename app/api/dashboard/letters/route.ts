@@ -257,6 +257,9 @@ function computeViewModel(l: RawLetter, cps: any[], realNowMs: number, direction
       current_over_text = checkpointGeoText(best.lat, best.lon);
     }
   }
+  if (!canceled && !delivered && sleeping) {
+    current_over_text = "Resting";
+  }
 
   // thumb coords: progress-based
   const curLat =
