@@ -130,7 +130,6 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
     !!letter.postcard_template_id ||
     (letter.seal_id == null && !!letter.subject);
   const postcardTemplate = resolvePostcardTemplate(letter.postcard_template_id);
-  const blurPostcard = isPostcard && !isOpened && !isSender;
   let isSender = false;
 
   if (user) {
@@ -141,6 +140,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
       .maybeSingle();
     if (!roleErr && roleLetter?.sender_user_id === user.id) isSender = true;
   }
+  const blurPostcard = isPostcard && !isOpened && !isSender;
 
   // Logged out: status + OTP
   if (!user) {
