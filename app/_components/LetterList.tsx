@@ -1,4 +1,5 @@
 import { US_REGIONS } from "@/app/lib/geo/usRegions";
+import LocalTime from "@/app/l/[token]/_components/LocalTime";
 
 type LetterListItem = {
   id: string;
@@ -17,13 +18,6 @@ function regionLabelFor(destRegionId?: string | null, destName?: string | null) 
   if (destName) return destName;
   if (destRegionId) return destRegionId;
   return "somewhere over the map";
-}
-
-function formatLocal(iso?: string | null) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "";
-  return d.toLocaleString();
 }
 
 export default function LetterList({
@@ -50,7 +44,7 @@ export default function LetterList({
             const bird = letter.bird_type || letter.bird || "Unknown bird";
             const destination = regionLabelFor(letter.dest_region_id, letter.dest_name);
             const opened = !!letter.opened_at;
-            const timeLabel = opened ? formatLocal(letter.opened_at) : formatLocal(letter.created_at);
+            const timeIso = opened ? letter.opened_at : letter.created_at;
 
             return (
               <div key={letter.id} className="soft" style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -58,7 +52,12 @@ export default function LetterList({
                   <div style={{ fontWeight: 800 }}>{destination}</div>
                   <div className="muted" style={{ fontSize: 12 }}>
                     {bird} • {opened ? "Opened" : "Sealed"}
-                    {timeLabel ? ` • ${timeLabel}` : ""}
+                    {timeIso ? (
+                      <>
+                        {" "}
+                        • <LocalTime iso={timeIso} />
+                      </>
+                    ) : null}
                   </div>
                 </div>
                 <div className="muted" style={{ fontSize: 12 }}>
