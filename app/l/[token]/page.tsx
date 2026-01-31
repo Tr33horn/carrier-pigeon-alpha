@@ -8,6 +8,7 @@ import StatusAutoRefresh from "./_components/StatusAutoRefresh";
 import { birdDisplayLabel, normalizeBird } from "@/app/lib/birds";
 import { getEnvelopeTintColor, normalizeEnvelopeTint } from "@/app/lib/envelopeTints";
 import { getSealImgSrc } from "@/app/lib/seals";
+import { POSTCARD_TEMPLATES } from "@/app/lib/postcards";
 import styles from "./status.module.css";
 import AppHeader from "@/app/_components/AppHeader";
 import LocalTime from "./_components/LocalTime";
@@ -52,6 +53,8 @@ type StatusApi = {
     body?: string | null;
     distance_km?: number | null;
     speed_kmh?: number | null;
+    delivery_type?: "letter" | "postcard" | null;
+    postcard_template_id?: string | null;
   };
   checkpoints: any[];
   delivered: boolean;
@@ -88,7 +91,8 @@ async function getRequestOrigin() {
 }
 
 export default async function LetterTokenPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
+  const raw = (await params).token;
+  const token = raw.replace(/^\/+/, "").replace(/^l\//, "");
   const supabase = await createSupabaseServerReadClient();
 
   const { data: userData } = await supabase.auth.getUser();
@@ -121,6 +125,9 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
   const sealImg = getSealImgSrc(letter.seal_id) || "/waxseal.png";
   const envTint = getEnvelopeTintColor(normalizeEnvelopeTint(letter.envelope_tint));
   const isOpened = !!letter.opened_at;
+  const isPostcard = letter.delivery_type === "postcard" || !!letter.postcard_template_id;
+  const postcardTemplate =
+    POSTCARD_TEMPLATES.find((p) => p.id === letter.postcard_template_id) ?? POSTCARD_TEMPLATES[0] ?? null;
   let isSender = false;
 
   if (user) {
@@ -197,33 +204,57 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
             className={`${styles.statusGrid} ${data.delivered ? styles.deliveredStack : styles.incomingWide}`}
           >
             <div className={`${styles.statusCol} ${styles.gridLetter}`}>
-              <div className={`card letterCard ${styles.statusLetterCard}`}>
-                <div className="cardHead">
-                  <div>
-                    <div className="kicker">Letter</div>
-                    <div className="h2">
-                      {letter.from_name ? `From ${letter.from_name}` : "From someone"}
+              {isPostcard ? (
+                <div className={`card ${styles.statusLetterCard}`}>
+                  <div className="cardHead">
+                    <div>
+                      <div className="kicker">Postcard</div>
+                      <div className="h2">
+                        {letter.from_name ? `From ${letter.from_name}` : "From someone"}
+                      </div>
+                      {letter.subject ? <div className="muted">{letter.subject}</div> : null}
                     </div>
-                    {letter.subject ? <div className="muted">{letter.subject}</div> : null}
+                    <div className="metaPill faint">{postcardTemplate?.name ?? "Postcard"}</div>
+                  </div>
+
+                  <div className="postcardPreview" style={postcardTemplate?.preview}>
+                    <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
+                    <div className="postcardBackHint">
+                      {isOpened ? "Postcard read" : "Back side: message + address"}
+                    </div>
                   </div>
                 </div>
+              ) : (
+                <div className={`card letterCard ${styles.statusLetterCard}`}>
+                  <div className="cardHead">
+                    <div>
+                      <div className="kicker">Letter</div>
+                      <div className="h2">
+                        {letter.from_name ? `From ${letter.from_name}` : "From someone"}
+                      </div>
+                      {letter.subject ? <div className="muted">{letter.subject}</div> : null}
+                    </div>
+                  </div>
 
-                <div className="soft envelope" style={{ marginTop: 14, ["--env-tint" as any]: envTint }}>
-                  <div className="sealCard">
-                    <div className="sealRow">
-                      <button type="button" className="waxBtn" aria-label="Wax seal preview" disabled>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={sealImg} alt="" className="waxImg" />
-                      </button>
+                  <div className="soft envelope" style={{ marginTop: 14, ["--env-tint" as any]: envTint }}>
+                    <div className="sealCard">
+                      <div className="sealRow">
+                        <button type="button" className="waxBtn" aria-label="Wax seal preview" disabled>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={sealImg} alt="" className="waxImg" />
+                        </button>
 
-                      <div>
-                        <div className="sealTitle">{isOpened ? "Opened letter" : "Sealed letter"}</div>
-                        <div className="sealSub">{isOpened ? "Opened by recipient." : "Sign in to open once delivered."}</div>
+                        <div>
+                          <div className="sealTitle">{isOpened ? "Opened letter" : "Sealed letter"}</div>
+                          <div className="sealSub">
+                            {isOpened ? "Opened by recipient." : "Sign in to open once delivered."}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
 
             <div className={`${styles.statusCol} ${styles.gridMap}`}>
@@ -359,86 +390,140 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
         >
           {!isOpened ? (
             <div className={`${styles.statusCol} ${styles.gridLetter}`}>
-              <div className={`card letterCard ${styles.statusLetterCard}`}>
-                <div className="cardHead">
-                  <div>
-                    <div className="kicker">Letter</div>
-                    <div className="h2">
-                      {letter.from_name ? `From ${letter.from_name}` : "From someone"}
+              {isPostcard ? (
+                <div className={`card ${styles.statusLetterCard}`}>
+                  <div className="cardHead">
+                    <div>
+                      <div className="kicker">Postcard</div>
+                      <div className="h2">
+                        {letter.from_name ? `From ${letter.from_name}` : "From someone"}
+                      </div>
+                      {letter.subject ? <div className="muted">{letter.subject}</div> : null}
                     </div>
-                    {letter.subject ? <div className="muted">{letter.subject}</div> : null}
+                    <div className="metaPill faint">{postcardTemplate?.name ?? "Postcard"}</div>
+                  </div>
+
+                  {arrived && !isSender ? (
+                    <a href={`/l/${token}/open?auto=1`} className="postcardPreview" style={postcardTemplate?.preview}>
+                      <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
+                      <div className="postcardBackHint">Tap to read the back.</div>
+                    </a>
+                  ) : (
+                    <div className="postcardPreview" style={postcardTemplate?.preview}>
+                      <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
+                      <div className="postcardBackHint">
+                        {arrived ? "Delivered to recipient." : "In transit."}
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: 12 }}>
+                    {arrived ? (
+                      <div className="muted">{isSender ? "Delivered to recipient." : "Tap the postcard to read."}</div>
+                    ) : (
+                      <div className="muted">
+                        Arrives at <LocalTime iso={etaIso} fallback="an unknown time" />.
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                <div className="soft envelope" style={{ marginTop: 14, ["--env-tint" as any]: envTint }}>
-                <div className="sealCard">
-                  <div className="sealRow">
-                    {arrived && !isOpened && !isSender ? (
-                      <a
-                        href={`/l/${token}/open?auto=1`}
-                        className="waxBtn"
-                        aria-label="Open letter"
-                        title="Open letter"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={sealImg} alt="" className="waxImg" />
-                      </a>
-                    ) : (
-                      <button
-                        type="button"
-                        className="waxBtn"
-                        aria-label="Wax seal preview"
-                        title={isSender && arrived ? "Only the recipient can open this letter." : "Wax seal preview"}
-                        disabled
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={sealImg} alt="" className="waxImg" />
-                      </button>
-                    )}
-
+              ) : (
+                <div className={`card letterCard ${styles.statusLetterCard}`}>
+                  <div className="cardHead">
                     <div>
-                      <div className="sealTitle">{isOpened ? "Opened letter" : "Sealed letter"}</div>
-                      <div className="sealSub">
-                        {isOpened
-                          ? "Opened by recipient."
-                          : arrived
-                          ? isSender
-                            ? "Delivered to recipient."
-                            : "Ready to open."
-                          : "Sealed until delivery."}
+                      <div className="kicker">Letter</div>
+                      <div className="h2">
+                        {letter.from_name ? `From ${letter.from_name}` : "From someone"}
+                      </div>
+                      {letter.subject ? <div className="muted">{letter.subject}</div> : null}
+                    </div>
+                  </div>
+
+                  <div className="soft envelope" style={{ marginTop: 14, ["--env-tint" as any]: envTint }}>
+                  <div className="sealCard">
+                    <div className="sealRow">
+                      {arrived && !isOpened && !isSender ? (
+                        <a
+                          href={`/l/${token}/open?auto=1`}
+                          className="waxBtn"
+                          aria-label="Open letter"
+                          title="Open letter"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={sealImg} alt="" className="waxImg" />
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          className="waxBtn"
+                          aria-label="Wax seal preview"
+                          title={isSender && arrived ? "Only the recipient can open this letter." : "Wax seal preview"}
+                          disabled
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={sealImg} alt="" className="waxImg" />
+                        </button>
+                      )}
+
+                      <div>
+                        <div className="sealTitle">{isOpened ? "Opened letter" : "Sealed letter"}</div>
+                        <div className="sealSub">
+                          {isOpened
+                            ? "Opened by recipient."
+                            : arrived
+                            ? isSender
+                              ? "Delivered to recipient."
+                              : "Ready to open."
+                            : "Sealed until delivery."}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-                </div>
+                  </div>
 
-                <div style={{ marginTop: 12 }}>
-                  {isOpened ? (
-                    <div className="muted">Opened by recipient.</div>
-                  ) : arrived ? (
-                    <div className="muted">{isSender ? "Delivered to recipient." : "Tap the seal to open."}</div>
-                  ) : (
-                    <div className="muted">
-                      Arrives at <LocalTime iso={etaIso} fallback="an unknown time" />. You can open it once it
-                      lands.
-                    </div>
-                  )}
+                  <div style={{ marginTop: 12 }}>
+                    {isOpened ? (
+                      <div className="muted">Opened by recipient.</div>
+                    ) : arrived ? (
+                      <div className="muted">{isSender ? "Delivered to recipient." : "Tap the seal to open."}</div>
+                    ) : (
+                      <div className="muted">
+                        Arrives at <LocalTime iso={etaIso} fallback="an unknown time" />. You can open it once it
+                        lands.
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           ) : null}
 
           {isOpened && letter.body ? (
             <div className={`${styles.statusFull} ${styles.gridOpen}`}>
               <div className="card">
-                <div className="kicker">
-                  OPENED LETTER FROM{" "}
-                  {letter.from_name ? letter.from_name.toUpperCase() : "SOMEONE"}
-                </div>
-                <div className="h2">Message</div>
-                <div className="muted" style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>
-                  {letter.body}
-                </div>
+                {isPostcard ? (
+                  <>
+                    <div className="kicker">
+                      POSTCARD FROM {letter.from_name ? letter.from_name.toUpperCase() : "SOMEONE"}
+                    </div>
+                    <div className="h2">Back side</div>
+                    <div className="postcardBack" style={{ marginTop: 12 }}>
+                      <div className="postcardBackTitle">Message</div>
+                      <div className="postcardBackBody">{letter.body}</div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="kicker">
+                      OPENED LETTER FROM{" "}
+                      {letter.from_name ? letter.from_name.toUpperCase() : "SOMEONE"}
+                    </div>
+                    <div className="h2">Message</div>
+                    <div className="muted" style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>
+                      {letter.body}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           ) : null}
@@ -524,21 +609,25 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
             <div className="card">
               <div className="kicker">Badges</div>
               <div className="h2">Earned on this flight</div>
-              {data.items?.badges?.length ? (
-                <div className="stack" style={{ gap: 10, marginTop: 10 }}>
-                  {data.items.badges.map((b) => (
-                    <div key={b.id} className="soft" style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                      {b.iconSrc ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={b.iconSrc} alt={b.title} style={{ width: 28, height: 28 }} />
-                      ) : null}
-                      <div>
-                        <div style={{ fontWeight: 800 }}>{b.title}</div>
-                        {b.subtitle ? <div className="muted">{b.subtitle}</div> : null}
+                {data.items?.badges?.length ? (
+                  <div className="stack" style={{ gap: 10, marginTop: 10 }}>
+                    {data.items.badges.map((b) => (
+                      <div key={b.id} className="soft" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                        {b.iconSrc ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={b.iconSrc} alt={b.title} style={{ width: 28, height: 28 }} />
+                        ) : null}
+                        <div>
+                          <div style={{ fontWeight: 800 }}>{b.title}</div>
+                          {b.subtitle ? (
+                            <div className="muted">
+                              {isPostcard && b.code === "delivered" ? "Postcard delivered." : b.subtitle}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
               ) : (
                 <div className="muted" style={{ marginTop: 8 }}>
                   No badges yet.

@@ -9,6 +9,7 @@ type Props = {
   className?: string;
   children?: ReactNode;
   buttonProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
+  itemLabel?: string;
 };
 
 export default function UnsealButton({
@@ -17,6 +18,7 @@ export default function UnsealButton({
   className,
   children,
   buttonProps,
+  itemLabel = "letter",
 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -37,13 +39,13 @@ export default function UnsealButton({
       if (!res.ok) {
         const msg = String(data?.error ?? "");
         if (msg.includes("not_arrived")) {
-          throw new Error("Not yet — this letter has not arrived.");
+          throw new Error(`Not yet — this ${itemLabel} has not arrived.`);
         }
-        throw new Error(msg || "Could not unseal the letter.");
+        throw new Error(msg || `Could not open the ${itemLabel}.`);
       }
       router.replace(`/l/${token}/open?celebrate=1`);
     } catch (e: any) {
-      setError(e?.message || "Could not unseal the letter.");
+      setError(e?.message || `Could not open the ${itemLabel}.`);
     } finally {
       setLoading(false);
     }
@@ -59,7 +61,7 @@ export default function UnsealButton({
           disabled={loading || buttonProps?.disabled}
           {...buttonProps}
         >
-          {children ?? (loading ? "Unsealing…" : "Unseal letter")}
+          {children ?? (loading ? "Opening…" : `Open ${itemLabel}`)}
         </button>
         {error ? (
           <div className="err" style={{ marginTop: 8 }}>
@@ -75,13 +77,13 @@ export default function UnsealButton({
       <div className="cardHead">
         <div>
           <div className="kicker">Ready to open</div>
-          <div className="h2">Unseal the letter</div>
+          <div className="h2">Open the {itemLabel}</div>
         </div>
       </div>
 
       <div className="stack" style={{ gap: 10 }}>
         <button type="button" className="btnPrimary" onClick={onUnseal} disabled={loading}>
-          {loading ? "Unsealing…" : "Unseal letter"}
+          {loading ? "Opening…" : `Open ${itemLabel}`}
         </button>
         {error ? <div className="err">❌ {error}</div> : null}
       </div>

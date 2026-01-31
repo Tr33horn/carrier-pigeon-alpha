@@ -45,7 +45,11 @@ export default function SendPage() {
   const [stationeryId, setStationeryId] = useState<StationeryId>(draft.stationeryId ?? "plain-cotton");
   const deliveryType = draft.deliveryType || "letter";
   const postcardTemplateId = draft.postcardTemplateId ?? POSTCARD_TEMPLATES[0]?.id ?? null;
-  const isPostcard = deliveryType === "postcard";
+  const [sentDeliveryType, setSentDeliveryType] = useState<"letter" | "postcard" | null>(null);
+  const [sentPostcardTemplateId, setSentPostcardTemplateId] = useState<string | null>(null);
+  const effectiveDeliveryType = result ? sentDeliveryType ?? deliveryType : deliveryType;
+  const effectivePostcardTemplateId = result ? sentPostcardTemplateId ?? postcardTemplateId : postcardTemplateId;
+  const isPostcard = effectiveDeliveryType === "postcard";
 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -206,9 +210,9 @@ export default function SendPage() {
   }, [sealId]);
 
   const selectedPostcard = useMemo(() => {
-    if (!postcardTemplateId) return POSTCARD_TEMPLATES[0] ?? null;
-    return POSTCARD_TEMPLATES.find((p) => p.id === postcardTemplateId) ?? POSTCARD_TEMPLATES[0] ?? null;
-  }, [postcardTemplateId]);
+    if (!effectivePostcardTemplateId) return POSTCARD_TEMPLATES[0] ?? null;
+    return POSTCARD_TEMPLATES.find((p) => p.id === effectivePostcardTemplateId) ?? POSTCARD_TEMPLATES[0] ?? null;
+  }, [effectivePostcardTemplateId]);
 
   const sealOk =
     isPostcard || sealPolicy === "none" || (sealPolicy === "selectable" && !showSealPicker) ? true : !!sealId;
@@ -232,7 +236,7 @@ export default function SendPage() {
       setSending(false);
       return;
     }
-    if (isPostcard && !postcardTemplateId) {
+    if (deliveryType === "postcard" && !postcardTemplateId) {
       setError("Pick a postcard design.");
       setSending(false);
       return;
@@ -263,6 +267,8 @@ export default function SendPage() {
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data?.error ?? "Send failed");
 
+      setSentDeliveryType(deliveryType);
+      setSentPostcardTemplateId(postcardTemplateId);
       setResult({
         url: `${window.location.origin}/l/${data.public_token}`,
         eta_at: data.eta_at,

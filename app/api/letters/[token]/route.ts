@@ -255,9 +255,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
       canceled_at,
       bird,
       seal_id,
-      envelope_tint,
+      envelope_tint
   `;
-  const sleepSelect = `${baseSelect} sleep_offset_min, sleep_start_hour, sleep_end_hour`;
+  const deliverySelect = `${baseSelect} delivery_type, postcard_template_id`;
+  const sleepSelect = `${deliverySelect} sleep_offset_min, sleep_start_hour, sleep_end_hour`;
+  const missingDeliveryColumns = (err: any) =>
+    !!err && (err.code === "42703" || /(delivery_type|postcard_template_id)/i.test(err.message || ""));
   const missingSleepColumns = (err: any) =>
     !!err && (err.code === "42703" || /sleep_(offset|min|start|end)/i.test(err.message || ""));
 
@@ -274,6 +277,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
       console.warn("letters.sleep_* columns missing (api/letters/[token]); falling back to legacy select.");
       warnedMissingSleepColumns = true;
     }
+    ({ data: meta, error: metaErr } = await supabaseServer
+      .from("letters")
+      .select(deliverySelect)
+      .eq("public_token", token)
+      .order("sent_at", { ascending: false })
+      .limit(1)
+      .maybeSingle());
+  }
+  if (metaErr && missingDeliveryColumns(metaErr)) {
     ({ data: meta, error: metaErr } = await supabaseServer
       .from("letters")
       .select(baseSelect)

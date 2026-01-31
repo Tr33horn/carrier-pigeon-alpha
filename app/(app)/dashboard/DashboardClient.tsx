@@ -755,8 +755,10 @@ export default function DashboardClient({ initialEmail }: Props) {
                 const msLeft = etaAbsMs == null ? null : etaAbsMs - now.getTime();
                 const countdown = formatCountdown(msLeft);
 
-                const statusPath = `/l/${l.public_token}`;
-                const statusUrl = typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
+                const rawStatusPath = `/l/${l.public_token}`;
+                const statusPath = rawStatusPath.replace(/\/{2,}/g, "/");
+                const statusUrl =
+                  typeof window !== "undefined" ? `${window.location.origin}${statusPath}` : statusPath;
 
                 const canThumb =
                   Number.isFinite(l.origin_lat) &&
