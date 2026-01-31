@@ -593,6 +593,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
       };
     });
   const addons = (items ?? []).filter((x: any) => x.kind === "addon");
+  const addonPostcardTemplateId = addons.find((a: any) => a.code === "postcard_template")?.meta?.postcard_template_id ?? null;
 
   // ✅ ETA fields:
   // - Normal: adjusted ETA
@@ -630,6 +631,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
         // ✅ NEW: expose seal_id for UI (safe even before delivery)
         seal_id,
         envelope_tint,
+        postcard_template_id:
+          (meta as any).postcard_template_id ??
+          addonPostcardTemplateId ??
+          null,
 
         eta_at_adjusted,
         eta_utc_text,

@@ -491,6 +491,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: letterErr?.message ?? "Insert failed" }, { status: 500 });
   }
 
+  if (deliveryType === "postcard" && postcardTemplateId) {
+    const { error: addonErr } = await supabaseServer.from("letter_items").upsert(
+      [
+        {
+          letter_id: letter.id,
+          kind: "addon",
+          code: "postcard_template",
+          title: "Postcard template",
+          meta: { postcard_template_id: postcardTemplateId },
+        },
+      ],
+      { onConflict: "letter_id,kind,code" }
+    );
+    if (addonErr) {
+      console.warn("POSTCARD ADDON UPSERT ERROR:", addonErr);
+    }
+  }
+
   // ✅ Store baseline checkpoints (status route retimes them sleep-aware)
   const checkpoints = generateCheckpointsBaseline({
     sentUtcMs,
