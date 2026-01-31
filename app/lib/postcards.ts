@@ -33,7 +33,7 @@ export const POSTCARD_TEMPLATES: Array<{
     },
   },
     {
-    id: "jsoutpost",
+    id: "jsoutpostv",
     name: "Jonny's Outpost",
     preview: {
       backgroundImage: "url('/postcards/jsoutpostv.svg')",
