@@ -36,7 +36,7 @@ export const POSTCARD_TEMPLATES: Array<{
     id: "jsoutpost",
     name: "Jonny's Outpost",
     preview: {
-      backgroundImage: "url('/postcards/jsoutpost.svg')",
+      backgroundImage: "url('/postcards/jsoutpost.png')",
       backgroundSize: "cover",
       backgroundPosition: "center",
     },
