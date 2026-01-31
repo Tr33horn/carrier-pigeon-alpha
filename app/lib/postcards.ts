@@ -1,4 +1,4 @@
-export type PostcardTemplateId = "coastal-sun" | "night-ferry" | "field-notes"  | "jsoutpostv" ;
+export type PostcardTemplateId = "coastal-sun" | "night-ferry" | "field-notes" | "jsoutpost" | "jsoutpostv";
 
 export const POSTCARD_TEMPLATES: Array<{
   id: PostcardTemplateId;
@@ -32,11 +32,20 @@ export const POSTCARD_TEMPLATES: Array<{
       backgroundPosition: "center",
     },
   },
-    {
+  {
+    id: "jsoutpost",
+    name: "Jonny's Outpost",
+    preview: {
+      backgroundImage: "url('/postcards/jsoutpost.svg')",
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+    },
+  },
+  {
     id: "jsoutpostv",
     name: "Jonny's Outpost",
     preview: {
-      backgroundImage: "url('/postcards/jsoutpostv.svg')",
+      backgroundImage: "url('/postcards/jsoutpost.svg')",
       backgroundSize: "cover",
       backgroundPosition: "center",
     },

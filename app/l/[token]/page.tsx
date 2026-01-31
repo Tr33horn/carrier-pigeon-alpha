@@ -510,6 +510,10 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                       POSTCARD FROM {letter.from_name ? letter.from_name.toUpperCase() : "SOMEONE"}
                     </div>
                     <div className="h2">Back side</div>
+                    <div className="postcardPreview" style={postcardTemplate?.preview}>
+                      <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
+                      <div className="postcardBackHint">Front</div>
+                    </div>
                     <div className="postcardBack" style={{ marginTop: 12 }}>
                       <div className="postcardBackTitle">Message</div>
                       <div className="postcardBackBody">{letter.body}</div>
