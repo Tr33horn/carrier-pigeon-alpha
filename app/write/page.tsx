@@ -60,7 +60,7 @@ export default function WritePage() {
             </a>
             <div style={{ marginTop: 12 }}>
               <div className="kicker">Compose</div>
-              <h1 className="h1">Write a Letter</h1>
+              <h1 className="h1">Write Someone</h1>
               <p className="muted" style={{ marginTop: 6 }}>
                 Loading…
               </p>
@@ -417,7 +417,7 @@ function WritePageInner() {
         <div className="writeHead" style={{ marginTop: 12 }}>
           <div style={{ minWidth: 0 }}>
             <div className="kicker">Compose</div>
-            <h1 className="h1 h1Bold">Write a Letter</h1>
+            <h1 className="h1 h1Bold">Write Someone</h1>
 
             <p className="muted" style={{ marginTop: 6 }}>
               It’ll unlock for the recipient when the bird lands.

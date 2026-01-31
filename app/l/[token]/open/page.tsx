@@ -392,7 +392,7 @@ export default async function LetterOpenPage({
                 <UnsealButton
                   token={token}
                   variant="seal"
-                  className="postcardPreview"
+                  className={`postcardPreview ${isOpened ? "" : "blur"}`}
                   itemLabel="postcard"
                   buttonProps={{
                     "aria-label": "Read postcard",

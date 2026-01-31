@@ -533,13 +533,13 @@ export default function DashboardClient({ initialEmail }: Props) {
 
               <div className="dashWriteMobile">
                 <a href="/new" className="btnPrimary">
-                  + Write a letter
+                  + Write someone
                 </a>
               </div>
             </div>
 
             <a href="/new" className="linkPill dashWriteDesktop">
-              + Write a letter
+              + Write someone
             </a>
           </div>
 

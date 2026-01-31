@@ -146,7 +146,7 @@ export default function Home() {
           <div className="card homeActionsCard" style={{ width: "100%", marginTop: 14 }}>
             <div className="stack" style={{ gap: 10 }}>
               <Link href="/new" className="btnPrimary" style={{ textAlign: "center" }}>
-                Write a Letter
+                Write Someone
               </Link>
 
               <Link href="/dashboard" className="btnGhost" style={{ textAlign: "center" }}>

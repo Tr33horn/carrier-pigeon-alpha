@@ -130,6 +130,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
     !!letter.postcard_template_id ||
     (letter.seal_id == null && !!letter.subject);
   const postcardTemplate = resolvePostcardTemplate(letter.postcard_template_id);
+  const blurPostcard = isPostcard && !isOpened && !isSender;
   let isSender = false;
 
   if (user) {
@@ -219,7 +220,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                     <div className="metaPill faint">{postcardTemplate?.name ?? "Postcard"}</div>
                   </div>
 
-                  <div className="postcardPreview" style={postcardTemplate?.preview}>
+                  <div className={`postcardPreview ${blurPostcard ? "blur" : ""}`} style={postcardTemplate?.preview}>
                     <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
                     <div className="postcardBackHint">
                       {isOpened ? "Postcard read" : "Back side: message + address"}
@@ -406,12 +407,16 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                   </div>
 
                   {arrived && !isSender ? (
-                    <a href={`/l/${token}/open?auto=1`} className="postcardPreview" style={postcardTemplate?.preview}>
+                    <a
+                      href={`/l/${token}/open?auto=1`}
+                      className={`postcardPreview ${blurPostcard ? "blur" : ""}`}
+                      style={postcardTemplate?.preview}
+                    >
                       <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
                       <div className="postcardBackHint">Tap to read the back.</div>
                     </a>
                   ) : (
-                    <div className="postcardPreview" style={postcardTemplate?.preview}>
+                    <div className={`postcardPreview ${blurPostcard ? "blur" : ""}`} style={postcardTemplate?.preview}>
                       <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
                       <div className="postcardBackHint">
                         {arrived ? "Delivered to recipient." : "In transit."}
@@ -509,7 +514,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                       POSTCARD FROM {letter.from_name ? letter.from_name.toUpperCase() : "SOMEONE"}
                     </div>
                     <div className="h2">Back side</div>
-                    <div className="postcardPreview" style={postcardTemplate?.preview}>
+                    <div className={`postcardPreview ${blurPostcard ? "blur" : ""}`} style={postcardTemplate?.preview}>
                       <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
                       <div className="postcardBackHint">Front</div>
                     </div>
