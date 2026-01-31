@@ -32,7 +32,11 @@ function cleanOverText(s?: string | null) {
   const raw = (s || "").trim();
   if (!raw) return "";
   // If backend already sends “Over ___” we won’t double-prefix it.
-  return /^over\s+/i.test(raw) ? raw.replace(/^over\s+/i, "Over ") : `Over ${raw}`;
+  if (/^over\s+/i.test(raw)) {
+    const cleaned = raw.replace(/^over\s+/i, "");
+    return /^somewhere over the u\.s\.$/i.test(cleaned) ? "Somewhere over the U.S." : `Over ${cleaned}`;
+  }
+  return /^somewhere over the u\.s\.$/i.test(raw) ? "Somewhere over the U.S." : `Over ${raw}`;
 }
 
 export function LetterProgressUpdateEmail({

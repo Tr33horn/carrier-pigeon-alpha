@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { getEnabledBirdTypes, type BirdType } from "@/app/lib/birds";
 import { BIRD_CATALOG, enabledBirdCatalog, type BirdCatalogRow } from "@/app/lib/birdsCatalog";
@@ -10,6 +10,7 @@ import { ENVELOPE_TINTS, getEnvelopeTintColor, type EnvelopeTint } from "@/app/l
 import { safeJson } from "@/app/lib/http";
 import { clearDraft, setDraft, useLetterDraftStore } from "@/app/lib/letterDraftStore";
 import { getSeal, getSealImgSrc, getSelectableSeals } from "@/app/lib/seals";
+import type { StationeryId } from "@/app/lib/stationery";
 
 type BirdOption = {
   id: BirdType;
@@ -40,10 +41,14 @@ export default function SendPage() {
   const [bird, setBird] = useState<BirdType | null>(draft.bird ?? null);
   const [sealId, setSealId] = useState<string | null>(draft.sealId ?? null);
   const [envelopeTint, setEnvelopeTint] = useState<EnvelopeTint>((draft.envelopeTint as EnvelopeTint) || "classic");
+  const [stationeryId, setStationeryId] = useState<StationeryId>(draft.stationeryId ?? "plain-cotton");
 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ url: string; eta_at: string } | null>(null);
+  const [holding, setHolding] = useState(false);
+  const [holdRemainingMs, setHoldRemainingMs] = useState(0);
+  const holdTimerRef = useRef<number | null>(null);
 
   // Always mount-set in an effect (hook order stable)
   useEffect(() => {
@@ -60,7 +65,8 @@ export default function SendPage() {
 
     // ✅ FIX: don't force "classic" and block hydration
     setEnvelopeTint((prev) => prev ?? (draft.envelopeTint as EnvelopeTint) ?? "classic");
-  }, [mounted, draft.bird, draft.sealId, draft.envelopeTint]);
+    setStationeryId((prev) => prev ?? draft.stationeryId ?? "plain-cotton");
+  }, [mounted, draft.bird, draft.sealId, draft.envelopeTint, draft.stationeryId]);
 
   // Draft completeness
   const hasDraft =
@@ -138,6 +144,11 @@ export default function SendPage() {
     if (!mounted) return;
     setDraft({ sealId });
   }, [mounted, sealId]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    setDraft({ stationeryId });
+  }, [mounted, stationeryId]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -228,6 +239,7 @@ export default function SendPage() {
           bird,
           seal_id: sealId,
           envelope_tint: envelopeTint,
+          stationery_id: stationeryId,
         }),
       });
 
@@ -238,6 +250,8 @@ export default function SendPage() {
         url: `${window.location.origin}/l/${data.public_token}`,
         eta_at: data.eta_at,
       });
+      setHolding(false);
+      setHoldRemainingMs(0);
 
       // ✅ Clear draft after success, but we stay here because `result` exists
       clearDraft();
@@ -248,12 +262,49 @@ export default function SendPage() {
     }
   }
 
+  function clearHoldTimer() {
+    if (holdTimerRef.current != null) {
+      window.clearInterval(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  }
+
+  function cancelHold() {
+    clearHoldTimer();
+    setHolding(false);
+    setHoldRemainingMs(0);
+  }
+
+  function startHold() {
+    if (sending || result || holding) return;
+    const HOLD_MS = 3000;
+    setHolding(true);
+    setHoldRemainingMs(HOLD_MS);
+    const start = Date.now();
+    clearHoldTimer();
+    holdTimerRef.current = window.setInterval(() => {
+      const elapsed = Date.now() - start;
+      const remaining = Math.max(0, HOLD_MS - elapsed);
+      setHoldRemainingMs(remaining);
+      if (remaining <= 0) {
+        clearHoldTimer();
+        sendNow();
+      }
+    }, 80);
+  }
+
+  useEffect(() => {
+    return () => {
+      clearHoldTimer();
+    };
+  }, []);
+
   // ✅ Render gate AFTER all hooks are declared
   if (!mounted) return null;
   if (!hasDraft && !result) return null; // ✅ allow success view even after draft is cleared
 
   return (
-    <main className="pageBg">
+    <main className="pageBg sendPage">
       <div className="wrap">
         <Link href="/new" className="linkPill">
           ← Back to letter
@@ -318,6 +369,40 @@ export default function SendPage() {
           </div>
 
           <div className="stack" style={{ gap: 14 }}>
+            <div>
+              <div className="cardHead" style={{ marginBottom: 10 }}>
+                <div>
+                  <div className="kicker">Envelope</div>
+                  <div className="h2">Choose a tint</div>
+                  <div className="muted" style={{ marginTop: 4 }}>
+                    A little personality. Same paper.
+                  </div>
+                </div>
+
+                <div className="metaPill faint">
+                  {ENVELOPE_TINTS.find((t) => t.id === envelopeTint)?.label ?? "Classic"}
+                </div>
+              </div>
+
+              <div className="tintRow">
+                {ENVELOPE_TINTS.map((t) => {
+                  const on = t.id === envelopeTint;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className={`tintSwatch ${on ? "on" : ""}`}
+                      style={{ background: getEnvelopeTintColor(t.id) }}
+                      onClick={() => setEnvelopeTint(t.id)}
+                      aria-pressed={on}
+                      aria-label={`Envelope tint: ${t.label}`}
+                      title={t.label}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
             {sealPolicy !== "none" && (
               <div>
                 <div className="cardHead" style={{ marginBottom: 10 }}>
@@ -392,69 +477,53 @@ export default function SendPage() {
               </div>
             )}
 
-            <div>
-              <div className="cardHead" style={{ marginBottom: 10 }}>
-                <div>
-                  <div className="kicker">Envelope</div>
-                  <div className="h2">Choose a tint</div>
-                  <div className="muted" style={{ marginTop: 4 }}>
-                    A little personality. Same paper.
-                  </div>
-                </div>
+            <div
+              className="soft envelope"
+              style={{ marginTop: 4, ["--env-tint" as any]: getEnvelopeTintColor(envelopeTint) }}
+            >
+              <div className="sealCard">
+                <div className="sealRow">
+                  <button type="button" className="waxBtn" aria-label="Wax seal preview" disabled>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={selectedSealImg || "/waxseal.png"} alt="" className="waxImg" />
+                  </button>
 
-                <div className="metaPill faint">
-                  {ENVELOPE_TINTS.find((t) => t.id === envelopeTint)?.label ?? "Classic"}
-                </div>
-              </div>
-
-              <div className="tintRow">
-                {ENVELOPE_TINTS.map((t) => {
-                  const on = t.id === envelopeTint;
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      className={`tintSwatch ${on ? "on" : ""}`}
-                      style={{ background: getEnvelopeTintColor(t.id) }}
-                      onClick={() => setEnvelopeTint(t.id)}
-                      aria-pressed={on}
-                      aria-label={`Envelope tint: ${t.label}`}
-                      title={t.label}
-                    />
-                  );
-                })}
-              </div>
-
-              <div
-                className="soft envelope"
-                style={{ marginTop: 14, ["--env-tint" as any]: getEnvelopeTintColor(envelopeTint) }}
-              >
-                <div className="sealCard">
-                  <div className="sealRow">
-                    <button type="button" className="waxBtn" aria-label="Wax seal preview" disabled>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={selectedSealImg || "/waxseal.png"} alt="" className="waxImg" />
-                    </button>
-
-                    <div>
-                      <div className="sealTitle">Sealed letter</div>
-                      <div className="sealSub">Preview only</div>
-                    </div>
+                  <div>
+                    <div className="sealTitle">Sealed letter</div>
+                    <div className="sealSub">Preview only</div>
                   </div>
                 </div>
               </div>
-
-              <div className="trustLine">This will open exactly once.</div>
             </div>
+
+            <div className="trustLine">This will open exactly once.</div>
           </div>
         </section>
 
         {/* Send */}
         <div className="card sendCard" style={{ marginTop: 14 }}>
           <div className="sendStack">
-            <button onClick={sendNow} disabled={sending || !!result} className="btnPrimary sendBtn">
-              {result ? "Released" : sending ? "Releasing..." : "Release with care"}
+            <button
+              type="button"
+              onPointerDown={startHold}
+              onPointerUp={cancelHold}
+              onPointerLeave={cancelHold}
+              onPointerCancel={cancelHold}
+              disabled={sending || !!result}
+              className="btnPrimary sendBtn holdBtn"
+              style={{
+                ["--hold-progress" as any]: holding ? (3000 - holdRemainingMs) / 3000 : 0,
+              }}
+            >
+              <span className="holdLabel">
+                {result ? "Released" : sending ? "Releasing..." : "Hold to release"}
+              </span>
             </button>
+            {!result && !sending && (
+              <div className="muted" style={{ fontSize: 12 }}>
+                {holding ? `Keep holding… ${Math.ceil(holdRemainingMs / 1000)}s` : "Press and hold to confirm."}
+              </div>
+            )}
             <div className="sendHelper">
               {result ? "The bird has departed." : "This may arrive earlier or later than planned."}
             </div>

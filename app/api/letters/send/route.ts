@@ -309,12 +309,14 @@ export async function POST(req: Request) {
     bird: birdRaw,
     seal_id,
     envelope_tint,
+    stationery_id,
   } = body;
   const content = typeof message === "string" ? message : (typeof body?.body === "string" ? body.body : "");
 
   const bird: BirdType = normalizeBird(birdRaw);
   const birdCfg = BIRD_RULES[bird];
   const envelopeTint = normalizeEnvelopeTint(envelope_tint);
+  const stationeryId = typeof stationery_id === "string" && stationery_id.trim() ? stationery_id.trim() : null;
 
   // ✅ Resolve/validate seal before insert
   const sealResolved = resolveSealId({ bird, requestedSealId: seal_id });
@@ -406,9 +408,7 @@ export async function POST(req: Request) {
     etaBaselineUtc: etaAtSafe.toISOString(),
   });
 
-  const { data: letter, error: letterErr } = await supabaseServer
-    .from("letters")
-    .insert({
+  const insertBase = {
       public_token: publicToken,
       bird,
 
@@ -442,9 +442,25 @@ export async function POST(req: Request) {
 
       sent_at: sentAt.toISOString(),
       eta_at: etaAtSafe.toISOString(),
-    })
+    };
+
+  const insertPayload = stationeryId ? { ...insertBase, stationery_id: stationeryId } : insertBase;
+  const missingStationeryColumn = (err: any) =>
+    !!err && (err.code === "42703" || /stationery_id/i.test(err.message || ""));
+
+  let { data: letter, error: letterErr } = await supabaseServer
+    .from("letters")
+    .insert(insertPayload)
     .select("id, public_token, eta_at, origin_name, dest_name, from_name, to_name, bird, seal_id")
     .single();
+
+  if (letterErr && missingStationeryColumn(letterErr) && stationeryId) {
+    ({ data: letter, error: letterErr } = await supabaseServer
+      .from("letters")
+      .insert(insertBase)
+      .select("id, public_token, eta_at, origin_name, dest_name, from_name, to_name, bird, seal_id")
+      .single());
+  }
 
   if (letterErr || !letter) {
     return NextResponse.json({ error: letterErr?.message ?? "Insert failed" }, { status: 500 });

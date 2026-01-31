@@ -12,7 +12,9 @@ import { normalizeBird, type BirdType } from "@/app/lib/birds";
 // ✅ Seals catalog + helpers
 import { getSeal, getSealImgSrc, getSelectableSeals } from "@/app/lib/seals";
 import { ENVELOPE_TINTS, getEnvelopeTintColor, type EnvelopeTint } from "@/app/lib/envelopeTints";
+import { STATIONERY, type StationeryId } from "@/app/lib/stationery";
 import { safeJson } from "@/app/lib/http";
+import { setDraft, useLetterDraftStore } from "@/app/lib/letterDraftStore";
 
 /* ---------- helpers ---------- */
 function nearestCity(lat: number, lon: number, cities: { name: string; lat: number; lon: number }[]) {
@@ -117,6 +119,8 @@ function WritePageInner() {
   // ✅ Selected seal state (varies by policy)
   const [sealId, setSealId] = useState<string | null>(null);
   const [envelopeTint, setEnvelopeTint] = useState<EnvelopeTint>("classic");
+  const [stationeryId, setStationeryId] = useState<StationeryId>("plain-cotton");
+  const draft = useLetterDraftStore();
   const [activeStep, setActiveStep] = useState(1);
   const [showPrompts, setShowPrompts] = useState(false);
   const [previewInk, setPreviewInk] = useState(false);
@@ -145,6 +149,14 @@ function WritePageInner() {
     const preferred = defaultSealId || sealOptions[0]?.id || null;
     setSealId(preferred);
   }, [sealPolicy, fixedSealId, defaultSealId, sealOptions]);
+
+  useEffect(() => {
+    setStationeryId((prev) => prev ?? draft.stationeryId ?? "plain-cotton");
+  }, [draft.stationeryId]);
+
+  useEffect(() => {
+    setDraft({ stationeryId });
+  }, [stationeryId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -229,6 +241,7 @@ function WritePageInner() {
 
   const fromNameOk = fromName.trim().length > 0;
   const toNameOk = toName.trim().length > 0;
+  const subjectOk = subject.trim().length > 0;
   const messageOk = message.trim().length > 0;
 
   const routeOk = origin.name !== destination.name;
@@ -325,6 +338,11 @@ function WritePageInner() {
       setSending(false);
       return;
     }
+    if (!subjectOk) {
+      setError("Give the letter a title.");
+      setSending(false);
+      return;
+    }
     if (!sealOk) {
       setError("Pick a wax seal first.");
       setSending(false);
@@ -348,6 +366,7 @@ function WritePageInner() {
           // ✅ NEW
           seal_id: sealId,
           envelope_tint: envelopeTint,
+          stationery_id: stationeryId,
         }),
       });
 
@@ -379,6 +398,7 @@ function WritePageInner() {
     !routeOk ||
     !fromNameOk ||
     !toNameOk ||
+    !subjectOk ||
     !messageOk ||
     !senderEmailOk ||
     !recipientEmailOk ||
@@ -505,13 +525,14 @@ function WritePageInner() {
 
             <div className="stack">
               <label className="field">
-                <span className="fieldLabel">Subject (optional)</span>
+                <span className="fieldLabel">Title (required)</span>
                 <input
-                  className="input"
+                  className={`input ${!subjectOk ? "invalid" : ""}`}
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  placeholder="Optional subject…"
+                  placeholder="Required title…"
                 />
+                {!subjectOk && <div className="errorText">Give the letter a title.</div>}
               </label>
 
               <label className="field">
@@ -631,6 +652,40 @@ function WritePageInner() {
             </div>
 
             <div className="stack" style={{ gap: 14 }}>
+              <div>
+                <div className="cardHead" style={{ marginBottom: 10 }}>
+                  <div>
+                    <div className="kicker">Stationery</div>
+                    <div className="h2">Choose the paper</div>
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      Quiet textures, slow delivery.
+                    </div>
+                  </div>
+                  <div className="metaPill faint">
+                    {STATIONERY.find((s) => s.id === stationeryId)?.name ?? "Plain Cotton"}
+                  </div>
+                </div>
+
+                <div className="stationeryGrid">
+                  {STATIONERY.map((s) => {
+                    const on = s.id === stationeryId;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className={`stationeryPick ${on ? "on" : ""}`}
+                        onClick={() => setStationeryId(s.id)}
+                        aria-pressed={on}
+                        title={`Choose ${s.name}`}
+                      >
+                        <span className="stationerySwatch" style={s.preview} />
+                        <span className="stationeryLabel">{s.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Wax seal */}
               {sealPolicy !== "none" && (
                 <div>

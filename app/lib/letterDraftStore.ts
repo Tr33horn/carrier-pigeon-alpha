@@ -4,6 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import type { BirdType } from "@/app/lib/birds";
 import { normalizeEnvelopeTint, type EnvelopeTint } from "@/app/lib/envelopeTints";
+import type { StationeryId } from "@/app/lib/stationery";
 
 export type LatLonCity = { name: string; lat: number; lon: number };
 
@@ -19,6 +20,7 @@ export type LetterDraft = {
   bird: BirdType | null;
   sealId: string | null;
   envelopeTint: EnvelopeTint;
+  stationeryId: StationeryId;
   updatedAt: string | null;
   hydrated: boolean;
 };
@@ -38,6 +40,7 @@ const defaultDraft: LetterDraft = {
   bird: null,
   sealId: null,
   envelopeTint: "classic",
+  stationeryId: "plain-cotton",
   updatedAt: null,
   hydrated: false,
 };

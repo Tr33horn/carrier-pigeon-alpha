@@ -7,6 +7,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { CITIES } from "@/app/lib/cities";
 import { CityTypeahead } from "@/app/components/CityTypeahead";
 import { clearDraft, setDraft, useLetterDraftStore, type LatLonCity, type LetterDraft } from "@/app/lib/letterDraftStore";
+import { STATIONERY, type StationeryId } from "@/app/lib/stationery";
 
 /* ---------- helpers ---------- */
 function nearestCity(lat: number, lon: number, cities: { name: string; lat: number; lon: number }[]) {
@@ -84,6 +85,7 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
 
   // Step 2: message
   const [subject, setSubject] = useState(draft.subject || "");
+  const [stationeryId, setStationeryId] = useState<StationeryId>(draft.stationeryId ?? "plain-cotton");
   const [message, setMessage] = useState(draft.message || "");
   const [showPrompts, setShowPrompts] = useState(false);
 
@@ -118,6 +120,7 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
       message,
       origin,
       destination,
+      stationeryId,
       ...overrides,
     };
   }
@@ -203,6 +206,7 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
       setToEmail(draft.toEmail || "");
       setSubject(draft.subject || "");
       setMessage(draft.message || "");
+      setStationeryId(draft.stationeryId || "plain-cotton");
       setOrigin(draft.origin?.name ? draft.origin : defaultOrigin);
       setDestination(draft.destination?.name ? draft.destination : defaultDest);
     }
@@ -232,9 +236,19 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
 
   const fromNameOk = fromName.trim().length > 0;
   const toNameOk = toName.trim().length > 0;
+  const subjectOk = subject.trim().length > 0;
   const messageOk = message.trim().length > 0;
 
   const routeOk = origin.name !== destination.name;
+
+  const stationeryPreviewStyle = useMemo(() => {
+    const selected = STATIONERY.find((s) => s.id === stationeryId);
+    if (!selected?.preview) return undefined;
+    return {
+      background: selected.preview.background,
+      color: selected.ink || undefined,
+    } as const;
+  }, [stationeryId]);
 
   const stepMeta = useMemo(() => {
     const steps = [
@@ -351,6 +365,10 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
     }
     if (!messageOk) {
       setError("The bird won't fly without a message.");
+      return;
+    }
+    if (!subjectOk) {
+      setError("Give the letter a title.");
       return;
     }
 
@@ -492,24 +510,64 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
             </div>
 
             <div className="stack">
+              <div style={{ marginTop: 4 }}>
+                <div className="cardHead" style={{ marginBottom: 10 }}>
+                  <div>
+                    <div className="kicker">Stationery</div>
+                    <div className="h2">Choose the paper</div>
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      Quiet textures, slow delivery.
+                    </div>
+                  </div>
+                  <div className="metaPill faint">
+                    {STATIONERY.find((s) => s.id === stationeryId)?.name ?? "Plain Cotton"}
+                  </div>
+                </div>
+
+                <div className="stationeryRow">
+                  {STATIONERY.map((s) => {
+                    const on = s.id === stationeryId;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className={`stationeryDot ${on ? "on" : ""}`}
+                        onClick={() => {
+                          setStationeryId(s.id);
+                          scheduleSave({ stationeryId: s.id });
+                        }}
+                        aria-pressed={on}
+                        aria-label={`Stationery: ${s.name}`}
+                        title={s.name}
+                        style={s.preview}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
               <label className="field">
-                <span className="fieldLabel">Subject (optional)</span>
+                <span className="fieldLabel">Title (required)</span>
                 <input
-                  className="input"
+                  className={`input ${showErrors && !subjectOk ? "invalid" : ""}`}
                   value={subject}
                   onChange={(e) => updateSubject(e.target.value)}
-                  placeholder="Optional subject..."
+                  placeholder="Required title..."
                 />
+                {showErrors && !subjectOk && <div className="errorText">Give the letter a title.</div>}
               </label>
 
               <label className="field">
                 <span className="fieldLabel">Message</span>
                 <textarea
-                  className={`textarea ${showErrors && !messageOk ? "invalid" : ""}`}
+                  className={`textarea stationeryField ${stationeryId === "night-paper" ? "night" : ""} ${
+                    showErrors && !messageOk ? "invalid" : ""
+                  }`}
                   value={message}
                   onChange={(e) => updateMessage(e.target.value)}
                   rows={7}
                   placeholder="Write something worth the flight..."
+                  style={stationeryPreviewStyle}
                 />
                 {showErrors && !messageOk && (
                   <div className="errorText">The bird won&apos;t fly without a message.</div>

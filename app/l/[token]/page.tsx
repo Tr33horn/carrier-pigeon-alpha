@@ -10,13 +10,7 @@ import { getEnvelopeTintColor, normalizeEnvelopeTint } from "@/app/lib/envelopeT
 import { getSealImgSrc } from "@/app/lib/seals";
 import styles from "./status.module.css";
 import AppHeader from "@/app/_components/AppHeader";
-
-function formatLocal(iso?: string | null) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "";
-  return d.toLocaleString();
-}
+import LocalTime from "./_components/LocalTime";
 
 function InvalidLinkCard({ openedMessage }: { openedMessage?: boolean }) {
   return (
@@ -161,16 +155,25 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                 {data.delivered ? (
                   <>
                     <div className="metaPill faint">
-                      Sent: <strong>{letter.sent_at ? formatLocal(letter.sent_at) : "Unknown"}</strong>
+                      Sent:{" "}
+                      <strong>
+                        <LocalTime iso={letter.sent_at} fallback="Unknown" />
+                      </strong>
                     </div>
                     <div className="metaPill faint">
-                      Delivered: <strong>{etaIso ? formatLocal(etaIso) : "Unknown"}</strong>
+                      Delivered:{" "}
+                      <strong>
+                        <LocalTime iso={etaIso} fallback="Unknown" />
+                      </strong>
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="metaPill faint">
-                      ETA: <strong>{etaIso ? formatLocal(etaIso) : "ETA unknown"}</strong>
+                      ETA:{" "}
+                      <strong>
+                        <LocalTime iso={etaIso} fallback="ETA unknown" />
+                      </strong>
                     </div>
                     {letter.eta_utc_text ? <div className="metaPill faint">{letter.eta_utc_text}</div> : null}
                     <div className="metaPill faint">
@@ -182,7 +185,9 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                   </>
                 )}
                 {isOpened ? (
-                  <div className="metaPill faint">Opened: {formatLocal(letter.opened_at)}</div>
+                  <div className="metaPill faint">
+                    Opened: <LocalTime iso={letter.opened_at} />
+                  </div>
                 ) : null}
               </div>
             </div>
@@ -311,16 +316,25 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
               {data.delivered ? (
                 <>
                   <div className="metaPill faint">
-                    Sent: <strong>{letter.sent_at ? formatLocal(letter.sent_at) : "Unknown"}</strong>
+                    Sent:{" "}
+                    <strong>
+                      <LocalTime iso={letter.sent_at} fallback="Unknown" />
+                    </strong>
                   </div>
                   <div className="metaPill faint">
-                    Delivered: <strong>{etaIso ? formatLocal(etaIso) : "Unknown"}</strong>
+                    Delivered:{" "}
+                    <strong>
+                      <LocalTime iso={etaIso} fallback="Unknown" />
+                    </strong>
                   </div>
                 </>
               ) : (
                 <>
                   <div className="metaPill faint">
-                    ETA: <strong>{etaIso ? formatLocal(etaIso) : "ETA unknown"}</strong>
+                    ETA:{" "}
+                    <strong>
+                      <LocalTime iso={etaIso} fallback="ETA unknown" />
+                    </strong>
                   </div>
                   {letter.eta_utc_text ? <div className="metaPill faint">{letter.eta_utc_text}</div> : null}
                   <div className="metaPill faint">
@@ -332,7 +346,9 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                 </>
               )}
               {isOpened ? (
-                <div className="metaPill faint">Opened: {formatLocal(letter.opened_at)}</div>
+                <div className="metaPill faint">
+                  Opened: <LocalTime iso={letter.opened_at} />
+                </div>
               ) : null}
             </div>
           </div>
@@ -403,7 +419,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                     <div className="muted">{isSender ? "Delivered to recipient." : "Tap the seal to open."}</div>
                   ) : (
                     <div className="muted">
-                      Arrives at {etaIso ? formatLocal(etaIso) : "an unknown time"}. You can open it once it
+                      Arrives at <LocalTime iso={etaIso} fallback="an unknown time" />. You can open it once it
                       lands.
                     </div>
                   )}

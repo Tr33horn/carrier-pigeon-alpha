@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 import { safeJson } from "@/app/lib/http";
 import { getBirdCatalog } from "@/app/lib/birdsCatalog";
+import LocalTime from "@/app/l/[token]/_components/LocalTime";
 
 type Direction = "sent" | "incoming" | "both";
 
@@ -831,7 +832,7 @@ export default function DashboardClient({ initialEmail }: Props) {
                           </span>
                           {l.delivered && l.sent_at && !showUnsealedStatusStack && !showDeliveredStatusStack ? (
                             <span style={{ color: "#E53935", fontWeight: 700, marginLeft: 10 }}>
-                              Sent {new Date(l.sent_at).toLocaleString()}
+                              Sent <LocalTime iso={l.sent_at} />
                             </span>
                           ) : null}
                         </div>
@@ -848,9 +849,15 @@ export default function DashboardClient({ initialEmail }: Props) {
                               fontWeight: 700,
                             }}
                           >
-                            <div>Sent {l.sent_at ? new Date(l.sent_at).toLocaleString() : "Unknown"}</div>
-                            <div>Delivered {etaIsoResolved ? new Date(etaIsoResolved).toLocaleString() : "Unknown"}</div>
-                            <div>Opened {l.opened_at ? new Date(l.opened_at).toLocaleString() : "Unknown"}</div>
+                            <div>
+                              Sent <LocalTime iso={l.sent_at} fallback="Unknown" />
+                            </div>
+                            <div>
+                              Delivered <LocalTime iso={etaIsoResolved} fallback="Unknown" />
+                            </div>
+                            <div>
+                              Opened <LocalTime iso={l.opened_at} fallback="Unknown" />
+                            </div>
                           </div>
                         ) : null}
                         {showDeliveredStatusStack ? (
@@ -865,8 +872,12 @@ export default function DashboardClient({ initialEmail }: Props) {
                               fontWeight: 700,
                             }}
                           >
-                            <div>Sent {l.sent_at ? new Date(l.sent_at).toLocaleString() : "Unknown"}</div>
-                            <div>Delivered {etaIsoResolved ? new Date(etaIsoResolved).toLocaleString() : "Unknown"}</div>
+                            <div>
+                              Sent <LocalTime iso={l.sent_at} fallback="Unknown" />
+                            </div>
+                            <div>
+                              Delivered <LocalTime iso={etaIsoResolved} fallback="Unknown" />
+                            </div>
                           </div>
                         ) : null}
                         {showSentStatusStack ? (
@@ -881,7 +892,9 @@ export default function DashboardClient({ initialEmail }: Props) {
                               fontWeight: 700,
                             }}
                           >
-                          <div>Sent {l.sent_at ? new Date(l.sent_at).toLocaleString() : "Unknown"}</div>
+                          <div>
+                            Sent <LocalTime iso={l.sent_at} fallback="Unknown" />
+                          </div>
                           <div>Status {geoTextDisplay}</div>
                         </div>
                       ) : null}
@@ -891,12 +904,12 @@ export default function DashboardClient({ initialEmail }: Props) {
                             <div className="kicker">{topLabel}</div>
                             {dirTag !== "incoming" && l.sent_at ? (
                               <div className="muted" style={{ color: "#E53935", fontWeight: 700 }}>
-                                Sent {new Date(l.sent_at).toLocaleString()}
+                                Sent <LocalTime iso={l.sent_at} />
                               </div>
                             ) : null}
                             {isOpened && l.opened_at ? (
                               <div className="muted" style={{ color: "#E53935", fontWeight: 700 }}>
-                                Opened {new Date(l.opened_at).toLocaleString()}
+                                Opened <LocalTime iso={l.opened_at} />
                               </div>
                             ) : null}
                           </div>
@@ -907,7 +920,7 @@ export default function DashboardClient({ initialEmail }: Props) {
                             ✔️ <strong>{geoTextDisplay}</strong>
                             {l.delivered && etaIsoResolved ? (
                               <span style={{ color: "#E53935", fontWeight: 700, marginLeft: 10 }}>
-                                Delivered {new Date(etaIsoResolved).toLocaleString()}
+                                Delivered <LocalTime iso={etaIsoResolved} />
                               </span>
                             ) : null}
                           </div>

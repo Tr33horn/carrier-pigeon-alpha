@@ -10,13 +10,7 @@ import AppHeader from "@/app/_components/AppHeader";
 import { getSealImgSrc } from "@/app/lib/seals";
 import { getEnvelopeTintColor, normalizeEnvelopeTint } from "@/app/lib/envelopeTints";
 import styles from "../status.module.css";
-
-function formatLocal(iso?: string | null) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "";
-  return d.toLocaleString();
-}
+import LocalTime from "../_components/LocalTime";
 
 const REGION_LABELS = new Map<string, string>(US_REGIONS.map((r) => [r.id, r.label]));
 
@@ -108,10 +102,16 @@ function ReceiptCard({
 
       <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
         <div className="metaPill">
-          Delivered: <strong>{eta_at ? formatLocal(eta_at) : "Unknown"}</strong>
+          Delivered:{" "}
+          <strong>
+            <LocalTime iso={eta_at} fallback="Unknown" />
+          </strong>
         </div>
         <div className="metaPill">
-          Opened: <strong>{opened_at ? formatLocal(opened_at) : "Unknown"}</strong>
+          Opened:{" "}
+          <strong>
+            <LocalTime iso={opened_at} fallback="Unknown" />
+          </strong>
         </div>
       </div>
 
