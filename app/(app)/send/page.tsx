@@ -45,15 +45,16 @@ export default function SendPage() {
   const [stationeryId, setStationeryId] = useState<StationeryId>(draft.stationeryId ?? "plain-cotton");
   const deliveryType = draft.deliveryType || "letter";
   const postcardTemplateId = draft.postcardTemplateId ?? POSTCARD_TEMPLATES[0]?.id ?? null;
-  const [sentDeliveryType, setSentDeliveryType] = useState<"letter" | "postcard" | null>(null);
-  const [sentPostcardTemplateId, setSentPostcardTemplateId] = useState<string | null>(null);
-  const effectiveDeliveryType = result ? sentDeliveryType ?? deliveryType : deliveryType;
-  const effectivePostcardTemplateId = result ? sentPostcardTemplateId ?? postcardTemplateId : postcardTemplateId;
-  const isPostcard = effectiveDeliveryType === "postcard";
 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ url: string; eta_at: string } | null>(null);
+  const [sentDeliveryType, setSentDeliveryType] = useState<"letter" | "postcard" | null>(null);
+  const [sentPostcardTemplateId, setSentPostcardTemplateId] = useState<string | null>(null);
+
+  const effectiveDeliveryType = result ? sentDeliveryType ?? deliveryType : deliveryType;
+  const effectivePostcardTemplateId = result ? sentPostcardTemplateId ?? postcardTemplateId : postcardTemplateId;
+  const isPostcard = effectiveDeliveryType === "postcard";
   const [holding, setHolding] = useState(false);
   const [holdRemainingMs, setHoldRemainingMs] = useState(0);
   const holdTimerRef = useRef<number | null>(null);
