@@ -620,7 +620,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
       server_now_utc_text,
 
       letter: {
-        ...meta,
+        ...(meta as Record<string, any>),
         bird,
         body,
 
