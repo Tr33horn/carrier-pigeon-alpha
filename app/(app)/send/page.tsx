@@ -11,7 +11,7 @@ import { safeJson } from "@/app/lib/http";
 import { clearDraft, setDraft, useLetterDraftStore } from "@/app/lib/letterDraftStore";
 import { getSeal, getSealImgSrc, getSelectableSeals } from "@/app/lib/seals";
 import type { StationeryId } from "@/app/lib/stationery";
-import { POSTCARD_TEMPLATES } from "@/app/lib/postcards";
+import { POSTCARD_TEMPLATES, resolvePostcardTemplate } from "@/app/lib/postcards";
 
 type BirdOption = {
   id: BirdType;
@@ -210,10 +210,10 @@ export default function SendPage() {
     return getSeal(sealId)?.label ?? sealId;
   }, [sealId]);
 
-  const selectedPostcard = useMemo(() => {
-    if (!effectivePostcardTemplateId) return POSTCARD_TEMPLATES[0] ?? null;
-    return POSTCARD_TEMPLATES.find((p) => p.id === effectivePostcardTemplateId) ?? POSTCARD_TEMPLATES[0] ?? null;
-  }, [effectivePostcardTemplateId]);
+  const selectedPostcard = useMemo(
+    () => resolvePostcardTemplate(effectivePostcardTemplateId),
+    [effectivePostcardTemplateId]
+  );
 
   const sealOk =
     isPostcard || sealPolicy === "none" || (sealPolicy === "selectable" && !showSealPicker) ? true : !!sealId;

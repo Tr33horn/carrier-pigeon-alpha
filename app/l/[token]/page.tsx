@@ -8,7 +8,7 @@ import StatusAutoRefresh from "./_components/StatusAutoRefresh";
 import { birdDisplayLabel, normalizeBird } from "@/app/lib/birds";
 import { getEnvelopeTintColor, normalizeEnvelopeTint } from "@/app/lib/envelopeTints";
 import { getSealImgSrc } from "@/app/lib/seals";
-import { POSTCARD_TEMPLATES } from "@/app/lib/postcards";
+import { resolvePostcardTemplate } from "@/app/lib/postcards";
 import styles from "./status.module.css";
 import AppHeader from "@/app/_components/AppHeader";
 import LocalTime from "./_components/LocalTime";
@@ -129,8 +129,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
     letter.delivery_type === "postcard" ||
     !!letter.postcard_template_id ||
     (letter.seal_id == null && !!letter.subject);
-  const postcardTemplate =
-    POSTCARD_TEMPLATES.find((p) => p.id === letter.postcard_template_id) ?? POSTCARD_TEMPLATES[0] ?? null;
+  const postcardTemplate = resolvePostcardTemplate(letter.postcard_template_id);
   let isSender = false;
 
   if (user) {

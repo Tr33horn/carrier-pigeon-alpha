@@ -10,7 +10,7 @@ import { US_REGIONS } from "@/app/lib/geo/usRegions";
 import AppHeader from "@/app/_components/AppHeader";
 import { getSealImgSrc } from "@/app/lib/seals";
 import { getEnvelopeTintColor, normalizeEnvelopeTint } from "@/app/lib/envelopeTints";
-import { POSTCARD_TEMPLATES } from "@/app/lib/postcards";
+import { resolvePostcardTemplate } from "@/app/lib/postcards";
 import styles from "../status.module.css";
 import LocalTime from "../_components/LocalTime";
 
@@ -220,8 +220,7 @@ export default async function LetterOpenPage({
     postcardTemplateId = status?.postcard_template_id ?? null;
   }
   let isPostcard = deliveryType === "postcard";
-  const postcardTemplate =
-    POSTCARD_TEMPLATES.find((p) => p.id === postcardTemplateId) ?? POSTCARD_TEMPLATES[0] ?? null;
+  const postcardTemplate = resolvePostcardTemplate(postcardTemplateId);
   if (!isPostcard && status?.seal_id == null && status?.subject) {
     isPostcard = true;
   }

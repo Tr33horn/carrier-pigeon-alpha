@@ -41,13 +41,10 @@ export const POSTCARD_TEMPLATES: Array<{
       backgroundPosition: "center",
     },
   },
-  {
-    id: "jsoutpostv",
-    name: "Jonny's Outpost",
-    preview: {
-      backgroundImage: "url('/postcards/jsoutpost.svg')",
-      backgroundSize: "cover",
-      backgroundPosition: "center",
-    },
-  },
 ];
+
+export function resolvePostcardTemplate(id?: string | null) {
+  if (!id) return POSTCARD_TEMPLATES[0] ?? null;
+  const normalized = id === "jsoutpostv" ? "jsoutpost" : id;
+  return POSTCARD_TEMPLATES.find((p) => p.id === normalized) ?? POSTCARD_TEMPLATES[0] ?? null;
+}
