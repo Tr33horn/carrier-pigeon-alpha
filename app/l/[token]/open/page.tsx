@@ -73,7 +73,7 @@ function StatusCard({ status }: { status: StatusRow }) {
             ETA
           </div>
           <div style={{ fontWeight: 700 }}>
-            {status.eta_at ? formatLocal(status.eta_at) : "ETA unknown"}
+            <LocalTime iso={status.eta_at} fallback="ETA unknown" />
           </div>
         </div>
       </div>
