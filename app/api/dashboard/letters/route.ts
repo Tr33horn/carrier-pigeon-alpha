@@ -355,7 +355,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
   }
 
-  const baseSelect = `
+  const baseSelectLegacy = `
       id,
       public_token,
       from_name,
@@ -378,9 +378,15 @@ export async function GET(req: Request) {
       archived_at,
       canceled_at,
       bird,
+      seal_id,
       recipient_archived_at
     `;
+  const baseSelect = `${baseSelectLegacy},
+      delivery_type,
+      postcard_template_id`;
   const sleepSelect = `${baseSelect}, sleep_offset_min, sleep_start_hour, sleep_end_hour`;
+  const missingDeliveryColumns = (err: any) =>
+    !!err && (err.code === "42703" || /(delivery_type|postcard_template_id)/i.test(err.message || ""));
   const missingSleepColumns = (err: any) =>
     !!err && (err.code === "42703" || /sleep_(offset|min|start|end)/i.test(err.message || ""));
 
@@ -403,6 +409,15 @@ export async function GET(req: Request) {
     ({ data: sentData, error: sentErr } = await supabaseServer
       .from("letters")
       .select(baseSelect)
+      .eq("from_email", email)
+      .or("archived_at.is.null,canceled_at.not.is.null")
+      .order("sent_at", { ascending: false })
+      .limit(50));
+  }
+  if (sentErr && missingDeliveryColumns(sentErr)) {
+    ({ data: sentData, error: sentErr } = await supabaseServer
+      .from("letters")
+      .select(baseSelectLegacy)
       .eq("from_email", email)
       .or("archived_at.is.null,canceled_at.not.is.null")
       .order("sent_at", { ascending: false })
@@ -432,6 +447,15 @@ export async function GET(req: Request) {
     ({ data: incomingData, error: incomingErr } = await supabaseServer
       .from("letters")
       .select(baseSelect)
+      .eq("to_email", email)
+      .is("recipient_archived_at", null)
+      .order("sent_at", { ascending: false })
+      .limit(50));
+  }
+  if (incomingErr && missingDeliveryColumns(incomingErr)) {
+    ({ data: incomingData, error: incomingErr } = await supabaseServer
+      .from("letters")
+      .select(baseSelectLegacy)
       .eq("to_email", email)
       .is("recipient_archived_at", null)
       .order("sent_at", { ascending: false })

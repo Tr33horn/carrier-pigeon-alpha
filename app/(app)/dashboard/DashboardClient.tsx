@@ -43,6 +43,9 @@ type DashboardLetter = {
 
   bird?: "pigeon" | "snipe" | "goose";
   sleeping?: boolean;
+  delivery_type?: "letter" | "postcard" | null;
+  postcard_template_id?: string | null;
+  seal_id?: string | null;
 
   sent_utc_text: string;
   eta_utc_text: string;
@@ -795,6 +798,8 @@ export default function DashboardClient({ initialEmail }: Props) {
                 const dirLabel = dirTag === "incoming" ? "INCOMING" : dirTag === "both" ? "SENT + INCOMING" : "SENT";
                 const topLabel =
                   isOpened ? "UNSEALED" : dirTag === "incoming" && l.delivered ? "ARRIVED" : dirLabel;
+                const isPostcard =
+                  l.delivery_type === "postcard" || !!l.postcard_template_id || (l.seal_id == null && !!l.subject);
                 const hideHeavy = isOpened || l.delivered;
                 const showUnsealedStatusStack = l.delivered && isOpened;
                 const showDeliveredStatusStack = l.delivered && !isOpened;
@@ -817,7 +822,10 @@ export default function DashboardClient({ initialEmail }: Props) {
                         <img src={birdImg} alt="" />
                       </div>
                       <div className="dashRowMain">
-                        <div className="h2">{l.subject?.trim() ? l.subject : "(No subject)"}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                          <div className="h2">{l.subject?.trim() ? l.subject : "(No subject)"}</div>
+                          <div className="metaPill faint">{isPostcard ? "Postcard" : "Letter"}</div>
+                        </div>
 
                         <div className="muted" style={{ marginTop: 6 }}>
                           {dirLabel === "INCOMING" ? (

@@ -219,9 +219,12 @@ export default async function LetterOpenPage({
     deliveryType = "postcard";
     postcardTemplateId = status?.postcard_template_id ?? null;
   }
-  const isPostcard = deliveryType === "postcard";
+  let isPostcard = deliveryType === "postcard";
   const postcardTemplate =
     POSTCARD_TEMPLATES.find((p) => p.id === postcardTemplateId) ?? POSTCARD_TEMPLATES[0] ?? null;
+  if (!isPostcard && status?.seal_id == null && status?.subject) {
+    isPostcard = true;
+  }
 
   if (!status) {
     return (
