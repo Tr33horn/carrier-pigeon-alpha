@@ -1,4 +1,4 @@
-export type PostcardTemplateId = "coastal-sun" | "night-ferry" | "field-notes"  | "jsoutpost" ;
+export type PostcardTemplateId = "coastal-sun" | "night-ferry" | "field-notes"  | "jsoutpostv" ;
 
 export const POSTCARD_TEMPLATES: Array<{
   id: PostcardTemplateId;
@@ -36,7 +36,7 @@ export const POSTCARD_TEMPLATES: Array<{
     id: "jsoutpost",
     name: "Jonny's Outpost",
     preview: {
-      backgroundImage: "url('/postcards/jsoutpost.svg')",
+      backgroundImage: "url('/postcards/jsoutpostv.svg')",
       backgroundSize: "cover",
       backgroundPosition: "center",
     },
