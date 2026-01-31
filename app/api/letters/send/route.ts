@@ -310,16 +310,25 @@ export async function POST(req: Request) {
     seal_id,
     envelope_tint,
     stationery_id,
+    delivery_type,
+    postcard_template_id,
   } = body;
   const content = typeof message === "string" ? message : (typeof body?.body === "string" ? body.body : "");
 
   const bird: BirdType = normalizeBird(birdRaw);
   const birdCfg = BIRD_RULES[bird];
   const envelopeTint = normalizeEnvelopeTint(envelope_tint);
-  const stationeryId = typeof stationery_id === "string" && stationery_id.trim() ? stationery_id.trim() : null;
+  const deliveryType = delivery_type === "postcard" ? "postcard" : "letter";
+  const postcardTemplateId =
+    typeof postcard_template_id === "string" && postcard_template_id.trim() ? postcard_template_id.trim() : null;
+  const stationeryId =
+    deliveryType === "letter" && typeof stationery_id === "string" && stationery_id.trim() ? stationery_id.trim() : null;
 
   // ✅ Resolve/validate seal before insert
-  const sealResolved = resolveSealId({ bird, requestedSealId: seal_id });
+  const sealResolved =
+    deliveryType === "postcard"
+      ? { ok: true as const, sealId: null as string | null }
+      : resolveSealId({ bird, requestedSealId: seal_id });
   if (!sealResolved.ok) {
     return NextResponse.json({ error: sealResolved.error }, { status: 400 });
   }
@@ -409,57 +418,73 @@ export async function POST(req: Request) {
   });
 
   const insertBase = {
-      public_token: publicToken,
-      bird,
+    public_token: publicToken,
+    bird,
 
-      // ✅ NEW: store seal_id on the letter (requires DB column letters.seal_id)
-      seal_id: sealResolved.sealId,
-      envelope_tint: envelopeTint,
-      sleep_offset_min: offsetMin,
-      sleep_start_hour: sleepCfg?.sleepStartHour ?? null,
-      sleep_end_hour: sleepCfg?.sleepEndHour ?? null,
-      sender_user_id: user.id,
+    // ✅ NEW: store seal_id on the letter (requires DB column letters.seal_id)
+    seal_id: sealResolved.sealId,
+    envelope_tint: envelopeTint,
+    sleep_offset_min: offsetMin,
+    sleep_start_hour: sleepCfg?.sleepStartHour ?? null,
+    sleep_end_hour: sleepCfg?.sleepEndHour ?? null,
+    sender_user_id: user.id,
 
-      from_name: normalizedFromName,
-      from_email: userEmail,
-      sender_receipt_sent_at: null,
-      to_name,
-      to_email: normalizedToEmail,
-      delivered_notified_at: null,
-      subject,
-      body: content,
-      message: content,
-      origin_name: origin.name,
-      origin_lat: origin.lat,
-      origin_lon: origin.lon,
-      dest_name: destination.name,
-      dest_lat: destination.lat,
-      dest_lon: destination.lon,
-      distance_km: km,
+    from_name: normalizedFromName,
+    from_email: userEmail,
+    sender_receipt_sent_at: null,
+    to_name,
+    to_email: normalizedToEmail,
+    delivered_notified_at: null,
+    subject,
+    body: content,
+    message: content,
+    origin_name: origin.name,
+    origin_lat: origin.lat,
+    origin_lon: origin.lon,
+    dest_name: destination.name,
+    dest_lat: destination.lat,
+    dest_lon: destination.lon,
+    distance_km: km,
 
-      // ✅ snapshot only (NOT authoritative)
-      speed_kmh: speedKmhEffective,
+    // ✅ snapshot only (NOT authoritative)
+    speed_kmh: speedKmhEffective,
 
-      sent_at: sentAt.toISOString(),
-      eta_at: etaAtSafe.toISOString(),
-    };
+    sent_at: sentAt.toISOString(),
+    eta_at: etaAtSafe.toISOString(),
+  };
 
-  const insertPayload = stationeryId ? { ...insertBase, stationery_id: stationeryId } : insertBase;
-  const missingStationeryColumn = (err: any) =>
-    !!err && (err.code === "42703" || /stationery_id/i.test(err.message || ""));
+  const optionalFields: Record<string, string> = {};
+  if (stationeryId) optionalFields.stationery_id = stationeryId;
+  if (deliveryType) optionalFields.delivery_type = deliveryType;
+  if (postcardTemplateId && deliveryType === "postcard") optionalFields.postcard_template_id = postcardTemplateId;
 
+  const missingColumn = (err: any, column: string) =>
+    !!err &&
+    (err.code === "42703" ||
+      new RegExp(`\\b${column}\\b`, "i").test(err.message || "") ||
+      new RegExp(`\\b${column}\\b`, "i").test(err.details || ""));
+
+  let insertPayload: Record<string, any> = { ...insertBase, ...optionalFields };
   let { data: letter, error: letterErr } = await supabaseServer
     .from("letters")
     .insert(insertPayload)
     .select("id, public_token, eta_at, origin_name, dest_name, from_name, to_name, bird, seal_id")
     .single();
 
-  if (letterErr && missingStationeryColumn(letterErr) && stationeryId) {
-    ({ data: letter, error: letterErr } = await supabaseServer
-      .from("letters")
-      .insert(insertBase)
-      .select("id, public_token, eta_at, origin_name, dest_name, from_name, to_name, bird, seal_id")
-      .single());
+  if (letterErr && Object.keys(optionalFields).length > 0) {
+    const remaining = { ...insertPayload };
+    const keys = Object.keys(optionalFields);
+    for (const key of keys) {
+      if (!letterErr) break;
+      if (missingColumn(letterErr, key)) {
+        delete remaining[key];
+        ({ data: letter, error: letterErr } = await supabaseServer
+          .from("letters")
+          .insert(remaining)
+          .select("id, public_token, eta_at, origin_name, dest_name, from_name, to_name, bird, seal_id")
+          .single());
+      }
+    }
   }
 
   if (letterErr || !letter) {

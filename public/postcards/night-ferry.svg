@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800">
+  <defs>
+    <linearGradient id="night" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f1724"/>
+      <stop offset="55%" stop-color="#1c2a3a"/>
+      <stop offset="100%" stop-color="#2b3e52"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#night)"/>
+  <rect y="520" width="1200" height="280" fill="#0b1a27"/>
+  <circle cx="220" cy="190" r="70" fill="#d3e8ff" opacity="0.85"/>
+  <rect x="470" y="420" width="260" height="60" rx="20" fill="#1e2f42"/>
+  <rect x="510" y="380" width="180" height="50" rx="16" fill="#23384f"/>
+  <rect x="540" y="350" width="120" height="40" rx="14" fill="#2a455f"/>
+  <path d="M470 480 Q600 520 730 480" fill="none" stroke="#9cc3ff" stroke-opacity="0.5" stroke-width="6"/>
+  <path d="M460 565 Q600 585 740 565" fill="none" stroke="#9cc3ff" stroke-opacity="0.3" stroke-width="4"/>
+  <rect x="760" y="90" width="320" height="80" rx="40" fill="#0f2033" fill-opacity="0.75"/>
+  <text x="790" y="142" font-family="Times New Roman, serif" font-size="38" fill="#d7e7ff">Night Ferry</text>
+</svg>

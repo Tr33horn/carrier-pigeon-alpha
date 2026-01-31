@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f7f2e6"/>
+      <stop offset="100%" stop-color="#efe6d4"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#paper)"/>
+  <path d="M80 240 H1120" stroke="#c9bba4" stroke-width="4" stroke-opacity="0.5"/>
+  <path d="M80 330 H1120" stroke="#c9bba4" stroke-width="4" stroke-opacity="0.5"/>
+  <path d="M80 420 H1120" stroke="#c9bba4" stroke-width="4" stroke-opacity="0.5"/>
+  <path d="M80 510 H1120" stroke="#c9bba4" stroke-width="4" stroke-opacity="0.5"/>
+  <path d="M80 600 H1120" stroke="#c9bba4" stroke-width="4" stroke-opacity="0.5"/>
+  <rect x="120" y="120" width="440" height="90" rx="45" fill="#f1e5cf"/>
+  <text x="150" y="180" font-family="Times New Roman, serif" font-size="42" fill="#6b4c32">Field Notes</text>
+  <circle cx="980" cy="200" r="70" fill="#89b88f" opacity="0.85"/>
+  <path d="M930 260 Q980 210 1030 260" fill="none" stroke="#6b8f6b" stroke-width="6"/>
+</svg>

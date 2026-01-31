@@ -11,6 +11,7 @@ import { safeJson } from "@/app/lib/http";
 import { clearDraft, setDraft, useLetterDraftStore } from "@/app/lib/letterDraftStore";
 import { getSeal, getSealImgSrc, getSelectableSeals } from "@/app/lib/seals";
 import type { StationeryId } from "@/app/lib/stationery";
+import { POSTCARD_TEMPLATES } from "@/app/lib/postcards";
 
 type BirdOption = {
   id: BirdType;
@@ -42,6 +43,9 @@ export default function SendPage() {
   const [sealId, setSealId] = useState<string | null>(draft.sealId ?? null);
   const [envelopeTint, setEnvelopeTint] = useState<EnvelopeTint>((draft.envelopeTint as EnvelopeTint) || "classic");
   const [stationeryId, setStationeryId] = useState<StationeryId>(draft.stationeryId ?? "plain-cotton");
+  const deliveryType = draft.deliveryType || "letter";
+  const postcardTemplateId = draft.postcardTemplateId ?? POSTCARD_TEMPLATES[0]?.id ?? null;
+  const isPostcard = deliveryType === "postcard";
 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -201,7 +205,13 @@ export default function SendPage() {
     return getSeal(sealId)?.label ?? sealId;
   }, [sealId]);
 
-  const sealOk = sealPolicy === "none" || (sealPolicy === "selectable" && !showSealPicker) ? true : !!sealId;
+  const selectedPostcard = useMemo(() => {
+    if (!postcardTemplateId) return POSTCARD_TEMPLATES[0] ?? null;
+    return POSTCARD_TEMPLATES.find((p) => p.id === postcardTemplateId) ?? POSTCARD_TEMPLATES[0] ?? null;
+  }, [postcardTemplateId]);
+
+  const sealOk =
+    isPostcard || sealPolicy === "none" || (sealPolicy === "selectable" && !showSealPicker) ? true : !!sealId;
 
   async function sendNow() {
     setSending(true);
@@ -222,6 +232,11 @@ export default function SendPage() {
       setSending(false);
       return;
     }
+    if (isPostcard && !postcardTemplateId) {
+      setError("Pick a postcard design.");
+      setSending(false);
+      return;
+    }
 
     try {
       const res = await fetch("/api/letters/send", {
@@ -237,9 +252,11 @@ export default function SendPage() {
           origin: draft.origin,
           destination: draft.destination,
           bird,
-          seal_id: sealId,
+          seal_id: isPostcard ? null : sealId,
           envelope_tint: envelopeTint,
-          stationery_id: stationeryId,
+          stationery_id: isPostcard ? undefined : stationeryId,
+          delivery_type: deliveryType,
+          postcard_template_id: isPostcard ? postcardTemplateId : null,
         }),
       });
 
@@ -314,7 +331,8 @@ export default function SendPage() {
           <div className="kicker">Send</div>
           <h1 className="h1">Choose how it travels</h1>
           <p className="muted" style={{ marginTop: 6 }}>
-            Your letter is written. Now choose the bird and seal.
+            {isPostcard ? "Your postcard is written." : "Your letter is written."} Now choose the bird
+            {isPostcard ? "." : " and seal."}
           </p>
         </div>
 
@@ -359,146 +377,183 @@ export default function SendPage() {
           </div>
         </section>
 
-        {/* Seal & Envelope */}
-        <section className="card" style={{ marginTop: 14 }}>
-          <div className="cardHead" style={{ marginBottom: 10 }}>
-            <div>
-              <div className="kicker">Seal &amp; Envelope</div>
-              <div className="h2">Finalize the ritual</div>
-            </div>
-          </div>
-
-          <div className="stack" style={{ gap: 14 }}>
-            <div>
-              <div className="cardHead" style={{ marginBottom: 10 }}>
-                <div>
-                  <div className="kicker">Envelope</div>
-                  <div className="h2">Choose a tint</div>
-                  <div className="muted" style={{ marginTop: 4 }}>
-                    A little personality. Same paper.
-                  </div>
-                </div>
-
-                <div className="metaPill faint">
-                  {ENVELOPE_TINTS.find((t) => t.id === envelopeTint)?.label ?? "Classic"}
+        {isPostcard ? (
+          <section className="card" style={{ marginTop: 14 }}>
+            <div className="cardHead" style={{ marginBottom: 10 }}>
+              <div>
+                <div className="kicker">Postcard</div>
+                <div className="h2">Pick a template</div>
+                <div className="muted" style={{ marginTop: 4 }}>
+                  Front artwork only. Your message goes on the back.
                 </div>
               </div>
+              <div className="metaPill faint">{selectedPostcard?.name ?? "Postcard"}</div>
+            </div>
 
-              <div className="tintRow">
-                {ENVELOPE_TINTS.map((t) => {
-                  const on = t.id === envelopeTint;
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      className={`tintSwatch ${on ? "on" : ""}`}
-                      style={{ background: getEnvelopeTintColor(t.id) }}
-                      onClick={() => setEnvelopeTint(t.id)}
-                      aria-pressed={on}
-                      aria-label={`Envelope tint: ${t.label}`}
-                      title={t.label}
-                    />
-                  );
-                })}
+            <div className="stationeryRow" style={{ marginBottom: 12 }}>
+              {POSTCARD_TEMPLATES.map((p) => {
+                const on = p.id === postcardTemplateId;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`stationeryDot ${on ? "on" : ""}`}
+                    onClick={() => setDraft({ postcardTemplateId: p.id, deliveryType: "postcard" })}
+                    aria-pressed={on}
+                    aria-label={`Postcard template: ${p.name}`}
+                    title={p.name}
+                    style={p.preview}
+                  />
+                );
+              })}
+            </div>
+
+            <div className="postcardPreview" style={selectedPostcard?.preview}>
+              <div className="postcardPreviewLabel">{selectedPostcard?.name ?? "Postcard"}</div>
+              <div className="postcardBackHint">Back side: message + address</div>
+            </div>
+          </section>
+        ) : (
+          <section className="card" style={{ marginTop: 14 }}>
+            <div className="cardHead" style={{ marginBottom: 10 }}>
+              <div>
+                <div className="kicker">Seal &amp; Envelope</div>
+                <div className="h2">Finalize the ritual</div>
               </div>
             </div>
 
-            {sealPolicy !== "none" && (
+            <div className="stack" style={{ gap: 14 }}>
               <div>
                 <div className="cardHead" style={{ marginBottom: 10 }}>
                   <div>
-                    <div className="kicker">Wax seal</div>
-                    <div className="h2">Choose a seal</div>
+                    <div className="kicker">Envelope</div>
+                    <div className="h2">Choose a tint</div>
                     <div className="muted" style={{ marginTop: 4 }}>
-                      {sealPolicy === "fixed" ? "This bird insists." : "This will appear on the sealed letter."}
+                      A little personality. Same paper.
                     </div>
+                  </div>
+
+                  <div className="metaPill faint">
+                    {ENVELOPE_TINTS.find((t) => t.id === envelopeTint)?.label ?? "Classic"}
+                  </div>
+                </div>
+
+                <div className="tintRow">
+                  {ENVELOPE_TINTS.map((t) => {
+                    const on = t.id === envelopeTint;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        className={`tintSwatch ${on ? "on" : ""}`}
+                        style={{ background: getEnvelopeTintColor(t.id) }}
+                        onClick={() => setEnvelopeTint(t.id)}
+                        aria-pressed={on}
+                        aria-label={`Envelope tint: ${t.label}`}
+                        title={t.label}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              {sealPolicy !== "none" && (
+                <div>
+                  <div className="cardHead" style={{ marginBottom: 10 }}>
+                    <div>
+                      <div className="kicker">Wax seal</div>
+                      <div className="h2">Choose a seal</div>
+                      <div className="muted" style={{ marginTop: 4 }}>
+                        {sealPolicy === "fixed" ? "This bird insists." : "This will appear on the sealed letter."}
+                      </div>
+                    </div>
+
+                    {sealPolicy === "fixed" ? (
+                      <div className="metaPill faint" title="This seal is locked for this bird">
+                        Locked
+                      </div>
+                    ) : (
+                      <div className="metaPill faint">{selectedSealLabel || "Pick one"}</div>
+                    )}
                   </div>
 
                   {sealPolicy === "fixed" ? (
-                    <div className="metaPill faint" title="This seal is locked for this bird">
-                      Locked
+                    <div className="sealFixedRow">
+                      <div className="sealThumbLarge">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={selectedSealImg || "/waxseal.png"} alt={selectedSealLabel || "Wax seal"} />
+                      </div>
+
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 900, letterSpacing: "-0.01em" }}>
+                          {selectedSealLabel || "Wax seal"}
+                        </div>
+                        <div className="muted" style={{ marginTop: 4 }}>
+                          You can&apos;t change this one. The bird filed the paperwork already.
+                        </div>
+                      </div>
                     </div>
+                  ) : showSealPicker ? (
+                    <>
+                      <div className="sealGrid">
+                        {sealOptions.map((s) => {
+                          const on = s.id === sealId;
+                          const img = getSealImgSrc(s.id) || (s as any).imgSrc || "/waxseal.png";
+
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              className={`sealPick ${on ? "on" : ""}`}
+                              onClick={() => setSealId(s.id)}
+                              aria-pressed={on}
+                              title={`Choose ${s.label}`}
+                            >
+                              <span className="sealThumb">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={img} alt="" />
+                              </span>
+                              <span className="sealLabel">{s.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {!sealOk && (
+                        <div className="errorText" style={{ marginTop: 10 }}>
+                          Pick a seal to finish it.
+                        </div>
+                      )}
+                    </>
                   ) : (
-                    <div className="metaPill faint">{selectedSealLabel || "Pick one"}</div>
+                    <div className="muted">This bird doesn&apos;t accept seals.</div>
                   )}
                 </div>
+              )}
 
-                {sealPolicy === "fixed" ? (
-                  <div className="sealFixedRow">
-                    <div className="sealThumbLarge">
+              <div
+                className="soft envelope"
+                style={{ marginTop: 4, ["--env-tint" as any]: getEnvelopeTintColor(envelopeTint) }}
+              >
+                <div className="sealCard">
+                  <div className="sealRow">
+                    <button type="button" className="waxBtn" aria-label="Wax seal preview" disabled>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={selectedSealImg || "/waxseal.png"} alt={selectedSealLabel || "Wax seal"} />
+                      <img src={selectedSealImg || "/waxseal.png"} alt="" className="waxImg" />
+                    </button>
+
+                    <div>
+                      <div className="sealTitle">Sealed letter</div>
+                      <div className="sealSub">Preview only</div>
                     </div>
-
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 900, letterSpacing: "-0.01em" }}>
-                        {selectedSealLabel || "Wax seal"}
-                      </div>
-                      <div className="muted" style={{ marginTop: 4 }}>
-                        You can&apos;t change this one. The bird filed the paperwork already.
-                      </div>
-                    </div>
-                  </div>
-                ) : showSealPicker ? (
-                  <>
-                    <div className="sealGrid">
-                      {sealOptions.map((s) => {
-                        const on = s.id === sealId;
-                        const img = getSealImgSrc(s.id) || (s as any).imgSrc || "/waxseal.png";
-
-                        return (
-                          <button
-                            key={s.id}
-                            type="button"
-                            className={`sealPick ${on ? "on" : ""}`}
-                            onClick={() => setSealId(s.id)}
-                            aria-pressed={on}
-                            title={`Choose ${s.label}`}
-                          >
-                            <span className="sealThumb">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={img} alt="" />
-                            </span>
-                            <span className="sealLabel">{s.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {!sealOk && (
-                      <div className="errorText" style={{ marginTop: 10 }}>
-                        Pick a seal to finish it.
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="muted">This bird doesn&apos;t accept seals.</div>
-                )}
-              </div>
-            )}
-
-            <div
-              className="soft envelope"
-              style={{ marginTop: 4, ["--env-tint" as any]: getEnvelopeTintColor(envelopeTint) }}
-            >
-              <div className="sealCard">
-                <div className="sealRow">
-                  <button type="button" className="waxBtn" aria-label="Wax seal preview" disabled>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={selectedSealImg || "/waxseal.png"} alt="" className="waxImg" />
-                  </button>
-
-                  <div>
-                    <div className="sealTitle">Sealed letter</div>
-                    <div className="sealSub">Preview only</div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="trustLine">This will open exactly once.</div>
-          </div>
-        </section>
+              <div className="trustLine">This will open exactly once.</div>
+            </div>
+          </section>
+        )}
 
         {/* Send */}
         <div className="card sendCard" style={{ marginTop: 14 }}>

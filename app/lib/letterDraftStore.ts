@@ -5,10 +5,13 @@ import { useEffect, useSyncExternalStore } from "react";
 import type { BirdType } from "@/app/lib/birds";
 import { normalizeEnvelopeTint, type EnvelopeTint } from "@/app/lib/envelopeTints";
 import type { StationeryId } from "@/app/lib/stationery";
+import type { PostcardTemplateId } from "@/app/lib/postcards";
 
 export type LatLonCity = { name: string; lat: number; lon: number };
 
 export type LetterDraft = {
+  deliveryType: "letter" | "postcard";
+  postcardTemplateId: PostcardTemplateId | null;
   fromName: string;
   fromEmail: string;
   toName: string;
@@ -29,6 +32,8 @@ const STORAGE_KEY = "flok:letterDraft:v1";
 const LEGACY_STORAGE_KEY = "flok_letter_draft_v1";
 
 const defaultDraft: LetterDraft = {
+  deliveryType: "letter",
+  postcardTemplateId: null,
   fromName: "",
   fromEmail: "",
   toName: "",

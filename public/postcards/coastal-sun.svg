@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f9f2e4"/>
+      <stop offset="55%" stop-color="#efe1c8"/>
+      <stop offset="100%" stop-color="#e9d6b6"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#a8c7c9"/>
+      <stop offset="100%" stop-color="#6fa4a8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#sky)"/>
+  <rect y="520" width="1200" height="280" fill="url(#sea)"/>
+  <circle cx="950" cy="210" r="90" fill="#f5b26c" opacity="0.9"/>
+  <circle cx="950" cy="210" r="120" fill="#f5b26c" opacity="0.25"/>
+  <path d="M0 520 Q220 500 420 520 T840 520 T1200 520" fill="none" stroke="#ffffff" stroke-opacity="0.5" stroke-width="6"/>
+  <path d="M0 585 Q240 565 460 585 T920 585 T1200 585" fill="none" stroke="#ffffff" stroke-opacity="0.3" stroke-width="4"/>
+  <rect x="80" y="80" width="320" height="80" rx="40" fill="#ffffff" fill-opacity="0.7"/>
+  <text x="110" y="132" font-family="Times New Roman, serif" font-size="40" fill="#6b4c32">Coastal Sun</text>
+</svg>

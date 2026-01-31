@@ -8,6 +8,7 @@ import { CITIES } from "@/app/lib/cities";
 import { CityTypeahead } from "@/app/components/CityTypeahead";
 import { clearDraft, setDraft, useLetterDraftStore, type LatLonCity, type LetterDraft } from "@/app/lib/letterDraftStore";
 import { STATIONERY, type StationeryId } from "@/app/lib/stationery";
+import type { PostcardTemplateId } from "@/app/lib/postcards";
 
 /* ---------- helpers ---------- */
 function nearestCity(lat: number, lon: number, cities: { name: string; lat: number; lon: number }[]) {
@@ -78,6 +79,10 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
   const isLocked = !!lockedFromEmail;
 
   const [fromName, setFromName] = useState(lockedFromName || draft.fromName || "You");
+  const [deliveryType, setDeliveryType] = useState<"letter" | "postcard">(draft.deliveryType || "letter");
+  const [postcardTemplateId, setPostcardTemplateId] = useState<PostcardTemplateId | null>(
+    draft.postcardTemplateId ?? null
+  );
   const [toName, setToName] = useState(draft.toName || "");
 
   const [fromEmail, setFromEmail] = useState(lockedFromEmail || draft.fromEmail || "");
@@ -116,6 +121,8 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
       fromEmail,
       toName,
       toEmail,
+      deliveryType,
+      postcardTemplateId,
       subject,
       message,
       origin,
@@ -207,6 +214,8 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
       setSubject(draft.subject || "");
       setMessage(draft.message || "");
       setStationeryId(draft.stationeryId || "plain-cotton");
+      setDeliveryType(draft.deliveryType || "letter");
+      setPostcardTemplateId(draft.postcardTemplateId || null);
       setOrigin(draft.origin?.name ? draft.origin : defaultOrigin);
       setDestination(draft.destination?.name ? draft.destination : defaultDest);
     }
@@ -242,13 +251,14 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
   const routeOk = origin.name !== destination.name;
 
   const stationeryPreviewStyle = useMemo(() => {
+    if (deliveryType !== "letter") return undefined;
     const selected = STATIONERY.find((s) => s.id === stationeryId);
     if (!selected?.preview) return undefined;
     return {
       background: selected.preview.background,
       color: selected.ink || undefined,
     } as const;
-  }, [stationeryId]);
+  }, [deliveryType, stationeryId]);
 
   const stepMeta = useMemo(() => {
     const steps = [
@@ -387,6 +397,8 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
         message,
         origin,
         destination,
+        deliveryType,
+        postcardTemplateId,
       })
     );
 
@@ -510,6 +522,40 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
             </div>
 
             <div className="stack">
+              <div className="cardHead" style={{ marginBottom: 10 }}>
+                <div>
+                  <div className="kicker">Delivery</div>
+                  <div className="h2">Letter or postcard?</div>
+                </div>
+                <div className="metaPill faint">{deliveryType === "postcard" ? "Postcard" : "Letter"}</div>
+              </div>
+
+              <div className="stationeryRow">
+                {(["letter", "postcard"] as const).map((t) => {
+                  const on = t === deliveryType;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      className={`stationeryDot ${on ? "on" : ""}`}
+                      onClick={() => {
+                        setDeliveryType(t);
+                        scheduleSave({ deliveryType: t });
+                      }}
+                      aria-pressed={on}
+                      aria-label={`Delivery type: ${t}`}
+                      title={t === "letter" ? "Letter" : "Postcard"}
+                      style={{
+                        background: t === "letter"
+                          ? "linear-gradient(135deg, #f3f1ea 0%, #ece7dc 100%)"
+                          : "linear-gradient(135deg, #e9eef7 0%, #dbe6f5 100%)",
+                      }}
+                    />
+                  );
+                })}
+              </div>
+
+              {deliveryType === "letter" ? (
               <div style={{ marginTop: 4 }}>
                 <div className="cardHead" style={{ marginBottom: 10 }}>
                   <div>
@@ -545,6 +591,7 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
                   })}
                 </div>
               </div>
+              ) : null}
 
               <label className="field">
                 <span className="fieldLabel">Title (required)</span>
@@ -560,9 +607,9 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
               <label className="field">
                 <span className="fieldLabel">Message</span>
                 <textarea
-                  className={`textarea stationeryField ${stationeryId === "night-paper" ? "night" : ""} ${
-                    showErrors && !messageOk ? "invalid" : ""
-                  }`}
+                  className={`textarea stationeryField ${
+                    deliveryType === "letter" && stationeryId === "night-paper" ? "night" : ""
+                  } ${showErrors && !messageOk ? "invalid" : ""}`}
                   value={message}
                   onChange={(e) => updateMessage(e.target.value)}
                   rows={7}
