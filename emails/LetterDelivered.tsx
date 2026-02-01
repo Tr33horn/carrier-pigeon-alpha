@@ -29,6 +29,7 @@ export function LetterDeliveredEmail({
   originName,
   destName,
   bird,
+  deliveryType,
 }: {
   toName?: string | null;
   fromName?: string | null;
@@ -36,11 +37,14 @@ export function LetterDeliveredEmail({
   originName: string;
   destName: string;
   bird?: BirdType | null;
+  deliveryType?: "letter" | "postcard" | null;
 }) {
   const href = joinUrl(APP_URL, statusUrl);
+  const itemLabel = deliveryType === "postcard" ? "postcard" : "letter";
+  const previewText = deliveryType === "postcard" ? "Your postcard has arrived." : "Your letter has arrived.";
 
   return (
-    <EmailLayout preview="Your letter has arrived.">
+    <EmailLayout preview={previewText}>
       <BirdStateImage bird={bird ?? undefined} state="landed" alt="Courier landed" />
 
       <Text style={{ fontSize: 18, fontWeight: 800, margin: "0 0 10px", textAlign: "center" }}>
@@ -48,7 +52,7 @@ export function LetterDeliveredEmail({
       </Text>
 
       <Text style={{ margin: "0 0 14px", textAlign: "center" }}>
-        Hey {toName || "there"} — your letter from <strong>{fromName || "someone"}</strong> has landed.
+        Hey {toName || "there"} — your {itemLabel} from <strong>{fromName || "someone"}</strong> has landed.
       </Text>
 
       <Text style={{ margin: "0 0 14px", color: "#444", textAlign: "center" }}>
@@ -57,7 +61,7 @@ export function LetterDeliveredEmail({
 
       <Section style={{ textAlign: "center", marginTop: 10 }}>
         <Button href={href} style={BUTTON}>
-          Open the letter
+          Open the {itemLabel}
         </Button>
       </Section>
 

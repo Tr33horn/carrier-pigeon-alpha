@@ -150,6 +150,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
   }
   const blurPostcard = isPostcard && !isOpened && !isSender;
   const heavyBlurPostcard = isPostcard && !isOpened && !isSender;
+  const postcardBlurClass = blurPostcard ? (arrived ? "blurMedium" : "blurMedium") : "";
 
   // Logged out: status + OTP
   if (!user) {
@@ -231,16 +232,18 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                   ) : null}
                 </div>
 
-                  <div className={`postcardPreview ${heavyBlurPostcard ? "blurHeavy" : blurPostcard ? "blur" : ""}`}>
+                  <div className={`postcardPreview fullWidth ${postcardBlurClass}`}>
                     <div className="postcardPreviewArt" style={postcardTemplate?.preview} />
                     {isSender || isOpened ? (
                       <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
                     ) : null}
-                    <div className="postcardBackHint">
-                      {isOpened ? "Postcard read" : "Back side: message + address"}
-                    </div>
+                    {!blurPostcard && (arrived || isOpened) ? (
+                      <div className="postcardBackHint">
+                        {isOpened ? "Postcard read" : "Back side: message + address"}
+                      </div>
+                    ) : null}
                     {blurPostcard ? (
-                      <div className="postcardStatusPill top">{arrived ? "Tap to read." : "In transit."}</div>
+                      <div className="postcardStatusPill center">{arrived ? "Tap to read." : "In transit."}</div>
                     ) : null}
                   </div>
                 </div>
@@ -426,30 +429,27 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                   </div>
 
                   {arrived && !isSender ? (
-                    <a
-                      href={`/l/${token}/open?auto=1`}
-                      className={`postcardPreview ${heavyBlurPostcard ? "blurHeavy" : blurPostcard ? "blur" : ""}`}
-                    >
+                    <a href={`/l/${token}/open?auto=1`} className={`postcardPreview fullWidth ${postcardBlurClass}`}>
                       <div className="postcardPreviewArt" style={postcardTemplate?.preview} />
                       {isSender || isOpened ? (
                         <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
                       ) : null}
-                      <div className="postcardBackHint">Tap to read the back.</div>
+                      {!blurPostcard && arrived ? <div className="postcardBackHint">Tap to read the back.</div> : null}
                       {blurPostcard ? (
-                        <div className="postcardStatusPill top">{arrived ? "Tap to read." : "In transit."}</div>
+                        <div className="postcardStatusPill center">{arrived ? "Tap to read." : "In transit."}</div>
                       ) : null}
                     </a>
                   ) : (
-                    <div className={`postcardPreview ${heavyBlurPostcard ? "blurHeavy" : blurPostcard ? "blur" : ""}`}>
+                    <div className={`postcardPreview fullWidth ${postcardBlurClass}`}>
                       <div className="postcardPreviewArt" style={postcardTemplate?.preview} />
                       {isSender || isOpened ? (
                         <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
                       ) : null}
-                      <div className="postcardBackHint">
-                        {arrived ? "Delivered to recipient." : "In transit."}
-                      </div>
+                      {!blurPostcard && arrived ? (
+                        <div className="postcardBackHint">Delivered to recipient.</div>
+                      ) : null}
                       {blurPostcard ? (
-                        <div className="postcardStatusPill top">{arrived ? "Tap to read." : "In transit."}</div>
+                        <div className="postcardStatusPill center">{arrived ? "Tap to read." : "In transit."}</div>
                       ) : null}
                     </div>
                   )}

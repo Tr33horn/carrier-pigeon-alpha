@@ -18,14 +18,18 @@ export function DeliveryReceiptEmail({
   statusUrl,
   deliveredAtUtc,
   bird,
+  deliveryType,
 }: {
   toName?: string | null;
   statusUrl: string; // absolute preferred
   deliveredAtUtc: string;
   bird?: BirdType | null;
+  deliveryType?: "letter" | "postcard" | null;
 }) {
+  const itemLabel = deliveryType === "postcard" ? "postcard" : "letter";
+  const previewText = deliveryType === "postcard" ? "Postcard delivery confirmed." : "Delivery receipt confirmed.";
   return (
-    <EmailLayout preview="Delivery receipt confirmed.">
+    <EmailLayout preview={previewText}>
       <BirdStateImage bird={bird ?? undefined} state="landed" alt="Courier landed" />
 
       <Text style={{ fontSize: 18, fontWeight: 800, margin: "0 0 10px", textAlign: "center" }}>
@@ -33,7 +37,7 @@ export function DeliveryReceiptEmail({
       </Text>
 
       <Text style={{ margin: "0 0 14px", textAlign: "center" }}>
-        Your letter to <strong>{toName || "the recipient"}</strong> has been delivered.
+        Your {itemLabel} to <strong>{toName || "the recipient"}</strong> has been delivered.
       </Text>
 
       <Text style={{ margin: "0 0 14px", color: "#444", textAlign: "center" }}>

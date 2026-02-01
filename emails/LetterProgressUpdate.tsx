@@ -47,6 +47,7 @@ export function LetterProgressUpdateEmail({
   etaTextUtc,
   funLine,
   bird,
+  deliveryType,
 
   // ✅ prefer the new prop name used by the cron route…
   overText,
@@ -61,6 +62,7 @@ export function LetterProgressUpdateEmail({
   etaTextUtc: string;
   funLine: string;
   bird?: BirdType | null;
+  deliveryType?: "letter" | "postcard" | null;
 
   /** ✅ NEW preferred: “Over Seattle Metro”, etc */
   overText?: string | null;
@@ -71,6 +73,7 @@ export function LetterProgressUpdateEmail({
   const href = statusUrl.startsWith("http") ? statusUrl : joinUrl(APP_URL, statusUrl);
 
   const overLine = cleanOverText(overText || locationText);
+  const itemLabel = deliveryType === "postcard" ? "postcard" : "letter";
 
   // ✅ Location-first preview (this is what most inboxes show)
   const preview = overLine
@@ -92,7 +95,7 @@ export function LetterProgressUpdateEmail({
       </Text>
 
       <Text style={{ margin: "0 0 10px", textAlign: "center" }}>
-        Your sealed letter from <strong>{fromName || "someone"}</strong> is still in flight.
+        Your {itemLabel} from <strong>{fromName || "someone"}</strong> is still in flight.
       </Text>
 
       {overLine ? (
@@ -116,7 +119,7 @@ export function LetterProgressUpdateEmail({
       </Section>
 
       <Text style={{ fontSize: 12, color: "#666", marginTop: 18, textAlign: "center" }}>
-        Still sealed. Still mysterious.
+        {deliveryType === "postcard" ? "Still in flight. Still mysterious." : "Still sealed. Still mysterious."}
       </Text>
     </EmailLayout>
   );

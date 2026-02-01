@@ -296,9 +296,9 @@ export async function GET(req: Request) {
   -------------------------- */
 
   const baseSelect =
-    "id, public_token, eta_at, sent_at, distance_km, speed_kmh, from_name, from_email, to_name, to_email, delivered_notified_at, sender_receipt_sent_at, origin_name, dest_name, subject, bird, origin_lon, dest_lon, archived_at, canceled_at";
+    "id, public_token, eta_at, sent_at, distance_km, speed_kmh, from_name, from_email, to_name, to_email, delivered_notified_at, sender_receipt_sent_at, origin_name, dest_name, subject, bird, origin_lon, dest_lon, archived_at, canceled_at, delivery_type";
   const inflightBaseSelect =
-    "id, public_token, subject, from_name, to_email, sent_at, eta_at, distance_km, speed_kmh, progress_25_sent_at, progress_50_sent_at, progress_75_sent_at, bird, origin_lon, dest_lon, origin_lat, dest_lat, origin_name, dest_name, archived_at, canceled_at";
+    "id, public_token, subject, from_name, to_email, sent_at, eta_at, distance_km, speed_kmh, progress_25_sent_at, progress_50_sent_at, progress_75_sent_at, bird, origin_lon, dest_lon, origin_lat, dest_lat, origin_name, dest_name, archived_at, canceled_at, delivery_type";
   const sleepSelect = `${baseSelect}, sleep_offset_min, sleep_start_hour, sleep_end_hour`;
   const missingSleepColumns = (err: any) =>
     !!err && (err.code === "42703" || /sleep_(offset|min|start|end)/i.test(err.message || ""));
@@ -361,11 +361,16 @@ export async function GET(req: Request) {
     const statusPath = `/l/${letter.public_token}`;
     const absoluteStatusUrl = joinUrl(baseUrl, statusPath);
 
+    const deliveryType = (letter as any).delivery_type === "postcard" ? "postcard" : "letter";
     // recipient email
     if (letter.to_email) {
       await sendEmail({
         to: letter.to_email,
-        subject: letter.subject?.trim() ? `Delivered: ${letter.subject.trim()}` : "Your letter has arrived",
+        subject: letter.subject?.trim()
+          ? `Delivered: ${letter.subject.trim()}`
+          : deliveryType === "postcard"
+          ? "Your postcard has arrived"
+          : "Your letter has arrived",
         react: (
           <LetterDeliveredEmail
             toName={letter.to_name}
@@ -374,6 +379,7 @@ export async function GET(req: Request) {
             originName={letter.origin_name || "Origin"}
             destName={letter.dest_name || "Destination"}
             bird={bird}
+            deliveryType={deliveryType}
           />
         ),
         tags: [
@@ -394,13 +400,14 @@ export async function GET(req: Request) {
 
       await sendEmail({
         to: letter.from_email,
-        subject: "Delivery receipt: confirmed",
+        subject: deliveryType === "postcard" ? "Postcard receipt: confirmed" : "Delivery receipt: confirmed",
         react: (
           <DeliveryReceiptEmail
             toName={letter.to_name}
             deliveredAtUtc={deliveredAtUtc}
             statusUrl={absoluteStatusUrl}
             bird={bird}
+            deliveryType={deliveryType}
           />
         ),
         tags: [
@@ -539,13 +546,20 @@ export async function GET(req: Request) {
       milestone: 25 | 50 | 75,
       column: "progress_25_sent_at" | "progress_50_sent_at" | "progress_75_sent_at"
     ) => {
-      const subjectLine = overText
-        ? `${overText} · Flight update`
-        : milestone === 25
+    const deliveryType = (letter as any).delivery_type === "postcard" ? "postcard" : "letter";
+    const subjectLine = overText
+      ? `${overText} · ${deliveryType === "postcard" ? "Postcard update" : "Flight update"}`
+      : milestone === 25
+      ? deliveryType === "postcard"
         ? "Update: 25% of the way there"
-        : milestone === 50
+        : "Update: 25% of the way there"
+      : milestone === 50
+      ? deliveryType === "postcard"
         ? "Update: Halfway there"
-        : "Update: 75% complete (incoming)";
+        : "Update: Halfway there"
+      : deliveryType === "postcard"
+      ? "Update: 75% complete (incoming)"
+      : "Update: 75% complete (incoming)";
 
       const funLine =
         milestone === 25
@@ -567,6 +581,7 @@ export async function GET(req: Request) {
             funLine={funLine}
             bird={bird}
             overText={overText} // ✅ preferred prop (email supports back-compat too)
+            deliveryType={deliveryType}
           />
         ),
         tags: [

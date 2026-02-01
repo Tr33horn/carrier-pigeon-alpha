@@ -36,6 +36,7 @@ export function LetterOnTheWayEmail({
   etaTextUtc,
   bird,
   debugToken,
+  deliveryType,
 }: {
   toName?: string | null;
   fromName?: string | null;
@@ -45,11 +46,14 @@ export function LetterOnTheWayEmail({
   etaTextUtc: string;
   bird?: BirdType | null;
   debugToken?: string | null; // public_token
+  deliveryType?: "letter" | "postcard" | null;
 }) {
   const href = joinUrl(safeBaseUrl(), statusUrl);
+  const itemLabel = deliveryType === "postcard" ? "postcard" : "letter";
+  const previewText = deliveryType === "postcard" ? "A postcard is on the way." : "A letter is on the way.";
 
   return (
-    <EmailLayout preview="A letter is on the way.">
+    <EmailLayout preview={previewText}>
       {debugToken ? (
         <>
           {/* X-FLOK-TOKEN: {debugToken} */}
@@ -62,13 +66,22 @@ export function LetterOnTheWayEmail({
       <BirdStateImage bird={bird ?? undefined} state="fly" alt="Courier in flight" />
 
       <Text style={{ fontSize: 18, fontWeight: 800, margin: "0 0 10px", textAlign: "center" }}>
-        A letter is on the way.
+        A {itemLabel} is on the way.
       </Text>
 
       <Text style={{ margin: "0 0 14px", textAlign: "center" }}>
-        Hey {toName || "there"} — <strong>{fromName || "someone"}</strong> sent you a letter.
-        <br />
-        It stays sealed until delivery.
+        Hey {toName || "there"} — <strong>{fromName || "someone"}</strong> sent you a {itemLabel}.
+        {deliveryType === "postcard" ? (
+          <>
+            <br />
+            It’ll arrive soon.
+          </>
+        ) : (
+          <>
+            <br />
+            It stays sealed until delivery.
+          </>
+        )}
       </Text>
 
       <Text style={{ margin: "0 0 14px", color: "#444", textAlign: "center" }}>

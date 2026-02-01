@@ -1528,11 +1528,17 @@
   text-decoration: none;
   color: inherit;
 }
+.postcardPreview.fullWidth {
+  max-width: 100%;
+}
 .postcardPreview.blur {
   filter: blur(3px) saturate(0.9);
 }
 .postcardPreview.blurHeavy .postcardPreviewArt {
   filter: blur(14px) saturate(0.85);
+}
+.postcardPreview.blurMedium .postcardPreviewArt {
+  filter: blur(10px) saturate(0.88);
 }
 .postcardPreviewArt {
   position: absolute;
@@ -1561,6 +1567,13 @@
 .postcardStatusPill.top {
   top: 12px;
   bottom: auto;
+}
+.postcardStatusPill.center {
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
 }
 .postcardPreviewLabel {
   font-weight: 900;

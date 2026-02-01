@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import type { CSSProperties } from "react";
 
 import OtpForm from "../_components/OtpForm";
@@ -19,6 +20,15 @@ const REGION_LABELS = new Map<string, string>(US_REGIONS.map((r) => [r.id, r.lab
 function regionLabelFor(id?: string | null) {
   if (!id) return "somewhere over the map";
   return REGION_LABELS.get(id) || id;
+}
+
+async function getRequestOrigin() {
+  const hdrs = await headers();
+  const proto = hdrs.get("x-forwarded-proto") || "https";
+  const host = hdrs.get("x-forwarded-host") || hdrs.get("host");
+  if (host) return `${proto}://${host}`;
+  const env = (process.env.NEXT_PUBLIC_APP_URL || "").trim();
+  return env.endsWith("/") ? env.slice(0, -1) : env;
 }
 
 type StatusRow = {
@@ -230,6 +240,18 @@ export default async function LetterOpenPage({
       .eq("code", "postcard_template")
       .maybeSingle();
     postcardTemplateId = (addonRow as any)?.meta?.postcard_template_id ?? null;
+  }
+  if (!postcardTemplateId) {
+    try {
+      const origin = await getRequestOrigin();
+      const res = await fetch(`${origin}/api/letters/${token}`, { cache: "no-store" });
+      if (res.ok) {
+        const apiData = await res.json();
+        postcardTemplateId = apiData?.letter?.postcard_template_id ?? null;
+      }
+    } catch {
+      // ignore; keep fallback
+    }
   }
   let isPostcard = deliveryType === "postcard";
   const postcardTemplate = resolvePostcardTemplate(postcardTemplateId);

@@ -550,9 +550,10 @@ export async function POST(req: Request) {
     const absoluteStatusUrl = joinUrl(baseUrl, statusPath);
     const etaTextUtc = formatUtc(letter.eta_at);
 
+    const deliveryType = (letter as any).delivery_type === "postcard" ? "postcard" : "letter";
     const result = await sendEmail({
       to: normalizedToEmail,
-      subject: "A letter is on the way",
+      subject: deliveryType === "postcard" ? "A postcard is on the way" : "A letter is on the way",
       react: createElement(LetterOnTheWayEmail as any, {
         toName: letter.to_name,
         fromName: letter.from_name,
@@ -562,6 +563,7 @@ export async function POST(req: Request) {
         statusUrl: absoluteStatusUrl,
         bird: (letter.bird as BirdType) || bird,
         debugToken: publicToken,
+        deliveryType,
         // optional to use later in template:
         sealId: (letter as any).seal_id ?? sealResolved.sealId,
       }),
