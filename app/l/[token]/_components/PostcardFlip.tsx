@@ -19,7 +19,7 @@ export default function PostcardFlip({
   fromName,
   toName,
 }: Props) {
-  const [side, setSide] = useState<"front" | "back">(defaultSide);
+  const [side, setSide] = useState<"front" | "back">(defaultSide === "back" ? "back" : "front");
 
   return (
     <div className="stack" style={{ gap: 12 }}>
