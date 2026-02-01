@@ -92,6 +92,7 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
   const [subject, setSubject] = useState(draft.subject || "");
   const [stationeryId, setStationeryId] = useState<StationeryId>(draft.stationeryId ?? "plain-cotton");
   const [message, setMessage] = useState(draft.message || "");
+  const messageLimit = deliveryType === "postcard" ? 325 : undefined;
   const [showPrompts, setShowPrompts] = useState(false);
 
   // Step 3: route
@@ -173,8 +174,9 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
   }
 
   function updateMessage(next: string) {
-    setMessage(next);
-    scheduleSave({ message: next });
+    const capped = messageLimit ? next.slice(0, messageLimit) : next;
+    setMessage(capped);
+    scheduleSave({ message: capped });
   }
 
   function updateOrigin(next: LatLonCity) {
@@ -605,13 +607,16 @@ function ComposePage({ initialFromEmail, initialFromName }: Props) {
               </label>
 
               <label className="field">
-                <span className="fieldLabel">Message</span>
+                <span className="fieldLabel">
+                  Message{messageLimit ? ` (${message.length}/${messageLimit})` : ""}
+                </span>
                 <textarea
                   className={`textarea stationeryField ${
                     deliveryType === "letter" && stationeryId === "night-paper" ? "night" : ""
                   } ${showErrors && !messageOk ? "invalid" : ""}`}
                   value={message}
                   onChange={(e) => updateMessage(e.target.value)}
+                  maxLength={messageLimit}
                   rows={7}
                   placeholder="Write something worth the flight..."
                   style={stationeryPreviewStyle}

@@ -45,9 +45,21 @@ export const POSTCARD_TEMPLATES: Array<{
 
 export function resolvePostcardTemplate(id?: string | null) {
   if (!id) return POSTCARD_TEMPLATES[0] ?? null;
+  const raw = String(id).trim();
+  const cleaned = raw
+    .toLowerCase()
+    .replace(/^.*\//, "")
+    .replace(/\.(svg|png|jpg|jpeg)$/i, "")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
   const normalized =
-    id === "jsoutpostv" || id === "jsoutpost"
+    cleaned === "jsoutpostv" ||
+    cleaned === "jsoutpost" ||
+    cleaned === "jonnys-outpost" ||
+    cleaned === "jonny-outpost" ||
+    cleaned === "jonny-s-outpost" ||
+    cleaned === "outpostjs"
       ? "outpostjs"
-      : id;
+      : cleaned;
   return POSTCARD_TEMPLATES.find((p) => p.id === normalized) ?? POSTCARD_TEMPLATES[0] ?? null;
 }

@@ -78,6 +78,11 @@ type StatusApi = {
       rarity?: string | null;
       earned_at?: string | null;
     }>;
+    addons?: Array<{
+      id: string;
+      code: string;
+      meta?: Record<string, any> | null;
+    }>;
   };
 };
 
@@ -125,11 +130,14 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
   const sealImg = getSealImgSrc(letter.seal_id) || "/waxseal.png";
   const envTint = getEnvelopeTintColor(normalizeEnvelopeTint(letter.envelope_tint));
   const isOpened = !!letter.opened_at;
+  const addonPostcardTemplateId =
+    data.items?.addons?.find((addon) => addon.code === "postcard_template")?.meta?.postcard_template_id ?? null;
+  const postcardTemplateId = letter.postcard_template_id ?? addonPostcardTemplateId ?? null;
   const isPostcard =
     letter.delivery_type === "postcard" ||
-    !!letter.postcard_template_id ||
+    !!postcardTemplateId ||
     (letter.seal_id == null && !!letter.subject);
-  const postcardTemplate = resolvePostcardTemplate(letter.postcard_template_id);
+  const postcardTemplate = resolvePostcardTemplate(postcardTemplateId);
   let isSender = false;
 
   if (user) {
@@ -140,7 +148,9 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
       .maybeSingle();
     if (!roleErr && roleLetter?.sender_user_id === user.id) isSender = true;
   }
+  const inFlightPostcard = isPostcard && !arrived;
   const blurPostcard = isPostcard && !isOpened && !isSender;
+  const heavyBlurPostcard = isPostcard && !isOpened && !isSender;
 
   // Logged out: status + OTP
   if (!user) {
@@ -217,14 +227,22 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                       </div>
                       {letter.subject ? <div className="muted">{letter.subject}</div> : null}
                     </div>
+                  {isSender || isOpened ? (
                     <div className="metaPill faint">{postcardTemplate?.name ?? "Postcard"}</div>
-                  </div>
+                  ) : null}
+                </div>
 
-                  <div className={`postcardPreview ${blurPostcard ? "blur" : ""}`} style={postcardTemplate?.preview}>
-                    <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
+                  <div className={`postcardPreview ${heavyBlurPostcard ? "blurHeavy" : blurPostcard ? "blur" : ""}`}>
+                    <div className="postcardPreviewArt" style={postcardTemplate?.preview} />
+                    {isSender || isOpened ? (
+                      <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
+                    ) : null}
                     <div className="postcardBackHint">
                       {isOpened ? "Postcard read" : "Back side: message + address"}
                     </div>
+                    {blurPostcard ? (
+                      <div className="postcardStatusPill top">{arrived ? "Tap to read." : "In transit."}</div>
+                    ) : null}
                   </div>
                 </div>
               ) : (
@@ -403,24 +421,37 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                       </div>
                       {letter.subject ? <div className="muted">{letter.subject}</div> : null}
                     </div>
-                    <div className="metaPill faint">{postcardTemplate?.name ?? "Postcard"}</div>
+                    {isSender || isOpened ? (
+                      <div className="metaPill faint">{postcardTemplate?.name ?? "Postcard"}</div>
+                    ) : null}
                   </div>
 
                   {arrived && !isSender ? (
                     <a
                       href={`/l/${token}/open?auto=1`}
-                      className={`postcardPreview ${blurPostcard ? "blur" : ""}`}
-                      style={postcardTemplate?.preview}
+                      className={`postcardPreview ${heavyBlurPostcard ? "blurHeavy" : blurPostcard ? "blur" : ""}`}
                     >
-                      <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
+                      <div className="postcardPreviewArt" style={postcardTemplate?.preview} />
+                      {isSender || isOpened ? (
+                        <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
+                      ) : null}
                       <div className="postcardBackHint">Tap to read the back.</div>
+                      {blurPostcard ? (
+                        <div className="postcardStatusPill top">{arrived ? "Tap to read." : "In transit."}</div>
+                      ) : null}
                     </a>
                   ) : (
-                    <div className={`postcardPreview ${blurPostcard ? "blur" : ""}`} style={postcardTemplate?.preview}>
-                      <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
+                    <div className={`postcardPreview ${heavyBlurPostcard ? "blurHeavy" : blurPostcard ? "blur" : ""}`}>
+                      <div className="postcardPreviewArt" style={postcardTemplate?.preview} />
+                      {isSender || isOpened ? (
+                        <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
+                      ) : null}
                       <div className="postcardBackHint">
                         {arrived ? "Delivered to recipient." : "In transit."}
                       </div>
+                      {blurPostcard ? (
+                        <div className="postcardStatusPill top">{arrived ? "Tap to read." : "In transit."}</div>
+                      ) : null}
                     </div>
                   )}
 
@@ -514,7 +545,8 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                       POSTCARD FROM {letter.from_name ? letter.from_name.toUpperCase() : "SOMEONE"}
                     </div>
                     <div className="h2">Back side</div>
-                    <div className={`postcardPreview ${blurPostcard ? "blur" : ""}`} style={postcardTemplate?.preview}>
+                    <div className={`postcardPreview ${blurPostcard ? "blur" : ""}`}>
+                      <div className="postcardPreviewArt" style={postcardTemplate?.preview} />
                       <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
                       <div className="postcardBackHint">Front</div>
                     </div>

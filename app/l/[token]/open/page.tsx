@@ -204,12 +204,14 @@ export default async function LetterOpenPage({
   const status = (Array.isArray(statusData) ? statusData[0] : statusData) as StatusRow | null | undefined;
   let deliveryType: "letter" | "postcard" = "letter";
   let postcardTemplateId: string | null = null;
+  let letterId: string | null = null;
   const { data: metaRow, error: metaErr } = await supabase
     .from("letters")
-    .select("delivery_type, postcard_template_id")
+    .select("id, delivery_type, postcard_template_id")
     .eq("public_token", token)
     .maybeSingle();
   if (!metaErr && metaRow) {
+    letterId = metaRow.id ?? null;
     deliveryType = metaRow.delivery_type === "postcard" ? "postcard" : "letter";
     postcardTemplateId = metaRow.postcard_template_id ?? null;
     if (deliveryType !== "postcard" && postcardTemplateId) {
@@ -218,6 +220,16 @@ export default async function LetterOpenPage({
   } else if (status?.delivery_type === "postcard") {
     deliveryType = "postcard";
     postcardTemplateId = status?.postcard_template_id ?? null;
+  }
+  if (!postcardTemplateId && letterId) {
+    const { data: addonRow } = await supabase
+      .from("letter_items")
+      .select("meta")
+      .eq("letter_id", letterId)
+      .eq("kind", "addon")
+      .eq("code", "postcard_template")
+      .maybeSingle();
+    postcardTemplateId = (addonRow as any)?.meta?.postcard_template_id ?? null;
   }
   let isPostcard = deliveryType === "postcard";
   const postcardTemplate = resolvePostcardTemplate(postcardTemplateId);
@@ -273,9 +285,10 @@ export default async function LetterOpenPage({
                       {status?.subject ? <div className="muted">{status.subject}</div> : null}
                     </div>
                   </div>
-                  <div className="postcardPreview" style={postcardTemplate?.preview}>
-                    <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
+                  <div className="postcardPreview blurHeavy">
+                    <div className="postcardPreviewArt" style={postcardTemplate?.preview} />
                     <div className="postcardBackHint">Back side: message + address</div>
+                    <div className="postcardStatusPill top">In transit.</div>
                   </div>
                 </div>
               ) : (
@@ -392,16 +405,16 @@ export default async function LetterOpenPage({
                 <UnsealButton
                   token={token}
                   variant="seal"
-                  className={`postcardPreview ${isOpened ? "" : "blur"}`}
+                  className={`postcardPreview ${isOpened ? "" : "blurHeavy"}`}
                   itemLabel="postcard"
                   buttonProps={{
                     "aria-label": "Read postcard",
                     title: "Read postcard",
-                    style: postcardTemplate?.preview,
                   }}
                 >
-                  <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
+                  <div className="postcardPreviewArt" style={postcardTemplate?.preview} />
                   <div className="postcardBackHint">Tap to read the back.</div>
+                  <div className="postcardStatusPill top">Tap to read.</div>
                 </UnsealButton>
               </div>
             ) : (
