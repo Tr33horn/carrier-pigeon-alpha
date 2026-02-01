@@ -148,7 +148,6 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
       .maybeSingle();
     if (!roleErr && roleLetter?.sender_user_id === user.id) isSender = true;
   }
-  const inFlightPostcard = isPostcard && !arrived;
   const blurPostcard = isPostcard && !isOpened && !isSender;
   const heavyBlurPostcard = isPostcard && !isOpened && !isSender;
 
