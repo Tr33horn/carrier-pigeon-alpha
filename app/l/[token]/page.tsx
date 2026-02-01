@@ -357,10 +357,26 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
         <CleanAuthHash />
         <StatusAutoRefresh enabled={!data.delivered && !data.canceled} />
         <div className="wrap">
+        {isOpened && isPostcard && letter.body ? (
+          <div className={`${styles.statusFull} ${styles.gridOpen}`} style={{ marginBottom: 16 }}>
+            <div className="card">
+              <PostcardFlip
+                postcardTemplate={postcardTemplate}
+                message={letter.body}
+                fromName={letter.from_name}
+                toName={letter.to_name}
+              />
+            </div>
+          </div>
+        ) : null}
+
         <div className={styles.statusHero}>
-          <div className="card">
-            <div className="kicker">Flight status</div>
-            <div className="h1">
+          <details className="card">
+            <summary className={`cardHead ${styles.collapseSummary}`}>
+              <div className="kicker">Flight status</div>
+              <div className="muted">Collapsed</div>
+            </summary>
+            <div className="h1" style={{ marginTop: 6 }}>
               {letter.origin_name ?? "Unknown origin"} → {letter.dest_name ?? "Unknown destination"}
             </div>
             <div className="muted" style={{ marginTop: 6 }}>
@@ -406,7 +422,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                 </div>
               ) : null}
             </div>
-          </div>
+          </details>
         </div>
 
         <div
@@ -544,33 +560,17 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
             </div>
           ) : null}
 
-          {isOpened && letter.body ? (
+          {isOpened && letter.body && !isPostcard ? (
             <div className={`${styles.statusFull} ${styles.gridOpen}`}>
               <div className="card">
-                {isPostcard ? (
-                  <>
-                    <div className="kicker">
-                      POSTCARD FROM {letter.from_name ? letter.from_name.toUpperCase() : "SOMEONE"}
-                    </div>
-                    <PostcardFlip
-                      postcardTemplate={postcardTemplate}
-                      message={letter.body}
-                      fromName={letter.from_name}
-                      toName={letter.to_name}
-                    />
-                  </>
-                ) : (
-                  <>
-                    <div className="kicker">
-                      OPENED LETTER FROM{" "}
-                      {letter.from_name ? letter.from_name.toUpperCase() : "SOMEONE"}
-                    </div>
-                    <div className="h2">Message</div>
-                    <div className="muted" style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>
-                      {letter.body}
-                    </div>
-                  </>
-                )}
+                <div className="kicker">
+                  OPENED LETTER FROM{" "}
+                  {letter.from_name ? letter.from_name.toUpperCase() : "SOMEONE"}
+                </div>
+                <div className="h2">Message</div>
+                <div className="muted" style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>
+                  {letter.body}
+                </div>
               </div>
             </div>
           ) : null}
@@ -653,34 +653,37 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
           </div>
 
           <div className={`${styles.statusFull} ${styles.gridBadges}`}>
-            <div className="card">
-              <div className="kicker">Badges</div>
-              <div className="h2">Earned on this flight</div>
-                {data.items?.badges?.length ? (
-                  <div className="stack" style={{ gap: 10, marginTop: 10 }}>
-                    {data.items.badges.map((b) => (
-                      <div key={b.id} className="soft" style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                        {b.iconSrc ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={b.iconSrc} alt={b.title} style={{ width: 28, height: 28 }} />
+            <details className="card">
+              <summary className={`cardHead ${styles.collapseSummary}`}>
+                <div className="kicker">Badges</div>
+                <div className="muted">Collapsed</div>
+              </summary>
+              <div className="h2" style={{ marginTop: 6 }}>Earned on this flight</div>
+              {data.items?.badges?.length ? (
+                <div className="stack" style={{ gap: 10, marginTop: 10 }}>
+                  {data.items.badges.map((b) => (
+                    <div key={b.id} className="soft" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                      {b.iconSrc ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={b.iconSrc} alt={b.title} style={{ width: 28, height: 28 }} />
+                      ) : null}
+                      <div>
+                        <div style={{ fontWeight: 800 }}>{b.title}</div>
+                        {b.subtitle ? (
+                          <div className="muted">
+                            {isPostcard && b.code === "delivered" ? "Postcard delivered." : b.subtitle}
+                          </div>
                         ) : null}
-                        <div>
-                          <div style={{ fontWeight: 800 }}>{b.title}</div>
-                          {b.subtitle ? (
-                            <div className="muted">
-                              {isPostcard && b.code === "delivered" ? "Postcard delivered." : b.subtitle}
-                            </div>
-                          ) : null}
-                        </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <div className="muted" style={{ marginTop: 8 }}>
                   No badges yet.
                 </div>
               )}
-            </div>
+            </details>
           </div>
         </div>
         </div>

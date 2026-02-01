@@ -411,15 +411,6 @@ export default async function LetterOpenPage({
 
         {isOpened ? (
           <>
-            <div style={{ position: "relative", overflow: "hidden" }}>
-              <ConfettiBurst active={celebrate === "1"} />
-              <ReceiptCard
-                bird_type={openedRow!.bird_type}
-                dest_region_id={openedRow!.dest_region_id}
-                eta_at={openedRow!.eta_at}
-                opened_at={openedRow!.opened_at}
-              />
-            </div>
             <div style={{ marginTop: 16 }}>
               <LetterView
                 letter={openedRow as LetterRow}
@@ -428,6 +419,15 @@ export default async function LetterOpenPage({
                 postcardTemplate={postcardTemplate}
                 fromName={status?.from_name}
                 toName={(status as any)?.to_name}
+              />
+            </div>
+            <div style={{ position: "relative", overflow: "hidden", marginTop: 16 }}>
+              <ConfettiBurst active={celebrate === "1"} />
+              <ReceiptCard
+                bird_type={openedRow!.bird_type}
+                dest_region_id={openedRow!.dest_region_id}
+                eta_at={openedRow!.eta_at}
+                opened_at={openedRow!.opened_at}
               />
             </div>
           </>
