@@ -71,17 +71,46 @@ export async function sendEmail({ to, subject, react, replyTo, tags }: SendArgs)
 
   if (tags?.length) payload.tags = tags;
 
-  let res: ResendSendResult;
-  try {
-    res = (await resend.emails.send(payload)) as unknown as ResendSendResult;
-  } catch (err) {
-    console.error("EMAIL_SEND_ERROR:", err, {
-      to: payload.to,
-      subject,
-      from: payload.from,
-      tags: payload.tags,
-    });
-    throw err;
+  const maxAttempts = 3;
+  const timeoutMs = 10_000;
+  let res: ResendSendResult | undefined;
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      res = (await Promise.race([
+        resend.emails.send(payload),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Resend send timeout after ${timeoutMs}ms`)), timeoutMs)
+        ),
+      ])) as unknown as ResendSendResult;
+      lastErr = res?.error ?? null;
+      if (!lastErr) break;
+      console.error("EMAIL_SEND_ERROR:", lastErr, {
+        attempt,
+        to: payload.to,
+        subject,
+        from: payload.from,
+        tags: payload.tags,
+      });
+    } catch (err) {
+      lastErr = err;
+      console.error("EMAIL_SEND_ERROR:", err, {
+        attempt,
+        to: payload.to,
+        subject,
+        from: payload.from,
+        tags: payload.tags,
+      });
+    }
+
+    if (attempt < maxAttempts) {
+      const backoffMs = 400 * attempt + Math.floor(Math.random() * 200);
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+    }
+  }
+
+  if (!res) {
+    throw lastErr ?? new Error("Resend send failed");
   }
 
   if (res?.error) {
