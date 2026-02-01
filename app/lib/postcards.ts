@@ -1,4 +1,4 @@
-export type PostcardTemplateId = "coastal-sun" | "night-ferry" | "field-notes" | "outpostjs";
+export type PostcardTemplateId = "coastal-sun" | "night-ferry" | "thefalls" | "outpostjs";
 
 export const POSTCARD_TEMPLATES: Array<{
   id: PostcardTemplateId;
@@ -35,15 +35,15 @@ export const POSTCARD_TEMPLATES: Array<{
     },
   },
   {
-    id: "field-notes",
-    name: "Field Notes",
+    id: "thefalls",
+    name: "Snoqualmie Falls",
     preview: {
-      backgroundImage: "url('/postcards/field-notes.svg')",
+      backgroundImage: "url('/postcards/thefalls.svg')",
       backgroundSize: "cover",
       backgroundPosition: "center",
     },
     back: {
-      backgroundImage: "url('/postcards/field-notes_back.svg')",
+      backgroundImage: "url('/postcards/thefalls_back.svg')",
       backgroundSize: "cover",
       backgroundPosition: "center",
     },

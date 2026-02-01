@@ -364,60 +364,91 @@ export async function GET(req: Request) {
     const deliveryType = (letter as any).delivery_type === "postcard" ? "postcard" : "letter";
     // recipient email
     if (letter.to_email) {
-      await sendEmail({
-        to: letter.to_email,
-        subject: letter.subject?.trim()
-          ? `Delivered: ${letter.subject.trim()}`
-          : deliveryType === "postcard"
-          ? "Your postcard has arrived"
-          : "Your letter has arrived",
-        react: (
-          <LetterDeliveredEmail
-            toName={letter.to_name}
-            fromName={letter.from_name}
-            statusUrl={absoluteStatusUrl}
-            originName={letter.origin_name || "Origin"}
-            destName={letter.dest_name || "Destination"}
-            bird={bird}
-            deliveryType={deliveryType}
-          />
-        ),
-        tags: [
-          { name: "kind", value: "delivered_recipient" },
-          { name: "token", value: String(letter.public_token || "") },
-        ],
-      });
-
-      delivered_recipient_emails++;
+      try {
+        await sendEmail({
+          to: letter.to_email,
+          subject: letter.subject?.trim()
+            ? `Delivered: ${letter.subject.trim()}`
+            : deliveryType === "postcard"
+            ? "Your postcard has arrived"
+            : "Your letter has arrived",
+          react: (
+            <LetterDeliveredEmail
+              toName={letter.to_name}
+              fromName={letter.from_name}
+              statusUrl={absoluteStatusUrl}
+              originName={letter.origin_name || "Origin"}
+              destName={letter.dest_name || "Destination"}
+              bird={bird}
+              deliveryType={deliveryType}
+            />
+          ),
+          tags: [
+            { name: "kind", value: "delivered_recipient" },
+            { name: "token", value: String(letter.public_token || "") },
+          ],
+        });
+        delivered_recipient_emails++;
+      } catch (err) {
+        console.error("deliveries cron: recipient email failed", {
+          token: letter.public_token,
+          to: letter.to_email,
+          err,
+        });
+      }
     }
 
     // mark delivered notified (timestamp = now)
-    await supabaseServer.from("letters").update({ delivered_notified_at: nowISO }).eq("id", letter.id);
+    try {
+      await supabaseServer.from("letters").update({ delivered_notified_at: nowISO }).eq("id", letter.id);
+    } catch (err) {
+      console.error("deliveries cron: update delivered_notified_at failed", {
+        token: letter.public_token,
+        id: letter.id,
+        err,
+      });
+    }
 
     // sender receipt
     if (letter.from_email && !letter.sender_receipt_sent_at) {
       const deliveredAtUtc = formatUtc(etaAdjustedISO || nowISO);
 
-      await sendEmail({
-        to: letter.from_email,
-        subject: deliveryType === "postcard" ? "Postcard receipt: confirmed" : "Delivery receipt: confirmed",
-        react: (
-          <DeliveryReceiptEmail
-            toName={letter.to_name}
-            deliveredAtUtc={deliveredAtUtc}
-            statusUrl={absoluteStatusUrl}
-            bird={bird}
-            deliveryType={deliveryType}
-          />
-        ),
-        tags: [
-          { name: "kind", value: "delivery_receipt_sender" },
-          { name: "token", value: String(letter.public_token || "") },
-        ],
-      });
+      try {
+        await sendEmail({
+          to: letter.from_email,
+          subject: deliveryType === "postcard" ? "Postcard receipt: confirmed" : "Delivery receipt: confirmed",
+          react: (
+            <DeliveryReceiptEmail
+              toName={letter.to_name}
+              deliveredAtUtc={deliveredAtUtc}
+              statusUrl={absoluteStatusUrl}
+              bird={bird}
+              deliveryType={deliveryType}
+            />
+          ),
+          tags: [
+            { name: "kind", value: "delivery_receipt_sender" },
+            { name: "token", value: String(letter.public_token || "") },
+          ],
+        });
+      } catch (err) {
+        console.error("deliveries cron: sender receipt email failed", {
+          token: letter.public_token,
+          to: letter.from_email,
+          err,
+        });
+      }
 
-      await supabaseServer.from("letters").update({ sender_receipt_sent_at: nowISO }).eq("id", letter.id);
-      delivered_sender_receipts++;
+      try {
+        await supabaseServer.from("letters").update({ sender_receipt_sent_at: nowISO }).eq("id", letter.id);
+        delivered_sender_receipts++;
+      } catch (err) {
+        console.error("deliveries cron: update sender_receipt_sent_at failed", {
+          token: letter.public_token,
+          id: letter.id,
+          err,
+        });
+      }
     }
   }
 
@@ -568,29 +599,47 @@ export async function GET(req: Request) {
           ? "Mid-flight snack negotiations successful."
           : "You may now hear faint wing sounds in the distance.";
 
-      await sendEmail({
-        to: letter.to_email!,
-        subject: subjectLine,
-        react: (
-          <LetterProgressUpdateEmail
-            milestone={milestone}
-            pct={pct}
-            fromName={letter.from_name}
-            statusUrl={absoluteStatusUrl}
-            etaTextUtc={etaUtcText}
-            funLine={funLine}
-            bird={bird}
-            overText={overText} // ✅ preferred prop (email supports back-compat too)
-            deliveryType={deliveryType}
-          />
-        ),
-        tags: [
-          { name: "kind", value: `progress_${milestone}` },
-          { name: "token", value: String(letter.public_token || "") },
-        ],
-      });
+      try {
+        await sendEmail({
+          to: letter.to_email!,
+          subject: subjectLine,
+          react: (
+            <LetterProgressUpdateEmail
+              milestone={milestone}
+              pct={pct}
+              fromName={letter.from_name}
+              statusUrl={absoluteStatusUrl}
+              etaTextUtc={etaUtcText}
+              funLine={funLine}
+              bird={bird}
+              overText={overText} // ✅ preferred prop (email supports back-compat too)
+              deliveryType={deliveryType}
+            />
+          ),
+          tags: [
+            { name: "kind", value: `progress_${milestone}` },
+            { name: "token", value: String(letter.public_token || "") },
+          ],
+        });
+      } catch (err) {
+        console.error("deliveries cron: progress email failed", {
+          token: letter.public_token,
+          milestone,
+          to: letter.to_email,
+          err,
+        });
+      }
 
-      await supabaseServer.from("letters").update({ [column]: nowISO }).eq("id", letter.id);
+      try {
+        await supabaseServer.from("letters").update({ [column]: nowISO }).eq("id", letter.id);
+      } catch (err) {
+        console.error("deliveries cron: progress update failed", {
+          token: letter.public_token,
+          milestone,
+          id: letter.id,
+          err,
+        });
+      }
     };
 
     if (pct >= 75 && !letter.progress_75_sent_at) {

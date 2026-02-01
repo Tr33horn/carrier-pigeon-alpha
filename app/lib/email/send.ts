@@ -44,8 +44,20 @@ export async function sendEmail({ to, subject, react, replyTo, tags }: SendArgs)
 
   const from = getMailFrom();
 
-  const html = await render(react, { pretty: false });
-  const text = await render(react, { plainText: true });
+  let html = "";
+  let text = "";
+  try {
+    html = await render(react, { pretty: false });
+    text = await render(react, { plainText: true });
+  } catch (err) {
+    console.error("EMAIL_RENDER_ERROR:", err, {
+      to: asArray(to),
+      subject,
+      from,
+      tags,
+    });
+    throw err;
+  }
 
   const payload: any = {
     from,
@@ -59,7 +71,18 @@ export async function sendEmail({ to, subject, react, replyTo, tags }: SendArgs)
 
   if (tags?.length) payload.tags = tags;
 
-  const res = (await resend.emails.send(payload)) as unknown as ResendSendResult;
+  let res: ResendSendResult;
+  try {
+    res = (await resend.emails.send(payload)) as unknown as ResendSendResult;
+  } catch (err) {
+    console.error("EMAIL_SEND_ERROR:", err, {
+      to: payload.to,
+      subject,
+      from: payload.from,
+      tags: payload.tags,
+    });
+    throw err;
+  }
 
   if (res?.error) {
     console.error("RESEND_SEND_ERROR:", res.error, {
