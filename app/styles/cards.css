@@ -1640,7 +1640,7 @@
   font-weight: 700;
 }
 .postcardBackMetaLabel {
-  font-size: clamp(10px, 1.6vw, 12px);
+  font-size: clamp(9px, 1.6vw, 12px);
   letter-spacing: 0.02em;
   text-transform: uppercase;
   opacity: 0.6;
