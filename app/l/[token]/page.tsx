@@ -232,7 +232,14 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                 </div>
 
                   <div className={`postcardPreview fullWidth ${postcardBlurClass}`}>
-                    <div className="postcardPreviewArt" style={postcardTemplate?.preview} />
+                    <div
+                      className={`postcardPreviewArt ${arrived ? "contain" : ""}`}
+                      style={
+                        arrived
+                          ? { ...postcardTemplate?.preview, backgroundSize: "contain", backgroundRepeat: "no-repeat" }
+                          : postcardTemplate?.preview
+                      }
+                    />
                     {isSender || isOpened ? (
                       <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
                     ) : null}
@@ -428,8 +435,18 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                   </div>
 
                   {arrived && !isSender ? (
-                    <a href={`/l/${token}/open?auto=1`} className={`postcardPreview fullWidth ${postcardBlurClass}`}>
-                      <div className="postcardPreviewArt" style={postcardTemplate?.preview} />
+                    <a
+                      href={`/l/${token}/open?auto=1&celebrate=1`}
+                      className={`postcardPreview fullWidth ${postcardBlurClass}`}
+                    >
+                      <div
+                        className={`postcardPreviewArt ${arrived ? "contain" : ""}`}
+                        style={
+                          arrived
+                            ? { ...postcardTemplate?.preview, backgroundSize: "contain", backgroundRepeat: "no-repeat" }
+                            : postcardTemplate?.preview
+                        }
+                      />
                       {isSender || isOpened ? (
                         <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
                       ) : null}
@@ -440,7 +457,14 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                     </a>
                   ) : (
                     <div className={`postcardPreview fullWidth ${postcardBlurClass}`}>
-                      <div className="postcardPreviewArt" style={postcardTemplate?.preview} />
+                      <div
+                        className={`postcardPreviewArt ${arrived ? "contain" : ""}`}
+                        style={
+                          arrived
+                            ? { ...postcardTemplate?.preview, backgroundSize: "contain", backgroundRepeat: "no-repeat" }
+                            : postcardTemplate?.preview
+                        }
+                      />
                       {isSender || isOpened ? (
                         <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
                       ) : null}

@@ -162,7 +162,15 @@ function LetterView({
       <div className="stack" style={{ gap: 12 }}>
         {isPostcard ? (
           <>
-            <div className="postcardPreview" style={postcardTemplate?.preview}>
+            <div className="postcardPreview fullWidth">
+              <div
+                className="postcardPreviewArt contain"
+                style={
+                  postcardTemplate
+                    ? { ...postcardTemplate.preview, backgroundSize: "contain", backgroundRepeat: "no-repeat" }
+                    : undefined
+                }
+              />
               <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
               <div className="postcardBackHint">Front</div>
             </div>
@@ -353,7 +361,7 @@ export default async function LetterOpenPage({
   if (auto === "1") {
     const supabaseAction = await createSupabaseServerActionClient();
     const { error: openErr } = await supabaseAction.rpc("open_letter_by_public_token", { p_token: token });
-    if (!openErr) {
+    if (!openErr || String(openErr?.message || "").toLowerCase().includes("already")) {
       redirect(`/l/${token}/open?celebrate=1`);
     }
   }

@@ -1538,13 +1538,18 @@
   filter: blur(14px) saturate(0.85);
 }
 .postcardPreview.blurMedium .postcardPreviewArt {
-  filter: blur(10px) saturate(0.88);
+  filter: blur(7px) saturate(0.9);
 }
 .postcardPreviewArt {
   position: absolute;
   inset: 0;
   background-size: cover;
   background-position: center;
+}
+.postcardPreviewArt.contain {
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-color: #f3efe6;
 }
 .postcardPreviewLabel,
 .postcardBackHint {
