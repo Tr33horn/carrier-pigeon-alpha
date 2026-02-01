@@ -32,7 +32,7 @@ export default function PostcardFlip({
             onClick={() => setSide((prev) => (prev === "front" ? "back" : "front"))}
             aria-pressed={isBack}
           >
-            Flip to back
+            Flip
           </button>
           <div
             className="postcardPreviewArt contain"
@@ -57,7 +57,7 @@ export default function PostcardFlip({
             onClick={() => setSide((prev) => (prev === "front" ? "back" : "front"))}
             aria-pressed={isBack}
           >
-            Flip to front
+            Flip
           </button>
           <div
             className="postcardPreviewArt contain"
