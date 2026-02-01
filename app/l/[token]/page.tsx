@@ -552,8 +552,12 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                     <div className="kicker">
                       POSTCARD FROM {letter.from_name ? letter.from_name.toUpperCase() : "SOMEONE"}
                     </div>
-                    <div className="h2">Postcard</div>
-                    <PostcardFlip postcardTemplate={postcardTemplate} message={letter.body} />
+                    <PostcardFlip
+                      postcardTemplate={postcardTemplate}
+                      message={letter.body}
+                      fromName={letter.from_name}
+                      toName={letter.to_name}
+                    />
                   </>
                 ) : (
                   <>

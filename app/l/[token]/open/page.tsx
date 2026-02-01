@@ -35,6 +35,7 @@ async function getRequestOrigin() {
 type StatusRow = {
   bird_type: string | null;
   from_name: string | null;
+  to_name?: string | null;
   subject: string | null;
   seal_id: string | null;
   envelope_tint: string | null;
@@ -145,24 +146,35 @@ function LetterView({
   title,
   isPostcard,
   postcardTemplate,
+  fromName,
+  toName,
 }: {
   letter: LetterRow;
   title: string;
   isPostcard: boolean;
   postcardTemplate: { name: string; preview: CSSProperties; back: CSSProperties } | null;
+  fromName?: string | null;
+  toName?: string | null;
 }) {
   return (
     <div className="card">
-      <div className="cardHead">
-        <div>
-          <div className="kicker">{isPostcard ? "Postcard" : "Opened letter"}</div>
-          <div className="h2">{isPostcard ? "Postcard" : title}</div>
+      {!isPostcard ? (
+        <div className="cardHead">
+          <div>
+            <div className="kicker">Opened letter</div>
+            <div className="h2">{title}</div>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="stack" style={{ gap: 12 }}>
         {isPostcard ? (
-          <PostcardFlip postcardTemplate={postcardTemplate} message={letter.message} />
+          <PostcardFlip
+            postcardTemplate={postcardTemplate}
+            message={letter.message}
+            fromName={fromName}
+            toName={toName}
+          />
         ) : (
           <div className="soft" style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
             {letter.message}
@@ -374,7 +386,7 @@ export default async function LetterOpenPage({
         <div className="wrap">
           <div>
           <div style={{ textAlign: "center" }}>
-            <h1 className="h1">{isOpened ? (isPostcard ? "Postcard read" : "Seal broken") : isPostcard ? "Open postcard" : "Open letter"}</h1>
+            <h1 className="h1">{isOpened ? (isPostcard ? "Postcard" : "Seal broken") : isPostcard ? "Open postcard" : "Open letter"}</h1>
             {isOpened ? (
               <div
                 className="muted"
@@ -414,6 +426,8 @@ export default async function LetterOpenPage({
                 title={status?.subject ? status.subject : "(No subject)"}
                 isPostcard={isPostcard}
                 postcardTemplate={postcardTemplate}
+                fromName={status?.from_name}
+                toName={(status as any)?.to_name}
               />
             </div>
           </>

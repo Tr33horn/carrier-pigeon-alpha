@@ -1590,7 +1590,8 @@
 }
 .postcardBackHint {
   position: absolute;
-  right: 14px;
+  left: 14px;
+  right: auto;
   bottom: 14px;
   font-size: 12px;
   font-weight: 700;
@@ -1609,18 +1610,45 @@
 }
 .postcardBackOverlay {
   position: absolute;
-  top: 14px;
-  left: 14px;
-  bottom: 14px;
-  width: calc(50% - 14px);
+  top: 18px;
+  left: 18px;
+  bottom: 18px;
+  width: calc(50% - 18px);
   z-index: 2;
-  padding: 0;
+  padding: 12px;
   border-radius: 0;
   background: transparent;
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
   overflow: hidden;
+  box-sizing: border-box;
+}
+.postcardBackMeta {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  bottom: 18px;
+  width: calc(50% - 18px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: rgba(0,0,0,0.7);
+  font-weight: 700;
+}
+.postcardBackMetaLabel {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  margin-bottom: 4px;
+}
+.postcardBackMetaValue {
+  font-size: 16px;
+  font-weight: 800;
+  font-family: var(--font-homemade-apple), "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
 }
 .postcardBackTitle {
   font-weight: 900;
@@ -1632,4 +1660,14 @@
   white-space: pre-wrap;
   line-height: 1.6;
   color: #2b2b2b;
+  font-size: 16px;
+}
+.postcardFlipToggle {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 3;
+  background: rgba(255,255,255,0.95);
+  border-color: rgba(0,0,0,0.2);
+  box-shadow: 0 8px 18px rgba(0,0,0,0.14);
 }

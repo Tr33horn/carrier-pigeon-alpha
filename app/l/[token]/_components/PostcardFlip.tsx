@@ -7,6 +7,8 @@ type Props = {
   message: string | null | undefined;
   backTitle?: string;
   defaultSide?: "front" | "back";
+  fromName?: string | null;
+  toName?: string | null;
 };
 
 export default function PostcardFlip({
@@ -14,24 +16,23 @@ export default function PostcardFlip({
   message,
   backTitle,
   defaultSide = "front",
+  fromName,
+  toName,
 }: Props) {
   const [side, setSide] = useState<"front" | "back">(defaultSide);
 
   return (
     <div className="stack" style={{ gap: 12 }}>
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button
-          type="button"
-          className="btnGhost"
-          onClick={() => setSide((prev) => (prev === "front" ? "back" : "front"))}
-          aria-pressed={side === "back"}
-        >
-          {side === "front" ? "Flip to back" : "Flip to front"}
-        </button>
-      </div>
-
       {side === "front" ? (
         <div className="postcardPreview fullWidth" style={{ maxHeight: "none" }}>
+          <button
+            type="button"
+            className="btnGhost postcardFlipToggle"
+            onClick={() => setSide((prev) => (prev === "front" ? "back" : "front"))}
+            aria-pressed={side === "back"}
+          >
+            Flip to back
+          </button>
           <div
             className="postcardPreviewArt contain"
             style={
@@ -45,10 +46,18 @@ export default function PostcardFlip({
                 : undefined
             }
           />
-          <div className="postcardBackHint">Front</div>
+          {null}
         </div>
       ) : (
         <div className="postcardPreview fullWidth" style={{ maxHeight: "none" }}>
+          <button
+            type="button"
+            className="btnGhost postcardFlipToggle"
+            onClick={() => setSide((prev) => (prev === "front" ? "back" : "front"))}
+            aria-pressed={side === "back"}
+          >
+            Flip to front
+          </button>
           <div
             className="postcardPreviewArt contain"
             style={
@@ -65,6 +74,16 @@ export default function PostcardFlip({
           <div className="postcardBackOverlay">
             {backTitle ? <div className="postcardBackTitle">{backTitle}</div> : null}
             <div className="postcardBackBody">{message}</div>
+          </div>
+          <div className="postcardBackMeta">
+            <div>
+              <div className="postcardBackMetaLabel">From:</div>
+              <div className="postcardBackMetaValue">{fromName || "Someone"}</div>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <div className="postcardBackMetaLabel">To:</div>
+              <div className="postcardBackMetaValue">{toName || "Someone"}</div>
+            </div>
           </div>
         </div>
       )}
