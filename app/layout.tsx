@@ -2,7 +2,7 @@
 // base → cards → timeline → map (map wins on specificity)
 
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Homemade_Apple } from "next/font/google";
 import "leaflet/dist/leaflet.css";
 import "./styles/base.css";
 import "./styles/cards.css";
@@ -12,6 +12,7 @@ import "./styles/map.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const homemadeApple = Homemade_Apple({ variable: "--font-homemade-apple", weight: "400", subsets: ["latin"] });
 
 const siteUrl =
   process.env.NEXT_PUBLIC_APP_URL ||
@@ -48,7 +49,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>{children}</body>
+      <body className={`${geistSans.variable} ${geistMono.variable} ${homemadeApple.variable} antialiased`}>
+        {children}
+      </body>
     </html>
   );
 }

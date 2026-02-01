@@ -1613,6 +1613,7 @@
 }
 .postcardBackBody {
   margin-top: 8px;
+  font-family: var(--font-homemade-apple), "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
   white-space: pre-wrap;
   line-height: 1.6;
   color: #2b2b2b;
