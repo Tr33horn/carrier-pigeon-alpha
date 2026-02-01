@@ -149,7 +149,6 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
     if (!roleErr && roleLetter?.sender_user_id === user.id) isSender = true;
   }
   const blurPostcard = isPostcard && !isOpened && !isSender;
-  const heavyBlurPostcard = isPostcard && !isOpened && !isSender;
   const postcardBlurClass = blurPostcard ? (arrived ? "blurMedium" : "blurMedium") : "";
 
   // Logged out: status + OTP
