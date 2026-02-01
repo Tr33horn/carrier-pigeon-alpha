@@ -171,7 +171,6 @@ function LetterView({
                     : undefined
                 }
               />
-              <div className="postcardPreviewLabel">{postcardTemplate?.name ?? "Postcard"}</div>
               <div className="postcardBackHint">Front</div>
             </div>
             <div className="postcardBack">
@@ -316,7 +315,14 @@ export default async function LetterOpenPage({
                     </div>
                   </div>
                   <div className="postcardPreview blurHeavy">
-                    <div className="postcardPreviewArt" style={postcardTemplate?.preview} />
+                    <div
+                      className="postcardPreviewArt contain"
+                      style={
+                        postcardTemplate
+                          ? { ...postcardTemplate.preview, backgroundSize: "contain", backgroundRepeat: "no-repeat" }
+                          : undefined
+                      }
+                    />
                     <div className="postcardBackHint">Back side: message + address</div>
                     <div className="postcardStatusPill top">In transit.</div>
                   </div>
@@ -442,7 +448,14 @@ export default async function LetterOpenPage({
                     title: "Read postcard",
                   }}
                 >
-                  <div className="postcardPreviewArt" style={postcardTemplate?.preview} />
+                  <div
+                    className="postcardPreviewArt contain"
+                    style={
+                      postcardTemplate
+                        ? { ...postcardTemplate.preview, backgroundSize: "contain", backgroundRepeat: "no-repeat" }
+                        : undefined
+                    }
+                  />
                   <div className="postcardBackHint">Tap to read the back.</div>
                   <div className="postcardStatusPill top">Tap to read.</div>
                 </UnsealButton>
