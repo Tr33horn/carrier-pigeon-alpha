@@ -4,12 +4,18 @@ export const POSTCARD_TEMPLATES: Array<{
   id: PostcardTemplateId;
   name: string;
   preview: { backgroundImage: string; backgroundSize: string; backgroundPosition: string };
+  back: { backgroundImage: string; backgroundSize: string; backgroundPosition: string };
 }> = [
   {
     id: "coastal-sun",
     name: "Coastal Sun",
     preview: {
       backgroundImage: "url('/postcards/coastal-sun.svg')",
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+    },
+    back: {
+      backgroundImage: "url('/postcards/coastal-sun_back.svg')",
       backgroundSize: "cover",
       backgroundPosition: "center",
     },
@@ -22,6 +28,11 @@ export const POSTCARD_TEMPLATES: Array<{
       backgroundSize: "cover",
       backgroundPosition: "center",
     },
+    back: {
+      backgroundImage: "url('/postcards/night-ferry_back.svg')",
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+    },
   },
   {
     id: "field-notes",
@@ -31,12 +42,22 @@ export const POSTCARD_TEMPLATES: Array<{
       backgroundSize: "cover",
       backgroundPosition: "center",
     },
+    back: {
+      backgroundImage: "url('/postcards/field-notes_back.svg')",
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+    },
   },
   {
     id: "outpostjs",
     name: "Jonny's Outpost",
     preview: {
       backgroundImage: "url('/postcards/outpostjs.svg')",
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+    },
+    back: {
+      backgroundImage: "url('/postcards/outpostjs_back.svg')",
       backgroundSize: "cover",
       backgroundPosition: "center",
     },

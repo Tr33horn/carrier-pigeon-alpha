@@ -9,6 +9,7 @@ import { birdDisplayLabel, normalizeBird } from "@/app/lib/birds";
 import { getEnvelopeTintColor, normalizeEnvelopeTint } from "@/app/lib/envelopeTints";
 import { getSealImgSrc } from "@/app/lib/seals";
 import { resolvePostcardTemplate } from "@/app/lib/postcards";
+import PostcardFlip from "./_components/PostcardFlip";
 import styles from "./status.module.css";
 import AppHeader from "@/app/_components/AppHeader";
 import LocalTime from "./_components/LocalTime";
@@ -551,22 +552,8 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                     <div className="kicker">
                       POSTCARD FROM {letter.from_name ? letter.from_name.toUpperCase() : "SOMEONE"}
                     </div>
-                    <div className="h2">Back side</div>
-                    <div className={`postcardPreview fullWidth ${blurPostcard ? "blur" : ""}`}>
-                      <div
-                        className="postcardPreviewArt contain"
-                        style={
-                          postcardTemplate
-                            ? { ...postcardTemplate.preview, backgroundSize: "contain", backgroundRepeat: "no-repeat" }
-                            : undefined
-                        }
-                      />
-                      <div className="postcardBackHint">Front</div>
-                    </div>
-                    <div className="postcardBack" style={{ marginTop: 12 }}>
-                      <div className="postcardBackTitle">Message</div>
-                      <div className="postcardBackBody">{letter.body}</div>
-                    </div>
+                    <div className="h2">Postcard</div>
+                    <PostcardFlip postcardTemplate={postcardTemplate} message={letter.body} />
                   </>
                 ) : (
                   <>

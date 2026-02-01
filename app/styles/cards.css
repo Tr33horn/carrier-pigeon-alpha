@@ -1607,6 +1607,21 @@
   padding: 18px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
 }
+.postcardBackOverlay {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  bottom: 14px;
+  width: calc(50% - 14px);
+  z-index: 2;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  overflow: hidden;
+}
 .postcardBackTitle {
   font-weight: 900;
   letter-spacing: -0.01em;

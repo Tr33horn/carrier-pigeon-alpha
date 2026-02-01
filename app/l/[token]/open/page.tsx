@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 
 import OtpForm from "../_components/OtpForm";
 import UnsealButton from "../_components/UnsealButton";
+import PostcardFlip from "../_components/PostcardFlip";
 import ConfettiBurst from "../_components/ConfettiBurst";
 import CleanAuthHash from "../_components/CleanAuthHash";
 import { createSupabaseServerReadClient, createSupabaseServerActionClient } from "@/app/lib/supabase/server";
@@ -148,36 +149,20 @@ function LetterView({
   letter: LetterRow;
   title: string;
   isPostcard: boolean;
-  postcardTemplate: { name: string; preview: CSSProperties } | null;
+  postcardTemplate: { name: string; preview: CSSProperties; back: CSSProperties } | null;
 }) {
   return (
     <div className="card">
       <div className="cardHead">
         <div>
           <div className="kicker">{isPostcard ? "Postcard" : "Opened letter"}</div>
-          <div className="h2">{isPostcard ? "Back side" : title}</div>
+          <div className="h2">{isPostcard ? "Postcard" : title}</div>
         </div>
       </div>
 
       <div className="stack" style={{ gap: 12 }}>
         {isPostcard ? (
-          <>
-            <div className="postcardPreview fullWidth">
-              <div
-                className="postcardPreviewArt contain"
-                style={
-                  postcardTemplate
-                    ? { ...postcardTemplate.preview, backgroundSize: "contain", backgroundRepeat: "no-repeat" }
-                    : undefined
-                }
-              />
-              <div className="postcardBackHint">Front</div>
-            </div>
-            <div className="postcardBack">
-              <div className="postcardBackTitle">Back side</div>
-              <div className="postcardBackBody">{letter.message}</div>
-            </div>
-          </>
+          <PostcardFlip postcardTemplate={postcardTemplate} message={letter.message} />
         ) : (
           <div className="soft" style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
             {letter.message}
@@ -314,12 +299,17 @@ export default async function LetterOpenPage({
                       {status?.subject ? <div className="muted">{status.subject}</div> : null}
                     </div>
                   </div>
-                  <div className="postcardPreview blurHeavy">
+                  <div className="postcardPreview blurHeavy fullWidth" style={{ maxHeight: "none" }}>
                     <div
                       className="postcardPreviewArt contain"
                       style={
                         postcardTemplate
-                          ? { ...postcardTemplate.preview, backgroundSize: "contain", backgroundRepeat: "no-repeat" }
+                          ? {
+                              ...postcardTemplate.preview,
+                              backgroundSize: "contain",
+                              backgroundRepeat: "no-repeat",
+                              backgroundColor: "#f3efe6",
+                            }
                           : undefined
                       }
                     />
@@ -441,18 +431,24 @@ export default async function LetterOpenPage({
                 <UnsealButton
                   token={token}
                   variant="seal"
-                  className={`postcardPreview ${isOpened ? "" : "blurHeavy"}`}
+                  className={`postcardPreview fullWidth ${isOpened ? "" : "blurHeavy"}`}
                   itemLabel="postcard"
                   buttonProps={{
                     "aria-label": "Read postcard",
                     title: "Read postcard",
+                    style: { maxHeight: "none", width: "100%" },
                   }}
                 >
                   <div
                     className="postcardPreviewArt contain"
                     style={
                       postcardTemplate
-                        ? { ...postcardTemplate.preview, backgroundSize: "contain", backgroundRepeat: "no-repeat" }
+                      ? {
+                          ...postcardTemplate.preview,
+                          backgroundSize: "contain",
+                          backgroundRepeat: "no-repeat",
+                          backgroundColor: "#f3efe6",
+                        }
                         : undefined
                     }
                   />
