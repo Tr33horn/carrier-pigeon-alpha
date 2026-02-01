@@ -358,7 +358,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
         <StatusAutoRefresh enabled={!data.delivered && !data.canceled} />
         <div className="wrap">
         {isOpened && isPostcard && letter.body ? (
-          <div className={`${styles.statusFull} ${styles.gridOpen}`} style={{ marginBottom: 16 }}>
+          <div className={`${styles.statusFull} ${styles.gridOpen}`}>
             <div className="card">
               <PostcardFlip
                 postcardTemplate={postcardTemplate}
@@ -370,7 +370,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
           </div>
         ) : null}
 
-        <div className={styles.statusHero}>
+        <div className={styles.statusHero} style={isOpened && isPostcard ? { marginTop: 14 } : undefined}>
           <details className="card">
             <summary className={`cardHead ${styles.collapseSummary}`}>
               <div className="kicker">Flight status</div>

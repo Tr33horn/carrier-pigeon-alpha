@@ -38,6 +38,7 @@ export const US_REGIONS: GeoRegion[] = [
 
   // --- Seattle-area specifics (tiny bboxes, win often) ---
   R("downtown-seattle", "Downtown Seattle", [47.58, -122.36, 47.63, -122.31], "over"),
+  R("vashon-island", "Vashon Island", [47.37, -122.52, 47.50, -122.38], "over"),
   R("lake-washington", "Lake Washington", [47.53, -122.31, 47.76, -122.16], "along"),
   R("snoqualmie-pass", "Snoqualmie Pass", [47.37, -121.50, 47.48, -121.33], "crossing"),
   R("issaquah-alps", "the Issaquah Alps", [47.47, -122.06, 47.61, -121.85], "over"),

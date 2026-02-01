@@ -1,11 +1,12 @@
 .statusHero {
-  margin-bottom: 14px;
+  margin-bottom: 0;
 }
 
 .statusGrid {
   display: grid;
   gap: 14px;
   grid-template-columns: 1fr;
+  margin-top: 14px;
 }
 
 .statusCol,
