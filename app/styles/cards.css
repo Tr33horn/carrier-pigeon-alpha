@@ -1650,6 +1650,7 @@
   font-size: clamp(12px, 2.2vw, 16px);
   font-weight: 800;
   font-family: var(--font-homemade-apple), "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
+  color: #284283;
 }
 .postcardBackTitle {
   font-weight: 900;
@@ -1660,7 +1661,7 @@
   font-family: var(--font-homemade-apple), "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
   white-space: pre-wrap;
   line-height: 1.55;
-  color: #2b2b2b;
+  color: #284283;
   font-size: clamp(10px, 1.9vw, 19px);
 }
 .postcardFlipToggle {
