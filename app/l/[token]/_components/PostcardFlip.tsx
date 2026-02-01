@@ -20,6 +20,7 @@ export default function PostcardFlip({
   toName,
 }: Props) {
   const [side, setSide] = useState<"front" | "back">(defaultSide === "back" ? "back" : "front");
+  const isBack = side === "back";
 
   return (
     <div className="stack" style={{ gap: 12 }}>
@@ -29,7 +30,7 @@ export default function PostcardFlip({
             type="button"
             className="btnGhost postcardFlipToggle"
             onClick={() => setSide((prev) => (prev === "front" ? "back" : "front"))}
-            aria-pressed={side === "back"}
+            aria-pressed={isBack}
           >
             Flip to back
           </button>
@@ -54,7 +55,7 @@ export default function PostcardFlip({
             type="button"
             className="btnGhost postcardFlipToggle"
             onClick={() => setSide((prev) => (prev === "front" ? "back" : "front"))}
-            aria-pressed={side === "back"}
+            aria-pressed={isBack}
           >
             Flip to front
           </button>
