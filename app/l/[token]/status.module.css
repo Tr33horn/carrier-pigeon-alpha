@@ -4,9 +4,9 @@
 
 .statusGrid {
   display: grid;
-  gap: 14px;
+  gap: 8px;
   grid-template-columns: 1fr;
-  margin-top: 14px;
+  margin-top: 8px;
 }
 
 .statusCol,
@@ -50,6 +50,14 @@
 
 .deliveredStack .gridTimeline {
   grid-area: timeline;
+}
+
+.postcardOpenedStack {
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "badges"
+    "map"
+    "timeline";
 }
 
 .statusLetterCard :global(.soft.envelope) {
@@ -143,6 +151,13 @@
     grid-template-areas:
       "letter letter"
       "open open"
+      "badges badges"
+      "map timeline";
+  }
+
+  .postcardOpenedStack {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
       "badges badges"
       "map timeline";
   }

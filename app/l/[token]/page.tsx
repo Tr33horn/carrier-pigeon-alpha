@@ -370,7 +370,24 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
           </div>
         ) : null}
 
-        <div className={styles.statusHero} style={isOpened && isPostcard ? { marginTop: 14 } : undefined}>
+        {isOpened && isPostcard && letter.body ? (
+          <div className={styles.statusHero} style={{ marginTop: 14 }}>
+            <details className="card" open>
+              <summary className={`cardHead ${styles.collapseSummary}`}>
+                <div className="kicker">Postcard message</div>
+                <div className="muted">Collapsed</div>
+              </summary>
+              <div className="h2" style={{ marginTop: 6 }}>
+                Message
+              </div>
+              <div className="muted" style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>
+                {letter.body}
+              </div>
+            </details>
+          </div>
+        ) : null}
+
+        <div className={styles.statusHero} style={isOpened && isPostcard ? { marginTop: 10 } : undefined}>
           <details className="card">
             <summary className={`cardHead ${styles.collapseSummary}`}>
               <div className="kicker">Flight status</div>
@@ -426,7 +443,9 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
         </div>
 
         <div
-          className={`${styles.statusGrid} ${data.delivered ? styles.deliveredStack : styles.incomingWide}`}
+          className={`${styles.statusGrid} ${data.delivered ? styles.deliveredStack : styles.incomingWide} ${
+            isOpened && isPostcard ? styles.postcardOpenedStack : ""
+          }`}
         >
           {!isOpened ? (
             <div className={`${styles.statusCol} ${styles.gridLetter}`}>
