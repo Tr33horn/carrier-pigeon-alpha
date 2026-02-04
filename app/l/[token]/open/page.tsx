@@ -8,6 +8,7 @@ import PostcardFlip from "../_components/PostcardFlip";
 import ConfettiBurst from "../_components/ConfettiBurst";
 import CleanAuthHash from "../_components/CleanAuthHash";
 import { createSupabaseServerReadClient, createSupabaseServerActionClient } from "@/app/lib/supabase/server";
+import { supabaseServer } from "@/app/lib/supabaseServer";
 import { US_REGIONS } from "@/app/lib/geo/usRegions";
 import AppHeader from "@/app/_components/AppHeader";
 import { getSealImgSrc } from "@/app/lib/seals";
@@ -210,6 +211,7 @@ export default async function LetterOpenPage({
   const auto = Array.isArray(sp.auto) ? sp.auto[0] : sp.auto;
   const celebrate = Array.isArray(sp.celebrate) ? sp.celebrate[0] : sp.celebrate;
   const supabase = await createSupabaseServerReadClient();
+  const authDisabled = process.env.OPEN_LETTER_AUTH_DISABLED === "1";
 
   const { data: userData } = await supabase.auth.getUser();
   const user = userData?.user ?? null;
@@ -280,6 +282,15 @@ export default async function LetterOpenPage({
     );
   }
 
+  const authBanner = authDisabled ? (
+    <div className="card" style={{ maxWidth: 760, margin: "12px auto 0" }}>
+      <div className="err">⚠️ Authentication is temporarily disabled for open-letter links.</div>
+      <div className="muted" style={{ marginTop: 6 }}>
+        To re-enable, run: <code>export OPEN_LETTER_AUTH_DISABLED=0</code> and restart the server.
+      </div>
+    </div>
+  ) : null;
+
   const etaMs = status.eta_at ? new Date(status.eta_at).getTime() : null;
   const arrived = !!(etaMs && Date.now() >= etaMs);
 
@@ -290,13 +301,14 @@ export default async function LetterOpenPage({
   const sealImg = getSealImgSrc(status?.seal_id) || "/waxseal.png";
   const envTint = getEnvelopeTintColor(normalizeEnvelopeTint(status?.envelope_tint));
 
-  if (!user) {
+  if (!user && !authDisabled) {
     return (
       <>
         <AppHeader />
         <main className="pageBg">
           <CleanAuthHash />
           <div className="wrap">
+            {authBanner}
             <div>
               <div style={{ textAlign: "center" }}>
                 <h1 className="h1">{isPostcard ? "Open postcard" : "Open letter"}</h1>
@@ -367,15 +379,54 @@ export default async function LetterOpenPage({
   }
 
   if (auto === "1") {
-    const supabaseAction = await createSupabaseServerActionClient();
-    const { error: openErr } = await supabaseAction.rpc("open_letter_by_public_token", { p_token: token });
-    if (!openErr || String(openErr?.message || "").toLowerCase().includes("already")) {
+    if (authDisabled) {
+      const { data: letterRow } = await supabaseServer
+        .from("letters")
+        .select("id, opened_at")
+        .eq("public_token", token)
+        .maybeSingle();
+      if (letterRow?.id && !letterRow.opened_at) {
+        await supabaseServer.from("letters").update({ opened_at: new Date().toISOString() }).eq("id", letterRow.id);
+      }
       redirect(`/l/${token}/open?celebrate=1`);
+    } else {
+      const supabaseAction = await createSupabaseServerActionClient();
+      const { error: openErr } = await supabaseAction.rpc("open_letter_by_public_token", { p_token: token });
+      if (!openErr || String(openErr?.message || "").toLowerCase().includes("already")) {
+        redirect(`/l/${token}/open?celebrate=1`);
+      }
     }
   }
 
-  const { data: openedData } = await supabase.rpc("read_opened_letter_by_public_token", { p_token: token });
-  const openedRow = (Array.isArray(openedData) ? openedData[0] : openedData) as LetterRow | null | undefined;
+  let openedRow: LetterRow | null | undefined;
+  if (authDisabled) {
+    const { data: openData } = await supabaseServer
+      .from("letters")
+      .select(
+        "id, public_token, from_name, to_name, subject, message, body, bird_type, bird, dest_region_id, eta_at, opened_at, sender_user_id, recipient_user_id"
+      )
+      .eq("public_token", token)
+      .maybeSingle();
+    if (openData?.opened_at) {
+      openedRow = {
+        id: openData.id,
+        public_token: openData.public_token,
+        from_name: openData.from_name,
+        to_name: openData.to_name,
+        subject: openData.subject,
+        message: openData.message ?? openData.body ?? "",
+        bird_type: openData.bird_type ?? openData.bird ?? null,
+        dest_region_id: openData.dest_region_id,
+        eta_at: openData.eta_at,
+        opened_at: openData.opened_at,
+        sender_user_id: openData.sender_user_id,
+        recipient_user_id: openData.recipient_user_id,
+      };
+    }
+  } else {
+    const { data: openedData } = await supabase.rpc("read_opened_letter_by_public_token", { p_token: token });
+    openedRow = (Array.isArray(openedData) ? openedData[0] : openedData) as LetterRow | null | undefined;
+  }
   const isOpened = !!openedRow?.id;
 
   return (
@@ -384,6 +435,7 @@ export default async function LetterOpenPage({
       <main className="pageBg">
         <CleanAuthHash />
         <div className="wrap">
+          {authBanner}
           <div>
           <div style={{ textAlign: "center" }}>
             <h1 className="h1">{isOpened ? (isPostcard ? "Postcard" : "Seal broken") : isPostcard ? "Open postcard" : "Open letter"}</h1>

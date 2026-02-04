@@ -100,6 +100,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
   const raw = (await params).token;
   const token = raw.replace(/^\/+/, "").replace(/^l\//, "");
   const supabase = await createSupabaseServerReadClient();
+  const authDisabled = process.env.OPEN_LETTER_AUTH_DISABLED === "1";
 
   const { data: userData } = await supabase.auth.getUser();
   const user = userData?.user ?? null;
@@ -140,6 +141,14 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
     (letter.seal_id == null && !!letter.subject);
   const postcardTemplate = resolvePostcardTemplate(postcardTemplateId);
   let isSender = false;
+  const authBanner = authDisabled ? (
+    <div className="card" style={{ maxWidth: 760, margin: "12px auto 0" }}>
+      <div className="err">⚠️ Authentication is temporarily disabled for open-letter links.</div>
+      <div className="muted" style={{ marginTop: 6 }}>
+        To re-enable, run: <code>export OPEN_LETTER_AUTH_DISABLED=0</code> and restart the server.
+      </div>
+    </div>
+  ) : null;
 
   if (user) {
     const { data: roleLetter, error: roleErr } = await supabase
@@ -153,7 +162,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
   const postcardBlurClass = blurPostcard ? (arrived ? "blurMedium" : "blurMedium") : "";
 
   // Logged out: status + OTP
-  if (!user) {
+  if (!user && !authDisabled) {
     return (
       <>
         <AppHeader />
@@ -161,6 +170,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
           <CleanAuthHash />
           <StatusAutoRefresh enabled={!data.delivered && !data.canceled} />
           <div className="wrap">
+          {authBanner}
           <div className={styles.statusHero}>
             <div className="card">
               <div className="kicker">Flight status</div>
@@ -357,6 +367,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
         <CleanAuthHash />
         <StatusAutoRefresh enabled={!data.delivered && !data.canceled} />
         <div className="wrap">
+        {authBanner}
         {isOpened && isPostcard && letter.body ? (
           <div className={`${styles.statusFull} ${styles.gridOpen}`}>
             <div className="card">
