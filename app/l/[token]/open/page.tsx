@@ -53,9 +53,12 @@ type LetterRow = {
   id: string;
   sender_user_id: string;
   recipient_user_id: string | null;
-  bird_type: string;
-  dest_region_id: string;
-  eta_at: string;
+  from_name?: string | null;
+  to_name?: string | null;
+  subject?: string | null;
+  bird_type: string | null;
+  dest_region_id: string | null;
+  eta_at: string | null;
   message: string;
   opened_at: string | null;
   delivery_type?: "letter" | "postcard" | null;
