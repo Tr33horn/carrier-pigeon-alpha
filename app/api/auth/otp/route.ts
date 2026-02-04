@@ -19,6 +19,7 @@ function getIpFromHeaders(req: Request) {
 export async function POST(req: Request) {
   const startedAt = Date.now();
   const devRequestId = process.env.NEXT_PUBLIC_APP_ENV === "dev" ? randomUUID() : null;
+  const requestId = devRequestId || randomUUID();
   let payload: any = null;
   try {
     payload = await req.json();
@@ -93,6 +94,16 @@ export async function POST(req: Request) {
     const domain = email.split("@")[1] || "unknown";
     const msg = error.message ?? "unknown";
     const status = (error as any).status ?? "unknown";
+    const code = (error as any).code ?? null;
+    console.error(
+      "[auth/otp] supabase_error",
+      `duration_ms=${durationMs}`,
+      `status=${status}`,
+      `message=${msg}`,
+      `emailDomain=${domain}`,
+      `nextPath=${nextPath}`,
+      `redirectTo=${redirectTo}`
+    );
     if (process.env.NEXT_PUBLIC_APP_ENV === "dev") {
       const requestId = devRequestId || "local";
       console.log(
@@ -108,17 +119,20 @@ export async function POST(req: Request) {
     }
     const isRateLimited = /rate|limit|too many|429/i.test(msg);
     if (process.env.NEXT_PUBLIC_APP_ENV === "dev" && devRequestId) {
-      res.headers.set("x-auth-request-id", devRequestId);
+      res.headers.set("x-auth-request-id", requestId);
       res.headers.set("x-auth-otp-status", "error");
       return NextResponse.json(
-        { error: msg || "Could not send link.", requestId: devRequestId },
+        { error: msg || "Could not send link.", status, code, requestId },
         { status: isRateLimited ? 429 : 500 }
       );
     }
-    return NextResponse.json(
-      { error: msg || "Could not send link." },
-      { status: 500 }
+    const errorRes = NextResponse.json(
+      { error: msg || "Could not send link.", status, code, requestId },
+      { status: isRateLimited ? 429 : 500 }
     );
+    errorRes.headers.set("x-auth-request-id", requestId);
+    errorRes.headers.set("x-auth-otp-status", "error");
+    return errorRes;
   }
 
   if (process.env.NEXT_PUBLIC_APP_ENV === "dev" && throttleKey) {

@@ -53,7 +53,18 @@ export default function OtpForm() {
         });
 
         const data = await safeJson(res);
-        if (!res.ok) throw new Error(data?.error ?? "Could not send OTP. Try again.");
+        if (!res.ok) {
+          const requestId = data?.requestId || res.headers.get("x-auth-request-id");
+          const status = data?.status ?? res.status;
+          const code = data?.code;
+          const suffixParts = [
+            status ? `status ${status}` : null,
+            code ? `code ${code}` : null,
+            requestId ? `request ${requestId}` : null,
+          ].filter(Boolean);
+          const suffix = suffixParts.length ? ` (${suffixParts.join(", ")})` : "";
+          throw new Error((data?.error ?? "Could not send OTP. Try again.") + suffix);
+        }
         setStep("sent");
         return;
       }
