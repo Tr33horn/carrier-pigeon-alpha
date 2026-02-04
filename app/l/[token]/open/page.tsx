@@ -410,7 +410,6 @@ export default async function LetterOpenPage({
     if (openData?.opened_at) {
       openedRow = {
         id: openData.id,
-        public_token: openData.public_token,
         from_name: openData.from_name,
         to_name: openData.to_name,
         subject: openData.subject,
