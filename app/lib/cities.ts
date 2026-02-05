@@ -172,6 +172,7 @@ export const CITIES: City[] = [
   { name: "Snoqualmie, WA", lat: 47.5287, lon: -121.8254 },
   { name: "Vashon, WA", lat: 47.4484, lon: -122.4590 },
   { name: "Jonny's NW Outpost", lat: 47.42316442230221, lon: -122.43188041634352 },
+  { name: "Kathi's Bungalow", lat: 47.451596801664174, lon: -122.51064038791561 },
   { name: "Vanilla Lane", lat: 47.4482, lon: -122.4563 },
 
   // West Virginia
