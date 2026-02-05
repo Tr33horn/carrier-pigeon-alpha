@@ -10,6 +10,7 @@ import { getEnvelopeTintColor, normalizeEnvelopeTint } from "@/app/lib/envelopeT
 import { getSealImgSrc } from "@/app/lib/seals";
 import { resolvePostcardTemplate } from "@/app/lib/postcards";
 import PostcardFlip from "./_components/PostcardFlip";
+import UnsealButton from "./_components/UnsealButton";
 import styles from "./status.module.css";
 import AppHeader from "@/app/_components/AppHeader";
 import LocalTime from "./_components/LocalTime";
@@ -165,12 +166,11 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
   if (!user && !authDisabled) {
     return (
       <>
-        <AppHeader />
+        <AppHeader hideAuthIndicator={authDisabled} />
         <main className="pageBg">
           <CleanAuthHash />
           <StatusAutoRefresh enabled={!data.delivered && !data.canceled} />
           <div className="wrap">
-          {authBanner}
           <div className={styles.statusHero}>
             <div className="card">
               <div className="kicker">Flight status</div>
@@ -362,12 +362,11 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
 
   return (
     <>
-      <AppHeader />
+      <AppHeader hideAuthIndicator={authDisabled} />
       <main className="pageBg">
         <CleanAuthHash />
         <StatusAutoRefresh enabled={!data.delivered && !data.canceled} />
         <div className="wrap">
-        {authBanner}
         {isOpened && isPostcard && letter.body ? (
           <div className={`${styles.statusFull} ${styles.gridOpen}`}>
             <div className="card">
@@ -473,23 +472,62 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
                   </div>
 
                   {arrived && !isSender ? (
-                    <a
-                      href={`/l/${token}/open?auto=1&celebrate=1`}
-                      className={`postcardPreview fullWidth ${postcardBlurClass}`}
-                    >
-                      <div
-                        className="postcardPreviewArt contain"
-                        style={
-                          postcardTemplate
-                            ? { ...postcardTemplate.preview, backgroundSize: "contain", backgroundRepeat: "no-repeat" }
-                            : undefined
-                        }
-                      />
-                      {!blurPostcard && arrived ? <div className="postcardBackHint">Tap to read the back.</div> : null}
-                      {blurPostcard ? (
-                        <div className="postcardStatusPill center">{arrived ? "Tap to read." : "In transit."}</div>
-                      ) : null}
-                    </a>
+                    authDisabled ? (
+                      <UnsealButton
+                        token={token}
+                        variant="seal"
+                        className={`postcardPreview fullWidth ${postcardBlurClass}`}
+                        itemLabel="postcard"
+                        buttonProps={{
+                          "aria-label": "Read postcard",
+                          title: "Read postcard",
+                          style: { maxHeight: "none", width: "100%", cursor: "pointer" },
+                        }}
+                      >
+                        <div
+                          className="postcardPreviewArt contain"
+                          style={
+                            postcardTemplate
+                              ? {
+                                  ...postcardTemplate.preview,
+                                  backgroundSize: "contain",
+                                  backgroundRepeat: "no-repeat",
+                                }
+                              : undefined
+                          }
+                        />
+                        {!blurPostcard && arrived ? (
+                          <div className="postcardBackHint">Tap to read the back.</div>
+                        ) : null}
+                        {blurPostcard ? (
+                          <div className="postcardStatusPill center">{arrived ? "Tap to read." : "In transit."}</div>
+                        ) : null}
+                      </UnsealButton>
+                    ) : (
+                      <a
+                        href={`/l/${token}/open?auto=1&celebrate=1`}
+                        className={`postcardPreview fullWidth ${postcardBlurClass}`}
+                      >
+                        <div
+                          className="postcardPreviewArt contain"
+                          style={
+                            postcardTemplate
+                              ? {
+                                  ...postcardTemplate.preview,
+                                  backgroundSize: "contain",
+                                  backgroundRepeat: "no-repeat",
+                                }
+                              : undefined
+                          }
+                        />
+                        {!blurPostcard && arrived ? (
+                          <div className="postcardBackHint">Tap to read the back.</div>
+                        ) : null}
+                        {blurPostcard ? (
+                          <div className="postcardStatusPill center">{arrived ? "Tap to read." : "In transit."}</div>
+                        ) : null}
+                      </a>
+                    )
                   ) : (
                     <div className={`postcardPreview fullWidth ${postcardBlurClass}`}>
                       <div
@@ -716,6 +754,7 @@ export default async function LetterTokenPage({ params }: { params: Promise<{ to
             </details>
           </div>
         </div>
+        {authBanner}
         </div>
       </main>
     </>

@@ -271,7 +271,7 @@ export default async function LetterOpenPage({
   if (!status) {
     return (
       <>
-        <AppHeader />
+        <AppHeader hideAuthIndicator={authDisabled} />
         <main className="pageBg">
           <CleanAuthHash />
           <div className="wrap">
@@ -311,7 +311,6 @@ export default async function LetterOpenPage({
         <main className="pageBg">
           <CleanAuthHash />
           <div className="wrap">
-            {authBanner}
             <div>
               <div style={{ textAlign: "center" }}>
                 <h1 className="h1">{isPostcard ? "Open postcard" : "Open letter"}</h1>
@@ -433,11 +432,10 @@ export default async function LetterOpenPage({
 
   return (
     <>
-      <AppHeader />
+      <AppHeader hideAuthIndicator={authDisabled} />
       <main className="pageBg">
         <CleanAuthHash />
         <div className="wrap">
-          {authBanner}
           <div>
           <div style={{ textAlign: "center" }}>
             <h1 className="h1">{isOpened ? (isPostcard ? "Postcard" : "Seal broken") : isPostcard ? "Open postcard" : "Open letter"}</h1>
@@ -565,6 +563,7 @@ export default async function LetterOpenPage({
           </a>
         </div>
         </div>
+        {authBanner}
         </div>
       </main>
     </>
